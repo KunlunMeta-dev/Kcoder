@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "id": "tool-call-reconnect",
+  "protocol": "openai_chat_completions",
+  "source": {
+    "kind": "synthetic",
+    "description": "Synthetic OpenAI Chat Completions SSE frames for deterministic offline protocol testing. This is not a captured MiniMax response."
+  },
+  "requests": [
+    {
+      "id": "initial",
+      "match": {
+        "lastMessageRole": "user",
+        "lastMessageIncludes": "KCODER_E2E:tool-call-reconnect"
+      },
+      "frames": [
+        "data: {\"id\":\"chatcmpl-e2e-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"I will \"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"inspect the requested fixture. \"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_fixture_read\",\"type\":\"function\",\"function\":{\"name\":\"read\",\"arguments\":\"\"}}]},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"file_path\\\":\"}}]},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"\\\"README.md\\\"}\"}}]},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    },
+    {
+      "id": "after-tool",
+      "match": {
+        "lastMessageRole": "tool",
+        "lastMessageIncludes": "KCoder E2E \u6700\u5c0f\u5de5\u4f5c\u533a"
+      },
+      "frames": [
+        "data: {\"id\":\"chatcmpl-e2e-tool-followup\",\"object\":\"chat.completion.chunk\",\"created\":2,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"reasoning_content\":\"The tool \"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool-followup\",\"object\":\"chat.completion.chunk\",\"created\":2,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"returned its deterministic fixture result. \"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool-followup\",\"object\":\"chat.completion.chunk\",\"created\":2,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"KCODER_E2E:FOLLOWUP_COMPLETE\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool-followup\",\"object\":\"chat.completion.chunk\",\"created\":2,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" I read the workspace README successfully.\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-tool-followup\",\"object\":\"chat.completion.chunk\",\"created\":2,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":27,\"completion_tokens\":12,\"total_tokens\":39}}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    }
+  ]
+}

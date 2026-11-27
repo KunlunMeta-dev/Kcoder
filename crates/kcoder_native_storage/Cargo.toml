@@ -1,0 +1,30 @@
+[package]
+name = "kcoder_native_storage"
+description = "Node-API ownership of the existing native storage file leases."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+anyhow.workspace = true
+serde_json.workspace = true
+fs2 = "0.4"
+kcoder_fs = { path = "../kcoder_config/internal/fs" }
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_System_LibraryLoader",
+] }
+
+[dev-dependencies]
+tempfile.workspace = true

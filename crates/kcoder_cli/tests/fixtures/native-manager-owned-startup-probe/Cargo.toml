@@ -1,0 +1,10 @@
+[package]
+name = "kcoder-native-manager-owned-startup-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+libc = "=0.2.186"

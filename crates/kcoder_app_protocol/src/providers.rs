@@ -1,0 +1,377 @@
+use serde::{Deserialize, Serialize};
+
+/// Explicit capability flags using the existing settings field names.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderModelCapabilities {
+    pub text: bool,
+    pub tools: bool,
+    pub vision: bool,
+    pub reasoning: bool,
+    pub structured_output: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderTemplatesParams {}
+
+/// Discover an unsaved deployment without requiring a model or persisting credentials.
+#[derive(Deserialize, Serialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderDiscoverModelsParams {
+    #[serde(default)]
+    pub id: Option<String>,
+    pub endpoint: String,
+    pub api_format: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub authentication: kcoder_types::ProviderAuthentication,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderDiscoveredModels {
+    /// Advertised identifiers, not a per-model inference or entitlement probe.
+    pub models: Vec<String>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderTemplateInfo {
+    pub authentication: kcoder_types::ProviderAuthentication,
+    pub id: String,
+    pub display_name: String,
+    pub api_format: String,
+    pub endpoint: String,
+    pub documentation_url: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderTemplatesResult {
+    pub supports_authentication_policy: bool,
+    /// App-server support for the explicit read-only Ollama window action.
+    #[serde(default)]
+    pub supports_ollama_context_probe: bool,
+    pub templates: Vec<ProviderTemplateInfo>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderDeleteParams {
+    pub id: String,
+    pub confirm: bool,
+    #[serde(default)]
+    pub replacement_provider: Option<String>,
+    #[serde(default)]
+    pub remove_credentials: bool,
+    #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
+    pub replacement_model: Option<String>,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderUpsertParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+
+    /// Legacy omission retains connection validation; capable clients explicitly
+    /// set false to save locally and run a separate revision-bound probe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub validate_connection: Option<bool>,
+
+    /// User-settings revision captured when the editor read its draft.
+    /// Omission preserves compatibility with clients without revision support.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_revision: Option<String>,
+    #[serde(default)]
+    pub chat_protocol: Option<kcoder_types::ChatProtocol>,
+    /// "default" removes the explicit model override; omission preserves it.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_policy: Option<kcoder_types::ModelReasoningPolicy>,
+    /// Legacy Provider-wide writes are rejected when a client has not negotiated model scope.
+    #[serde(default)]
+    pub extra_body: Option<serde_json::Map<String, serde_json::Value>>,
+    /// Model-specific body; omission preserves the edited model.
+    #[serde(default)]
+    pub model_extra_body: Option<serde_json::Map<String, serde_json::Value>>,
+    /// Explicit edit/rename target; omission adds or updates only the submitted model.
+    #[serde(default)]
+    pub original_model: Option<String>,
+    #[serde(default)]
+    pub capabilities: Option<ProviderModelCapabilities>,
+    #[serde(default)]
+    pub authentication: Option<kcoder_types::ProviderAuthentication>,
+    pub id: String,
+    pub api_format: String,
+    pub endpoint: String,
+    pub model: String,
+    pub context_window_tokens: usize,
+    pub max_output_tokens: u32,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub make_default: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderSettingsProfile {
+    /// Most recent connection probe matching the current configuration and credential.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub connection_check: Option<ProviderProbeResult>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub profile_configuration: Option<kcoder_types::ModelConfigurationSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_turn_configuration: Option<kcoder_types::ModelConfigurationSummary>,
+    /// Predefined field names and file layers only; no values, paths, or secret keys.
+    /// None means this runtime does not report provenance.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_sources:
+        Option<std::collections::BTreeMap<String, std::collections::BTreeSet<String>>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub available_in_current_config: Option<bool>,
+
+    #[serde(default)]
+    pub chat_protocol: kcoder_types::ChatProtocol,
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reasoning_policy: Option<kcoder_types::ModelReasoningPolicy>,
+    #[serde(default)]
+    pub extra_body: serde_json::Map<String, serde_json::Value>,
+    #[serde(default)]
+    pub is_provider_default: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<ProviderModelCapabilities>,
+    #[serde(default)]
+    pub authentication: kcoder_types::ProviderAuthentication,
+    pub id: String,
+    pub api_format: String,
+    pub endpoint: String,
+    pub model: String,
+    pub context_window_tokens: Option<usize>,
+    pub max_output_tokens: Option<u32>,
+    #[serde(default)]
+    pub execution_ready: bool,
+    /// Closed, value-free model readiness diagnostic; never a credential or path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configuration_error: Option<String>,
+    pub api_key_configured: bool,
+    pub is_default: bool,
+    #[serde(default)]
+    pub can_delete: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderSettingsResult {
+    #[serde(default)]
+    pub supports_model_discovery: bool,
+    #[serde(default)]
+    pub supports_independent_probe: bool,
+    #[serde(default)]
+    pub supports_runtime_scope: bool,
+    #[serde(default)]
+    pub supports_clear_user_overrides: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_turn_configuration: Option<kcoder_types::ModelConfigurationSummary>,
+    /// Actual user-owned root fields which override a selected profile.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub clearable_user_overrides: Vec<String>,
+    #[serde(default)]
+    pub supports_optimistic_concurrency: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub revision: Option<String>,
+    /// Revision committed by this mutation; list reads omit it. A later writer
+    /// may advance `revision` before the response's profile list is collected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub saved_revision: Option<String>,
+    #[serde(default)]
+    pub supports_model_reasoning: bool,
+    #[serde(default)]
+    pub supports_model_reasoning_policy: bool,
+    #[serde(default)]
+    pub supports_chat_protocol: bool,
+    #[serde(default)]
+    pub supports_extra_body: bool,
+    #[serde(default)]
+    pub supports_model_extra_body: bool,
+    #[serde(default)]
+    pub supports_new_session_reload: bool,
+    #[serde(default)]
+    pub supports_turn_model_reload: bool,
+    #[serde(default)]
+    pub supports_multiple_models: bool,
+    #[serde(default)]
+    pub supports_model_capabilities: bool,
+    pub profiles: Vec<ProviderSettingsProfile>,
+    pub restart_required: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderListParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderProbeParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expected_configuration_revision: Option<String>,
+    /// Query only Ollama loaded-model metadata instead of generating a response.
+    /// Omission retains the ordinary bounded connection test.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_ollama_context_window: Option<bool>,
+    pub id: String,
+    pub model: String,
+    pub expected_revision: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderContextWindowObservation {
+    pub configured_tokens: usize,
+    /// A unique loaded runner's endpoint-reported window at query time, not
+    /// training metadata or proof of the node serving a generation request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_tokens: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[cfg_attr(feature = "json-schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderProbeResult {
+    /// Start time of this explicit check, not a continuous health guarantee.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub checked_at_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
+    pub configuration_revision: String,
+    pub provider: String,
+    pub model: String,
+    pub revision: String,
+    /// Normal mode: connection test succeeded. Window-only mode: a runtime
+    /// observation was available; it does not assert model-call success.
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error_type: Option<String>,
+    /// Present only for an explicit window-only probe; missing observedTokens
+    /// means unverified. Older/ordinary connection results omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ollama_context_window: Option<ProviderContextWindowObservation>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProviderClearUserOverrideParams {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+
+    /// Allowlisted root runtime field name, never a submitted JSON path.
+    pub field: String,
+    pub expected_revision: String,
+}
+
+#[cfg(test)]
+mod revision_contract_tests {
+    use super::*;
+
+    #[test]
+    fn ollama_window_probe_is_opt_in_and_observation_is_not_connection_success() {
+        let original = serde_json::json!({
+            "id":"local","model":"sample:latest","expectedRevision":"settings-v1:x"
+        });
+        let legacy: ProviderProbeParams = serde_json::from_value(original.clone()).unwrap();
+        assert!(
+            serde_json::to_value(legacy)
+                .unwrap()
+                .get("checkOllamaContextWindow")
+                .is_none()
+        );
+        let mut requested = original;
+        requested["checkOllamaContextWindow"] = serde_json::json!(true);
+        let probe: ProviderProbeParams = serde_json::from_value(requested).unwrap();
+        assert_eq!(
+            serde_json::to_value(probe).unwrap()["checkOllamaContextWindow"],
+            true
+        );
+
+        let unavailable = serde_json::json!({
+            "provider":"local","model":"sample:latest","revision":"settings-v1:x",
+            "configurationRevision":"config-x","success":false,
+            "ollamaContextWindow":{"configuredTokens":32768}
+        });
+        let result: ProviderProbeResult = serde_json::from_value(unavailable.clone()).unwrap();
+        assert_eq!(serde_json::to_value(result).unwrap(), unavailable);
+        let legacy_result: ProviderProbeResult = serde_json::from_value(serde_json::json!({
+            "provider":"local","model":"sample:latest","revision":"settings-v1:x",
+            "configurationRevision":"config-x","success":true
+        }))
+        .unwrap();
+        assert!(
+            serde_json::to_value(legacy_result)
+                .unwrap()
+                .get("ollamaContextWindow")
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn management_unknown_limits_are_nullable_while_save_limits_remain_required() {
+        let row: ProviderSettingsProfile = serde_json::from_value(serde_json::json!({
+            "id":"OwnedCase","apiFormat":"openai_chat_completions","endpoint":"https://example.invalid/v1",
+            "model":"","contextWindowTokens":null,"maxOutputTokens":null,"apiKeyConfigured":false,"isDefault":false,
+            "executionReady":false,"configurationError":"model_limits_missing"
+        })).unwrap();
+        assert_eq!(row.context_window_tokens, None);
+        assert_eq!(row.max_output_tokens, None);
+        assert!(!row.execution_ready);
+        let wire = serde_json::to_value(&row).unwrap();
+        assert!(wire["contextWindowTokens"].is_null());
+        assert_eq!(wire["id"], "OwnedCase");
+        assert!(serde_json::from_value::<ProviderUpsertParams>(serde_json::json!({
+            "id":"OwnedCase","apiFormat":"openai_chat_completions","endpoint":"https://example.invalid/v1",
+            "model":"explicit-model","contextWindowTokens":null,"maxOutputTokens":null
+        })).is_err());
+    }
+
+    #[test]
+    fn old_settings_results_and_writes_remain_compatible() {
+        let result: ProviderSettingsResult =
+            serde_json::from_value(serde_json::json!({"profiles":[],"restartRequired":false}))
+                .unwrap();
+        assert!(!result.supports_optimistic_concurrency);
+        assert!(result.revision.is_none());
+        let wire = serde_json::json!({"id":"fixture","apiFormat":"openai_chat_completions","endpoint":"http://127.0.0.1:1/v1","model":"fixture","contextWindowTokens":32000,"maxOutputTokens":4096});
+        let mut request: ProviderUpsertParams = serde_json::from_value(wire).unwrap();
+        assert!(request.expected_revision.is_none());
+        assert!(
+            serde_json::to_value(&request)
+                .unwrap()
+                .get("expectedRevision")
+                .is_none()
+        );
+        request.expected_revision = Some("opaque-v1".into());
+        assert_eq!(
+            serde_json::to_value(request).unwrap()["expectedRevision"],
+            "opaque-v1"
+        );
+    }
+}

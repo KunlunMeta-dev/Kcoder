@@ -1,0 +1,104 @@
+{
+  "ThreadWorkspaceHintV1": [
+    {
+      "decoded": {
+        "workspacePath": "/owned/old-workspace"
+      },
+      "name": "unix",
+      "value": {
+        "workspacePath": "/owned/old-workspace"
+      }
+    },
+    {
+      "decoded": {
+        "workspacePath": "C:\\Users\\ordinary\\workspace"
+      },
+      "name": "windows",
+      "value": {
+        "workspacePath": "C:\\Users\\ordinary\\workspace"
+      }
+    }
+  ],
+  "ThreadWorkspaceLookupCompleteness": [
+    {
+      "decoded": "complete",
+      "name": "complete",
+      "value": "complete"
+    },
+    {
+      "decoded": "partial",
+      "name": "partial",
+      "value": "partial"
+    }
+  ],
+  "ThreadWorkspaceLookupParams": [
+    {
+      "decoded": {
+        "threadId": "old_1"
+      },
+      "name": "old-thread",
+      "value": {
+        "threadId": "old_1"
+      }
+    },
+    {
+      "decoded": {
+        "cursor": "opaque-page",
+        "limit": 64,
+        "threadId": "old_1"
+      },
+      "name": "opaque-page",
+      "value": {
+        "cursor": "opaque-page",
+        "limit": 64,
+        "threadId": "old_1"
+      }
+    }
+  ],
+  "ThreadWorkspaceLookupResult": [
+    {
+      "decoded": {
+        "candidates": [],
+        "completeness": "complete",
+        "issueCount": 0,
+        "scannedProjects": 0,
+        "threadId": "old_1"
+      },
+      "name": "empty",
+      "value": {
+        "candidates": [],
+        "completeness": "complete",
+        "issueCount": 0,
+        "scannedProjects": 0,
+        "threadId": "old_1"
+      }
+    },
+    {
+      "decoded": {
+        "candidates": [
+          {
+            "workspacePath": "/owned/old"
+          }
+        ],
+        "completeness": "partial",
+        "issueCount": 1,
+        "nextCursor": "page-2",
+        "scannedProjects": 64,
+        "threadId": "old_1"
+      },
+      "name": "partial-page",
+      "value": {
+        "candidates": [
+          {
+            "workspacePath": "/owned/old"
+          }
+        ],
+        "completeness": "partial",
+        "issueCount": 1,
+        "nextCursor": "page-2",
+        "scannedProjects": 64,
+        "threadId": "old_1"
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "ThreadOwnershipErrorDataV1": {
+    "valid": [
+      {"name":"original-thread", "value":{"version":1,"reason":"ownedElsewhere","threadId":"original_1"}}
+    ],
+    "invalid": [
+      {"name":"unsupported-version", "value":{"version":2,"reason":"ownedElsewhere","threadId":"original_1"}},
+      {"name":"unsupported-reason", "value":{"version":1,"reason":"permissionDenied","threadId":"original_1"}},
+      {"name":"invalid-thread", "value":{"version":1,"reason":"ownedElsewhere","threadId":"../outside"}},
+      {"name":"private-path", "value":{"version":1,"reason":"ownedElsewhere","threadId":"original_1","path":"private"}}
+    ]
+  }
+}

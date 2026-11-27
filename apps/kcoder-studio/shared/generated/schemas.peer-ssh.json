@@ -1,0 +1,1953 @@
+{
+  "PeerSshAuthCompleteParamsV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshChallengeClaimsV1": {
+        "additionalProperties": false,
+        "description": "Both signatures bind the complete expected scope and both fresh challenges.",
+        "properties": {
+          "enrollment": {
+            "$ref": "#/definitions/PeerSshEnrollmentV1"
+          },
+          "gatewayNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "nativeNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "processInstance": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshChallengePurposeV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollment",
+          "gatewayNonce",
+          "nativeNonce",
+          "processInstance",
+          "purpose",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshChallengePurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-challenge.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentPurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-enrollment.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentV1": {
+        "additionalProperties": false,
+        "description": "Expected pin data only. Deserializing this record does not enroll either peer. A future controlled transaction must establish, persist and revoke these pins.",
+        "properties": {
+          "enrollmentId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "gateway": {
+            "$ref": "#/definitions/PeerSshGatewayKeyV1"
+          },
+          "generation": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "native": {
+            "$ref": "#/definitions/PeerSshNativeProfileV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshEnrollmentPurposeV1"
+          },
+          "target": {
+            "$ref": "#/definitions/PeerSshTargetBindingV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollmentId",
+          "gateway",
+          "generation",
+          "native",
+          "purpose",
+          "target",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshGatewayKeyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "gatewayId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "keyGeneration": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "keyGeneration",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PeerSshGatewayProofV1": {
+        "additionalProperties": false,
+        "properties": {
+          "native": {
+            "$ref": "#/definitions/PeerSshNativeProofV1"
+          },
+          "signature": {
+            "$ref": "#/definitions/PeerSshSignatureV1"
+          }
+        },
+        "required": [
+          "native",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PeerSshNativeProofV1": {
+        "additionalProperties": false,
+        "properties": {
+          "claims": {
+            "$ref": "#/definitions/PeerSshChallengeClaimsV1"
+          },
+          "signature": {
+            "$ref": "#/definitions/PeerSshSignatureV1"
+          }
+        },
+        "required": [
+          "claims",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "PeerSshSignatureV1": {
+        "items": {
+          "format": "uint8",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "maxItems": 64,
+        "minItems": 64,
+        "type": "array"
+      },
+      "PeerSshTargetBindingV1": {
+        "additionalProperties": false,
+        "description": "Comparison data for one target. The host must separately prove its transport.",
+        "properties": {
+          "accountGeneration": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshHostKey": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshUser": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetRevision": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          }
+        },
+        "required": [
+          "accountGeneration",
+          "sshHostKey",
+          "sshUser",
+          "targetId",
+          "targetRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "proof": {
+        "$ref": "#/definitions/PeerSshGatewayProofV1"
+      }
+    },
+    "required": [
+      "proof"
+    ],
+    "title": "PeerSshAuthCompleteParamsV1",
+    "type": "object"
+  },
+  "PeerSshAuthCompleteResultV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      }
+    },
+    "description": "A correlated acknowledgement on the same held stdio. Capability negotiation still occurs in initialize after the Native connection verified both signatures.",
+    "properties": {
+      "enrollmentId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      },
+      "generation": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "processInstance": {
+        "$ref": "#/definitions/PeerSshNonceV1"
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "enrollmentId",
+      "generation",
+      "processInstance",
+      "version"
+    ],
+    "title": "PeerSshAuthCompleteResultV1",
+    "type": "object"
+  },
+  "PeerSshAuthNativeProofParamsV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshChallengeClaimsV1": {
+        "additionalProperties": false,
+        "description": "Both signatures bind the complete expected scope and both fresh challenges.",
+        "properties": {
+          "enrollment": {
+            "$ref": "#/definitions/PeerSshEnrollmentV1"
+          },
+          "gatewayNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "nativeNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "processInstance": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshChallengePurposeV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollment",
+          "gatewayNonce",
+          "nativeNonce",
+          "processInstance",
+          "purpose",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshChallengePurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-challenge.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentPurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-enrollment.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentV1": {
+        "additionalProperties": false,
+        "description": "Expected pin data only. Deserializing this record does not enroll either peer. A future controlled transaction must establish, persist and revoke these pins.",
+        "properties": {
+          "enrollmentId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "gateway": {
+            "$ref": "#/definitions/PeerSshGatewayKeyV1"
+          },
+          "generation": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "native": {
+            "$ref": "#/definitions/PeerSshNativeProfileV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshEnrollmentPurposeV1"
+          },
+          "target": {
+            "$ref": "#/definitions/PeerSshTargetBindingV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollmentId",
+          "gateway",
+          "generation",
+          "native",
+          "purpose",
+          "target",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshGatewayKeyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "gatewayId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "keyGeneration": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "keyGeneration",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "PeerSshTargetBindingV1": {
+        "additionalProperties": false,
+        "description": "Comparison data for one target. The host must separately prove its transport.",
+        "properties": {
+          "accountGeneration": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshHostKey": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshUser": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetRevision": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          }
+        },
+        "required": [
+          "accountGeneration",
+          "sshHostKey",
+          "sshUser",
+          "targetId",
+          "targetRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "claims": {
+        "$ref": "#/definitions/PeerSshChallengeClaimsV1"
+      }
+    },
+    "required": [
+      "claims"
+    ],
+    "title": "PeerSshAuthNativeProofParamsV1",
+    "type": "object"
+  },
+  "PeerSshAuthOfferParamsV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      }
+    },
+    "properties": {
+      "enrollmentId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      }
+    },
+    "required": [
+      "enrollmentId"
+    ],
+    "title": "PeerSshAuthOfferParamsV1",
+    "type": "object"
+  },
+  "PeerSshChallengeClaimsV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshChallengePurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-challenge.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentPurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-enrollment.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentV1": {
+        "additionalProperties": false,
+        "description": "Expected pin data only. Deserializing this record does not enroll either peer. A future controlled transaction must establish, persist and revoke these pins.",
+        "properties": {
+          "enrollmentId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "gateway": {
+            "$ref": "#/definitions/PeerSshGatewayKeyV1"
+          },
+          "generation": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "native": {
+            "$ref": "#/definitions/PeerSshNativeProfileV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshEnrollmentPurposeV1"
+          },
+          "target": {
+            "$ref": "#/definitions/PeerSshTargetBindingV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollmentId",
+          "gateway",
+          "generation",
+          "native",
+          "purpose",
+          "target",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshGatewayKeyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "gatewayId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "keyGeneration": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "keyGeneration",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "PeerSshTargetBindingV1": {
+        "additionalProperties": false,
+        "description": "Comparison data for one target. The host must separately prove its transport.",
+        "properties": {
+          "accountGeneration": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshHostKey": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshUser": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetRevision": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          }
+        },
+        "required": [
+          "accountGeneration",
+          "sshHostKey",
+          "sshUser",
+          "targetId",
+          "targetRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Both signatures bind the complete expected scope and both fresh challenges.",
+    "properties": {
+      "enrollment": {
+        "$ref": "#/definitions/PeerSshEnrollmentV1"
+      },
+      "gatewayNonce": {
+        "$ref": "#/definitions/PeerSshNonceV1"
+      },
+      "nativeNonce": {
+        "$ref": "#/definitions/PeerSshNonceV1"
+      },
+      "processInstance": {
+        "$ref": "#/definitions/PeerSshNonceV1"
+      },
+      "purpose": {
+        "$ref": "#/definitions/PeerSshChallengePurposeV1"
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "enrollment",
+      "gatewayNonce",
+      "nativeNonce",
+      "processInstance",
+      "purpose",
+      "version"
+    ],
+    "title": "PeerSshChallengeClaimsV1",
+    "type": "object"
+  },
+  "PeerSshChallengeOfferV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshChallengePurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-challenge.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      }
+    },
+    "description": "A challenge offer has no execution or route authority, even with valid pins.",
+    "properties": {
+      "enrollmentGeneration": {
+        "format": "uint64",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "enrollmentId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      },
+      "nativeNonce": {
+        "$ref": "#/definitions/PeerSshNonceV1"
+      },
+      "processInstance": {
+        "$ref": "#/definitions/PeerSshNonceV1"
+      },
+      "purpose": {
+        "$ref": "#/definitions/PeerSshChallengePurposeV1"
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "enrollmentGeneration",
+      "enrollmentId",
+      "nativeNonce",
+      "processInstance",
+      "purpose",
+      "version"
+    ],
+    "title": "PeerSshChallengeOfferV1",
+    "type": "object"
+  },
+  "PeerSshEnrollmentV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshEnrollmentPurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-enrollment.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshGatewayKeyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "gatewayId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "keyGeneration": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "keyGeneration",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "PeerSshTargetBindingV1": {
+        "additionalProperties": false,
+        "description": "Comparison data for one target. The host must separately prove its transport.",
+        "properties": {
+          "accountGeneration": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshHostKey": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshUser": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetRevision": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          }
+        },
+        "required": [
+          "accountGeneration",
+          "sshHostKey",
+          "sshUser",
+          "targetId",
+          "targetRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Expected pin data only. Deserializing this record does not enroll either peer. A future controlled transaction must establish, persist and revoke these pins.",
+    "properties": {
+      "enrollmentId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      },
+      "gateway": {
+        "$ref": "#/definitions/PeerSshGatewayKeyV1"
+      },
+      "generation": {
+        "format": "uint64",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "native": {
+        "$ref": "#/definitions/PeerSshNativeProfileV1"
+      },
+      "purpose": {
+        "$ref": "#/definitions/PeerSshEnrollmentPurposeV1"
+      },
+      "target": {
+        "$ref": "#/definitions/PeerSshTargetBindingV1"
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "enrollmentId",
+      "gateway",
+      "generation",
+      "native",
+      "purpose",
+      "target",
+      "version"
+    ],
+    "title": "PeerSshEnrollmentV1",
+    "type": "object"
+  },
+  "PeerSshGatewayProofV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshChallengeClaimsV1": {
+        "additionalProperties": false,
+        "description": "Both signatures bind the complete expected scope and both fresh challenges.",
+        "properties": {
+          "enrollment": {
+            "$ref": "#/definitions/PeerSshEnrollmentV1"
+          },
+          "gatewayNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "nativeNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "processInstance": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshChallengePurposeV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollment",
+          "gatewayNonce",
+          "nativeNonce",
+          "processInstance",
+          "purpose",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshChallengePurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-challenge.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentPurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-enrollment.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentV1": {
+        "additionalProperties": false,
+        "description": "Expected pin data only. Deserializing this record does not enroll either peer. A future controlled transaction must establish, persist and revoke these pins.",
+        "properties": {
+          "enrollmentId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "gateway": {
+            "$ref": "#/definitions/PeerSshGatewayKeyV1"
+          },
+          "generation": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "native": {
+            "$ref": "#/definitions/PeerSshNativeProfileV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshEnrollmentPurposeV1"
+          },
+          "target": {
+            "$ref": "#/definitions/PeerSshTargetBindingV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollmentId",
+          "gateway",
+          "generation",
+          "native",
+          "purpose",
+          "target",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshGatewayKeyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "gatewayId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "keyGeneration": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "keyGeneration",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PeerSshNativeProofV1": {
+        "additionalProperties": false,
+        "properties": {
+          "claims": {
+            "$ref": "#/definitions/PeerSshChallengeClaimsV1"
+          },
+          "signature": {
+            "$ref": "#/definitions/PeerSshSignatureV1"
+          }
+        },
+        "required": [
+          "claims",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "PeerSshSignatureV1": {
+        "items": {
+          "format": "uint8",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "maxItems": 64,
+        "minItems": 64,
+        "type": "array"
+      },
+      "PeerSshTargetBindingV1": {
+        "additionalProperties": false,
+        "description": "Comparison data for one target. The host must separately prove its transport.",
+        "properties": {
+          "accountGeneration": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshHostKey": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshUser": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetRevision": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          }
+        },
+        "required": [
+          "accountGeneration",
+          "sshHostKey",
+          "sshUser",
+          "targetId",
+          "targetRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "native": {
+        "$ref": "#/definitions/PeerSshNativeProofV1"
+      },
+      "signature": {
+        "$ref": "#/definitions/PeerSshSignatureV1"
+      }
+    },
+    "required": [
+      "native",
+      "signature"
+    ],
+    "title": "PeerSshGatewayProofV1",
+    "type": "object"
+  },
+  "PeerSshNativeProofV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshChallengeClaimsV1": {
+        "additionalProperties": false,
+        "description": "Both signatures bind the complete expected scope and both fresh challenges.",
+        "properties": {
+          "enrollment": {
+            "$ref": "#/definitions/PeerSshEnrollmentV1"
+          },
+          "gatewayNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "nativeNonce": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "processInstance": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshChallengePurposeV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollment",
+          "gatewayNonce",
+          "nativeNonce",
+          "processInstance",
+          "purpose",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshChallengePurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-challenge.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentPurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-enrollment.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentV1": {
+        "additionalProperties": false,
+        "description": "Expected pin data only. Deserializing this record does not enroll either peer. A future controlled transaction must establish, persist and revoke these pins.",
+        "properties": {
+          "enrollmentId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "gateway": {
+            "$ref": "#/definitions/PeerSshGatewayKeyV1"
+          },
+          "generation": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "native": {
+            "$ref": "#/definitions/PeerSshNativeProfileV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshEnrollmentPurposeV1"
+          },
+          "target": {
+            "$ref": "#/definitions/PeerSshTargetBindingV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollmentId",
+          "gateway",
+          "generation",
+          "native",
+          "purpose",
+          "target",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshGatewayKeyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "gatewayId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "keyGeneration": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "keyGeneration",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "PeerSshSignatureV1": {
+        "items": {
+          "format": "uint8",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "maxItems": 64,
+        "minItems": 64,
+        "type": "array"
+      },
+      "PeerSshTargetBindingV1": {
+        "additionalProperties": false,
+        "description": "Comparison data for one target. The host must separately prove its transport.",
+        "properties": {
+          "accountGeneration": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshHostKey": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshUser": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetRevision": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          }
+        },
+        "required": [
+          "accountGeneration",
+          "sshHostKey",
+          "sshUser",
+          "targetId",
+          "targetRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "claims": {
+        "$ref": "#/definitions/PeerSshChallengeClaimsV1"
+      },
+      "signature": {
+        "$ref": "#/definitions/PeerSshSignatureV1"
+      }
+    },
+    "required": [
+      "claims",
+      "signature"
+    ],
+    "title": "PeerSshNativeProofV1",
+    "type": "object"
+  },
+  "PeerSshPinCommandV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshEnrollmentPurposeV1": {
+        "enum": [
+          "kcoder.peer-message.ssh-enrollment.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshEnrollmentV1": {
+        "additionalProperties": false,
+        "description": "Expected pin data only. Deserializing this record does not enroll either peer. A future controlled transaction must establish, persist and revoke these pins.",
+        "properties": {
+          "enrollmentId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "gateway": {
+            "$ref": "#/definitions/PeerSshGatewayKeyV1"
+          },
+          "generation": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "native": {
+            "$ref": "#/definitions/PeerSshNativeProfileV1"
+          },
+          "purpose": {
+            "$ref": "#/definitions/PeerSshEnrollmentPurposeV1"
+          },
+          "target": {
+            "$ref": "#/definitions/PeerSshTargetBindingV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollmentId",
+          "gateway",
+          "generation",
+          "native",
+          "purpose",
+          "target",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshGatewayKeyV1": {
+        "additionalProperties": false,
+        "properties": {
+          "gatewayId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "keyGeneration": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          }
+        },
+        "required": [
+          "gatewayId",
+          "keyGeneration",
+          "publicKey"
+        ],
+        "type": "object"
+      },
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PeerSshNonceV1": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "PeerSshPinActionV1": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "enrollment": {
+                "$ref": "#/definitions/PeerSshEnrollmentV1"
+              },
+              "kind": {
+                "enum": [
+                  "authorize"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "enrollment",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "enrollmentId": {
+                "$ref": "#/definitions/PeerSshIdentityTextV1"
+              },
+              "expectedGeneration": {
+                "format": "uint64",
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "revoke"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "enrollmentId",
+              "expectedGeneration",
+              "kind"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "PeerSshPinCommandPurposeV1": {
+        "description": "An explicit OS-owner administration command, never an app-server route grant.",
+        "enum": [
+          "kcoder.peer-message.ssh-pin-change.v1"
+        ],
+        "type": "string"
+      },
+      "PeerSshTargetBindingV1": {
+        "additionalProperties": false,
+        "description": "Comparison data for one target. The host must separately prove its transport.",
+        "properties": {
+          "accountGeneration": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshHostKey": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "sshUser": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "targetRevision": {
+            "$ref": "#/definitions/PeerSshNonceV1"
+          }
+        },
+        "required": [
+          "accountGeneration",
+          "sshHostKey",
+          "sshUser",
+          "targetId",
+          "targetRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "action": {
+        "$ref": "#/definitions/PeerSshPinActionV1"
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      },
+      "purpose": {
+        "$ref": "#/definitions/PeerSshPinCommandPurposeV1"
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "action",
+      "expectedRevision",
+      "operationId",
+      "purpose",
+      "version"
+    ],
+    "title": "PeerSshPinCommandV1",
+    "type": "object"
+  },
+  "PeerSshPinReceiptReadV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshPinReceiptV1": {
+        "additionalProperties": false,
+        "description": "A durable pin mutation receipt is not a routing or model-execution verdict.",
+        "properties": {
+          "enrollmentId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "generation": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "operationId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "revision": {
+            "format": "uint64",
+            "maximum": 9007199254740991,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/definitions/PeerSshPinStatusV1"
+          },
+          "version": {
+            "format": "uint8",
+            "maximum": 1,
+            "minimum": 1,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "enrollmentId",
+          "generation",
+          "operationId",
+          "revision",
+          "status",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PeerSshPinStatusV1": {
+        "enum": [
+          "pinned",
+          "revoked"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "operationId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      },
+      "receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/PeerSshPinReceiptV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "operationId",
+      "version"
+    ],
+    "title": "PeerSshPinReceiptReadV1",
+    "type": "object"
+  },
+  "PeerSshPinReceiptV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshPinStatusV1": {
+        "enum": [
+          "pinned",
+          "revoked"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A durable pin mutation receipt is not a routing or model-execution verdict.",
+    "properties": {
+      "enrollmentId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      },
+      "generation": {
+        "format": "uint64",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "operationId": {
+        "$ref": "#/definitions/PeerSshIdentityTextV1"
+      },
+      "revision": {
+        "format": "uint64",
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/definitions/PeerSshPinStatusV1"
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "enrollmentId",
+      "generation",
+      "operationId",
+      "revision",
+      "status",
+      "version"
+    ],
+    "title": "PeerSshPinReceiptV1",
+    "type": "object"
+  },
+  "PeerSshProfileObservationV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PeerSshIdentityTextV1": {
+        "maxLength": 256,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$(?![\\s\\S])",
+        "type": "string"
+      },
+      "PeerSshNativeProfileV1": {
+        "additionalProperties": false,
+        "description": "Physical Native profile/workspace observations, distinct from Gateway labels.",
+        "properties": {
+          "accountUid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "identityEpoch": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "profileIdentity": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "publicKey": {
+            "items": {
+              "format": "uint8",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "maxItems": 32,
+            "minItems": 32,
+            "type": "array"
+          },
+          "targetId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/PeerSshIdentityTextV1"
+          }
+        },
+        "required": [
+          "accountUid",
+          "identityEpoch",
+          "profileIdentity",
+          "publicKey",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "An OS-owner observation, not proof of a parent or permission to message.",
+    "properties": {
+      "native": {
+        "$ref": "#/definitions/PeerSshNativeProfileV1"
+      },
+      "pinRevision": {
+        "format": "uint64",
+        "maximum": 9007199254740991,
+        "minimum": 0,
+        "type": "integer"
+      },
+      "version": {
+        "format": "uint8",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "native",
+      "pinRevision",
+      "version"
+    ],
+    "title": "PeerSshProfileObservationV1",
+    "type": "object"
+  }
+}

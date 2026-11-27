@@ -1,0 +1,20 @@
+//! Authenticated source/destination composition for independent-session messaging.
+pub(crate) mod backchannel;
+pub(crate) mod cold_source;
+pub(crate) mod cold_target_runtime;
+pub(crate) mod delivery;
+pub(crate) mod errors;
+pub(crate) mod host;
+pub(crate) mod idle;
+pub(crate) mod idle_turn;
+pub(crate) mod policy;
+pub(crate) mod receipt_list;
+pub(crate) mod receipt_read;
+pub(crate) mod remote_delivery;
+pub(crate) mod router_authority;
+pub(crate) mod router_rpc;
+pub(crate) mod router_store;
+pub(crate) mod service;
+#[cfg(target_os = "linux")]
+pub(crate) mod ssh_enrolled;
+pub(crate) mod ssh_parent;

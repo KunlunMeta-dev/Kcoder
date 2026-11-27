@@ -1,0 +1,244 @@
+{
+  "PeerSshGatewayPinStatusV1": {
+    "valid": [
+      {
+        "name": "closed-observation-0",
+        "value": "none"
+      },
+      {
+        "name": "closed-observation-1",
+        "value": "pinned"
+      },
+      {
+        "name": "closed-observation-2",
+        "value": "revoked"
+      },
+      {
+        "name": "closed-observation-3",
+        "value": "revoking"
+      },
+      {
+        "name": "closed-observation-4",
+        "value": "setup_unconfirmed"
+      },
+      {
+        "name": "closed-observation-5",
+        "value": "scope_changed"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-inferred-authority-or-old-status-default",
+        "value": "connected"
+      }
+    ]
+  },
+  "PeerSshGatewayProposalPhaseV1": {
+    "valid": [
+      {
+        "name": "closed-observation-0",
+        "value": "proposed"
+      },
+      {
+        "name": "closed-observation-1",
+        "value": "dispatching"
+      },
+      {
+        "name": "closed-observation-2",
+        "value": "setup_unconfirmed"
+      },
+      {
+        "name": "closed-observation-3",
+        "value": "completed"
+      },
+      {
+        "name": "closed-observation-4",
+        "value": "discarded"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-inferred-authority-or-old-status-default",
+        "value": "retried"
+      }
+    ]
+  },
+  "PeerSshGatewayProposalV1": {
+    "valid": [
+      {
+        "name": "closed-observation-0",
+        "value": {
+          "proposalId": "original-proposal",
+          "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "operationId": "original-operation",
+          "phase": "proposed",
+          "action": "authorize",
+          "enrollment": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+            "enrollmentId": "controlled-enrollment",
+            "generation": 7,
+            "gateway": {
+              "gatewayId": "gateway-A",
+              "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "keyGeneration": 2
+            },
+            "target": {
+              "targetId": "saved-ssh-target",
+              "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "accountGeneration": "account-generation",
+              "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+              "sshUser": "peer-user"
+            },
+            "native": {
+              "accountUid": 20001,
+              "profileIdentity": "physical-profile",
+              "targetId": "native-profile-target",
+              "workspaceId": "physical-workspace",
+              "identityEpoch": "profile-epoch",
+              "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+            }
+          }
+        }
+      },
+      {
+        "name": "closed-observation-1",
+        "value": {
+          "proposalId": "original-proposal",
+          "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "operationId": "original-operation",
+          "phase": "discarded",
+          "action": "authorize",
+          "enrollment": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+            "enrollmentId": "controlled-enrollment",
+            "generation": 7,
+            "gateway": {
+              "gatewayId": "gateway-A",
+              "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "keyGeneration": 2
+            },
+            "target": {
+              "targetId": "saved-ssh-target",
+              "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "accountGeneration": "account-generation",
+              "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+              "sshUser": "peer-user"
+            },
+            "native": {
+              "accountUid": 20001,
+              "profileIdentity": "physical-profile",
+              "targetId": "native-profile-target",
+              "workspaceId": "physical-workspace",
+              "identityEpoch": "profile-epoch",
+              "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-inferred-authority-or-old-status-default",
+        "value": {
+          "proposalId": "original-proposal",
+          "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "operationId": "original-operation",
+          "phase": "proposed",
+          "action": "authorize",
+          "enrollment": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+            "enrollmentId": "controlled-enrollment",
+            "generation": 7,
+            "gateway": {
+              "gatewayId": "gateway-A",
+              "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "keyGeneration": 2
+            },
+            "target": {
+              "targetId": "saved-ssh-target",
+              "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "accountGeneration": "account-generation",
+              "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+              "sshUser": "peer-user"
+            },
+            "native": {
+              "accountUid": 20001,
+              "profileIdentity": "physical-profile",
+              "targetId": "native-profile-target",
+              "workspaceId": "physical-workspace",
+              "identityEpoch": "profile-epoch",
+              "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+            }
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshGatewayStatusV1": {
+    "valid": [
+      {
+        "name": "closed-observation-0",
+        "value": {
+          "configured": true,
+          "pinStatus": "scope_changed",
+          "proposals": [
+            {
+              "proposalId": "original-proposal",
+              "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "operationId": "original-operation",
+              "phase": "proposed",
+              "action": "authorize",
+              "enrollment": {
+                "version": 1,
+                "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+                "enrollmentId": "controlled-enrollment",
+                "generation": 7,
+                "gateway": {
+                  "gatewayId": "gateway-A",
+                  "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                  "keyGeneration": 2
+                },
+                "target": {
+                  "targetId": "saved-ssh-target",
+                  "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "accountGeneration": "account-generation",
+                  "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                  "sshUser": "peer-user"
+                },
+                "native": {
+                  "accountUid": 20001,
+                  "profileIdentity": "physical-profile",
+                  "targetId": "native-profile-target",
+                  "workspaceId": "physical-workspace",
+                  "identityEpoch": "profile-epoch",
+                  "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "closed-observation-1",
+        "value": {
+          "configured": false,
+          "pinStatus": "none",
+          "proposals": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-inferred-authority-or-old-status-default",
+        "value": {
+          "configured": true,
+          "proposals": []
+        }
+      }
+    ]
+  }
+}

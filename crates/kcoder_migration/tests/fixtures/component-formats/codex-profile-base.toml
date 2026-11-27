@@ -1,0 +1,6 @@
+model = "base-model"
+model_provider = "Fixture"
+model_context_window = 128000
+[model_providers.Fixture]
+base_url = "https://example.invalid/v1"
+wire_api = "responses"

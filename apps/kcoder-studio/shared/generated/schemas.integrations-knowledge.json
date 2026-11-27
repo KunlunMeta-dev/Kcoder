@@ -1,0 +1,2661 @@
+{
+  "CitationReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/PublicationSource"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "owner",
+      "publicationId",
+      "source",
+      "version"
+    ],
+    "title": "CitationReadParams",
+    "type": "object"
+  },
+  "CitationReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      },
+      "PublishedKnowledgePage": {
+        "additionalProperties": false,
+        "properties": {
+          "markdown": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/PublicationSource"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown",
+          "source",
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "citation": {
+        "$ref": "#/definitions/PublishedKnowledgePage"
+      }
+    },
+    "required": [
+      "citation"
+    ],
+    "title": "CitationReadResult",
+    "type": "object"
+  },
+  "KnowledgeAdoptParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "owner",
+      "publicationId",
+      "version"
+    ],
+    "title": "KnowledgeAdoptParams",
+    "type": "object"
+  },
+  "KnowledgeAdoption": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "A user's explicit fixed-version selection; it never preserves a revoked source read grant.",
+    "properties": {
+      "adoptedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "publicationOwner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationVersion": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "adoptedAtMs",
+      "enabled",
+      "id",
+      "owner",
+      "publicationId",
+      "publicationOwner",
+      "publicationVersion",
+      "revision",
+      "updatedAtMs"
+    ],
+    "title": "KnowledgeAdoption",
+    "type": "object"
+  },
+  "KnowledgeAdoptionEnableParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "adoptionId": {
+        "type": "string"
+      },
+      "enabled": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "adoptionId",
+      "enabled"
+    ],
+    "title": "KnowledgeAdoptionEnableParams",
+    "type": "object"
+  },
+  "KnowledgeAdoptionListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgeAdoption": {
+        "additionalProperties": false,
+        "description": "A user's explicit fixed-version selection; it never preserves a revoked source read grant.",
+        "properties": {
+          "adoptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "publicationOwner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "publicationVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "adoptedAtMs",
+          "enabled",
+          "id",
+          "owner",
+          "publicationId",
+          "publicationOwner",
+          "publicationVersion",
+          "revision",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_KnowledgeAdoption": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/KnowledgeAdoption"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_KnowledgeAdoption"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "KnowledgeAdoptionListResult",
+    "type": "object"
+  },
+  "KnowledgeAdoptionResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgeAdoption": {
+        "additionalProperties": false,
+        "description": "A user's explicit fixed-version selection; it never preserves a revoked source read grant.",
+        "properties": {
+          "adoptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "publicationOwner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "publicationVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "adoptedAtMs",
+          "enabled",
+          "id",
+          "owner",
+          "publicationId",
+          "publicationOwner",
+          "publicationVersion",
+          "revision",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "adoption": {
+        "$ref": "#/definitions/KnowledgeAdoption"
+      }
+    },
+    "required": [
+      "adoption"
+    ],
+    "title": "KnowledgeAdoptionResult",
+    "type": "object"
+  },
+  "KnowledgePublication": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgeVisibility": {
+        "enum": [
+          "personal",
+          "project",
+          "department",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "PublicationDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "audienceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "purpose": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewConclusion": {
+            "default": null,
+            "description": "Publisher-provided review notes; this is not an independent approval or authority grant.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/PublicationSource"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unresolved": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "validFromMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "visibility": {
+            "$ref": "#/definitions/KnowledgeVisibility"
+          }
+        },
+        "required": [
+          "publicationId",
+          "sources",
+          "title",
+          "unresolved",
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      },
+      "PublishedKnowledgePage": {
+        "additionalProperties": false,
+        "properties": {
+          "markdown": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/PublicationSource"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown",
+          "source",
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "draft": {
+        "$ref": "#/definitions/PublicationDraft"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "pages": {
+        "items": {
+          "$ref": "#/definitions/PublishedKnowledgePage"
+        },
+        "type": "array"
+      },
+      "publishedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "publisherRole": {
+        "default": null,
+        "description": "Native permission context observed at publication, never a client-selected role.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "revoked": {
+        "type": "boolean"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "draft",
+      "owner",
+      "pages",
+      "publishedAtMs",
+      "revoked",
+      "version"
+    ],
+    "title": "KnowledgePublication",
+    "type": "object"
+  },
+  "KnowledgePublicationSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Owner management metadata only; expired or revoked versions never expose page bodies here.",
+    "properties": {
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "publishedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "publisherRole": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "purpose": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "revoked": {
+        "type": "boolean"
+      },
+      "title": {
+        "type": "string"
+      },
+      "validFromMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "validUntilMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "owner",
+      "publicationId",
+      "publishedAtMs",
+      "revoked",
+      "title",
+      "version"
+    ],
+    "title": "KnowledgePublicationSummary",
+    "type": "object"
+  },
+  "KnowledgePublishParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgeVisibility": {
+        "enum": [
+          "personal",
+          "project",
+          "department",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "PublicationDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "audienceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "purpose": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewConclusion": {
+            "default": null,
+            "description": "Publisher-provided review notes; this is not an independent approval or authority grant.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/PublicationSource"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unresolved": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "validFromMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "visibility": {
+            "$ref": "#/definitions/KnowledgeVisibility"
+          }
+        },
+        "required": [
+          "publicationId",
+          "sources",
+          "title",
+          "unresolved",
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "draft": {
+        "$ref": "#/definitions/PublicationDraft"
+      }
+    },
+    "required": [
+      "draft"
+    ],
+    "title": "KnowledgePublishParams",
+    "type": "object"
+  },
+  "KnowledgeRetrieval": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgeRetrievalOutcome": {
+        "enum": [
+          "matched",
+          "no_match"
+        ],
+        "type": "string"
+      },
+      "PublicationHit": {
+        "additionalProperties": false,
+        "properties": {
+          "excerpt": {
+            "type": "string"
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/PublicationSource"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "excerpt",
+          "publicationId",
+          "source",
+          "title",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "hits": {
+        "items": {
+          "$ref": "#/definitions/PublicationHit"
+        },
+        "type": "array"
+      },
+      "observedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "outcome": {
+        "$ref": "#/definitions/KnowledgeRetrievalOutcome"
+      }
+    },
+    "required": [
+      "hits",
+      "observedAtMs",
+      "outcome"
+    ],
+    "title": "KnowledgeRetrieval",
+    "type": "object"
+  },
+  "KnowledgeRetrievalOutcome": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "matched",
+      "no_match"
+    ],
+    "title": "KnowledgeRetrievalOutcome",
+    "type": "string"
+  },
+  "KnowledgeRetrieveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "limit": {
+        "default": 8,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "query": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "owner",
+      "publicationId",
+      "query",
+      "version"
+    ],
+    "title": "KnowledgeRetrieveParams",
+    "type": "object"
+  },
+  "KnowledgeRetrieveResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgeRetrieval": {
+        "additionalProperties": false,
+        "properties": {
+          "hits": {
+            "items": {
+              "$ref": "#/definitions/PublicationHit"
+            },
+            "type": "array"
+          },
+          "observedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/definitions/KnowledgeRetrievalOutcome"
+          }
+        },
+        "required": [
+          "hits",
+          "observedAtMs",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "KnowledgeRetrievalOutcome": {
+        "enum": [
+          "matched",
+          "no_match"
+        ],
+        "type": "string"
+      },
+      "PublicationHit": {
+        "additionalProperties": false,
+        "properties": {
+          "excerpt": {
+            "type": "string"
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/PublicationSource"
+          },
+          "title": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "excerpt",
+          "publicationId",
+          "source",
+          "title",
+          "version"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "retrieval": {
+        "$ref": "#/definitions/KnowledgeRetrieval"
+      }
+    },
+    "required": [
+      "retrieval"
+    ],
+    "title": "KnowledgeRetrieveResult",
+    "type": "object"
+  },
+  "KnowledgeRevokeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "owner",
+      "publicationId",
+      "version"
+    ],
+    "title": "KnowledgeRevokeParams",
+    "type": "object"
+  },
+  "KnowledgeSettingsFeature": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "memoryCenter",
+      "sharedKnowledge",
+      "subscriptions"
+    ],
+    "title": "KnowledgeSettingsFeature",
+    "type": "string"
+  },
+  "KnowledgeSettingsFlags": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "businessAutomationEnabled": {
+        "type": "boolean"
+      },
+      "memoryCenterEnabled": {
+        "type": "boolean"
+      },
+      "publicationsEnabled": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "businessAutomationEnabled",
+      "memoryCenterEnabled",
+      "publicationsEnabled"
+    ],
+    "title": "KnowledgeSettingsFlags",
+    "type": "object"
+  },
+  "KnowledgeSettingsPersisted": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "businessAutomationEnabled": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "memoryCenterEnabled": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "publicationsEnabled": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "title": "KnowledgeSettingsPersisted",
+    "type": "object"
+  },
+  "KnowledgeSettingsReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgeSettingsFlags": {
+        "additionalProperties": false,
+        "properties": {
+          "businessAutomationEnabled": {
+            "type": "boolean"
+          },
+          "memoryCenterEnabled": {
+            "type": "boolean"
+          },
+          "publicationsEnabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "businessAutomationEnabled",
+          "memoryCenterEnabled",
+          "publicationsEnabled"
+        ],
+        "type": "object"
+      },
+      "KnowledgeSettingsPersisted": {
+        "additionalProperties": false,
+        "properties": {
+          "businessAutomationEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "memoryCenterEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "publicationsEnabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "connection": {
+        "$ref": "#/definitions/KnowledgeSettingsFlags"
+      },
+      "effective": {
+        "$ref": "#/definitions/KnowledgeSettingsFlags"
+      },
+      "persisted": {
+        "$ref": "#/definitions/KnowledgeSettingsPersisted"
+      },
+      "restartRequired": {
+        "type": "boolean"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "connection",
+      "effective",
+      "persisted",
+      "restartRequired",
+      "revision"
+    ],
+    "title": "KnowledgeSettingsReadResult",
+    "type": "object"
+  },
+  "KnowledgeSettingsSaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgeSettingsFeature": {
+        "enum": [
+          "memoryCenter",
+          "sharedKnowledge",
+          "subscriptions"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "type": "string"
+      },
+      "feature": {
+        "$ref": "#/definitions/KnowledgeSettingsFeature"
+      }
+    },
+    "required": [
+      "enabled",
+      "expectedRevision",
+      "feature"
+    ],
+    "title": "KnowledgeSettingsSaveParams",
+    "type": "object"
+  },
+  "KnowledgeSourceObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Current lifecycle observation of a fixed source; it never rewrites publication contents.",
+    "properties": {
+      "archived": {
+        "type": "boolean"
+      },
+      "available": {
+        "type": "boolean"
+      },
+      "observedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "removed": {
+        "type": "boolean"
+      },
+      "source": {
+        "$ref": "#/definitions/PublicationSource"
+      }
+    },
+    "required": [
+      "archived",
+      "available",
+      "observedAtMs",
+      "removed",
+      "source"
+    ],
+    "title": "KnowledgeSourceObservation",
+    "type": "object"
+  },
+  "KnowledgeVisibility": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "personal",
+      "project",
+      "department",
+      "organization"
+    ],
+    "title": "KnowledgeVisibility",
+    "type": "string"
+  },
+  "PublicationDraft": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgeVisibility": {
+        "enum": [
+          "personal",
+          "project",
+          "department",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "audienceId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "purpose": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reviewConclusion": {
+        "default": null,
+        "description": "Publisher-provided review notes; this is not an independent approval or authority grant.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sources": {
+        "items": {
+          "$ref": "#/definitions/PublicationSource"
+        },
+        "type": "array"
+      },
+      "title": {
+        "type": "string"
+      },
+      "unresolved": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "validFromMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "validUntilMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "visibility": {
+        "$ref": "#/definitions/KnowledgeVisibility"
+      }
+    },
+    "required": [
+      "publicationId",
+      "sources",
+      "title",
+      "unresolved",
+      "visibility"
+    ],
+    "title": "PublicationDraft",
+    "type": "object"
+  },
+  "PublicationHistoryListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_KnowledgePublicationSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/KnowledgePublicationSummary"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "KnowledgePublicationSummary": {
+        "additionalProperties": false,
+        "description": "Owner management metadata only; expired or revoked versions never expose page bodies here.",
+        "properties": {
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "publishedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "publisherRole": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "purpose": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked": {
+            "type": "boolean"
+          },
+          "title": {
+            "type": "string"
+          },
+          "validFromMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "owner",
+          "publicationId",
+          "publishedAtMs",
+          "revoked",
+          "title",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_KnowledgePublicationSummary"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "PublicationHistoryListResult",
+    "type": "object"
+  },
+  "PublicationHit": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "excerpt": {
+        "type": "string"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/PublicationSource"
+      },
+      "title": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "excerpt",
+      "publicationId",
+      "source",
+      "title",
+      "version"
+    ],
+    "title": "PublicationHit",
+    "type": "object"
+  },
+  "PublicationListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_KnowledgePublication": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/KnowledgePublication"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "KnowledgePublication": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "$ref": "#/definitions/PublicationDraft"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/definitions/PublishedKnowledgePage"
+            },
+            "type": "array"
+          },
+          "publishedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "publisherRole": {
+            "default": null,
+            "description": "Native permission context observed at publication, never a client-selected role.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked": {
+            "type": "boolean"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft",
+          "owner",
+          "pages",
+          "publishedAtMs",
+          "revoked",
+          "version"
+        ],
+        "type": "object"
+      },
+      "KnowledgeVisibility": {
+        "enum": [
+          "personal",
+          "project",
+          "department",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "PublicationDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "audienceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "purpose": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewConclusion": {
+            "default": null,
+            "description": "Publisher-provided review notes; this is not an independent approval or authority grant.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/PublicationSource"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unresolved": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "validFromMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "visibility": {
+            "$ref": "#/definitions/KnowledgeVisibility"
+          }
+        },
+        "required": [
+          "publicationId",
+          "sources",
+          "title",
+          "unresolved",
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      },
+      "PublishedKnowledgePage": {
+        "additionalProperties": false,
+        "properties": {
+          "markdown": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/PublicationSource"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown",
+          "source",
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_KnowledgePublication"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "PublicationListResult",
+    "type": "object"
+  },
+  "PublicationReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "version": {
+        "default": null,
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "owner",
+      "publicationId"
+    ],
+    "title": "PublicationReadParams",
+    "type": "object"
+  },
+  "PublicationReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgePublication": {
+        "additionalProperties": false,
+        "properties": {
+          "draft": {
+            "$ref": "#/definitions/PublicationDraft"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "pages": {
+            "items": {
+              "$ref": "#/definitions/PublishedKnowledgePage"
+            },
+            "type": "array"
+          },
+          "publishedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "publisherRole": {
+            "default": null,
+            "description": "Native permission context observed at publication, never a client-selected role.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revoked": {
+            "type": "boolean"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft",
+          "owner",
+          "pages",
+          "publishedAtMs",
+          "revoked",
+          "version"
+        ],
+        "type": "object"
+      },
+      "KnowledgeVisibility": {
+        "enum": [
+          "personal",
+          "project",
+          "department",
+          "organization"
+        ],
+        "type": "string"
+      },
+      "PublicationDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "audienceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publicationId": {
+            "type": "string"
+          },
+          "purpose": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reviewConclusion": {
+            "default": null,
+            "description": "Publisher-provided review notes; this is not an independent approval or authority grant.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/PublicationSource"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unresolved": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "validFromMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "validUntilMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "visibility": {
+            "$ref": "#/definitions/KnowledgeVisibility"
+          }
+        },
+        "required": [
+          "publicationId",
+          "sources",
+          "title",
+          "unresolved",
+          "visibility"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      },
+      "PublishedKnowledgePage": {
+        "additionalProperties": false,
+        "properties": {
+          "markdown": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/PublicationSource"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "markdown",
+          "source",
+          "title"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "publication": {
+        "$ref": "#/definitions/KnowledgePublication"
+      }
+    },
+    "required": [
+      "publication"
+    ],
+    "title": "PublicationReadResult",
+    "type": "object"
+  },
+  "PublicationSource": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "libraryId": {
+        "type": "string"
+      },
+      "pageId": {
+        "type": "string"
+      },
+      "pageRevision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "libraryId",
+      "pageId",
+      "pageRevision"
+    ],
+    "title": "PublicationSource",
+    "type": "object"
+  },
+  "PublicationSourcesReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "after": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "publicationId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "owner",
+      "publicationId",
+      "version"
+    ],
+    "title": "PublicationSourcesReadParams",
+    "type": "object"
+  },
+  "PublicationSourcesReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "KnowledgePage_for_KnowledgeSourceObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/KnowledgeSourceObservation"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "KnowledgeSourceObservation": {
+        "additionalProperties": false,
+        "description": "Current lifecycle observation of a fixed source; it never rewrites publication contents.",
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "available": {
+            "type": "boolean"
+          },
+          "observedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "removed": {
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/definitions/PublicationSource"
+          }
+        },
+        "required": [
+          "archived",
+          "available",
+          "observedAtMs",
+          "removed",
+          "source"
+        ],
+        "type": "object"
+      },
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_KnowledgeSourceObservation"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "PublicationSourcesReadResult",
+    "type": "object"
+  },
+  "PublishedKnowledgePage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "PublicationSource": {
+        "additionalProperties": false,
+        "properties": {
+          "libraryId": {
+            "type": "string"
+          },
+          "pageId": {
+            "type": "string"
+          },
+          "pageRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "libraryId",
+          "pageId",
+          "pageRevision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "markdown": {
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/PublicationSource"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "markdown",
+      "source",
+      "title"
+    ],
+    "title": "PublishedKnowledgePage",
+    "type": "object"
+  }
+}

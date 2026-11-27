@@ -1,0 +1,133 @@
+{
+  "CronCreateParams": [
+    {
+      "decoded": {
+        "confirmed": false,
+        "jitterSeconds": null,
+        "prompt": "review",
+        "schedule": {
+          "every_seconds": 3600,
+          "kind": "every"
+        }
+      },
+      "name": "legacy_without_receipt",
+      "value": {
+        "prompt": "review",
+        "schedule": {
+          "every_seconds": 3600,
+          "kind": "every"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "clientRequestId": "original",
+        "confirmed": true,
+        "jitterSeconds": null,
+        "prompt": "review",
+        "schedule": {
+          "every_seconds": 3600,
+          "kind": "every"
+        }
+      },
+      "name": "stable_creation",
+      "value": {
+        "clientRequestId": "original",
+        "confirmed": true,
+        "prompt": "review",
+        "schedule": {
+          "every_seconds": 3600,
+          "kind": "every"
+        }
+      }
+    }
+  ],
+  "CronCreationContext": [
+    {
+      "decoded": {
+        "epoch": 1
+      },
+      "name": "current",
+      "value": {
+        "epoch": 1
+      }
+    },
+    {
+      "decoded": {
+        "epoch": null
+      },
+      "name": "unsupported_target",
+      "value": {
+        "epoch": null
+      }
+    }
+  ],
+  "CronCreationReadResult": [
+    {
+      "decoded": {
+        "clientRequestId": "original",
+        "creationReceipt": null,
+        "retired": false
+      },
+      "name": "missing_receipt",
+      "value": {
+        "clientRequestId": "original",
+        "creationReceipt": null
+      }
+    },
+    {
+      "decoded": {
+        "clientRequestId": "original",
+        "creationReceipt": {
+          "id": "original-job"
+        },
+        "retired": false
+      },
+      "name": "original_job",
+      "value": {
+        "clientRequestId": "original",
+        "creationReceipt": {
+          "id": "original-job"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "clientRequestId": "cron-v1-0-original",
+        "creationReceipt": null,
+        "retired": true
+      },
+      "name": "retired_original",
+      "value": {
+        "clientRequestId": "cron-v1-0-original",
+        "creationReceipt": null,
+        "retired": true
+      }
+    }
+  ],
+  "CronParams": [
+    {
+      "decoded": {},
+      "name": "legacy",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "clientRequestId": "original"
+      },
+      "name": "original_receipt",
+      "value": {
+        "clientRequestId": "original"
+      }
+    },
+    {
+      "decoded": {
+        "creationContext": true
+      },
+      "name": "read_creation_context",
+      "value": {
+        "creationContext": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,1426 @@
+{
+  "ApprovalRequestParams": [
+    {
+      "decoded": {
+        "action": {
+          "command": "echo fixture",
+          "type": "command"
+        },
+        "approvalId": "approval",
+        "reason": "Run command",
+        "serverId": "server",
+        "threadId": "thread",
+        "turnId": "turn"
+      },
+      "name": "legacy_without_tool_identity",
+      "value": {
+        "action": {
+          "command": "echo fixture",
+          "type": "command"
+        },
+        "approvalId": "approval",
+        "reason": "Run command",
+        "serverId": "server",
+        "threadId": "thread",
+        "turnId": "turn"
+      }
+    },
+    {
+      "decoded": {
+        "action": {
+          "input": {
+            "numbers": [
+              1,
+              2
+            ]
+          },
+          "name": "mcp__host__echo",
+          "type": "tool"
+        },
+        "approvalId": "approval",
+        "reason": "Run external tool",
+        "serverId": "server",
+        "threadId": "thread",
+        "toolCallId": "tool-1",
+        "turnId": "turn"
+      },
+      "name": "bound_tool_identity",
+      "value": {
+        "action": {
+          "input": {
+            "numbers": [
+              1,
+              2
+            ]
+          },
+          "name": "mcp__host__echo",
+          "type": "tool"
+        },
+        "approvalId": "approval",
+        "reason": "Run external tool",
+        "serverId": "server",
+        "threadId": "thread",
+        "toolCallId": "tool-1",
+        "turnId": "turn"
+      }
+    }
+  ],
+  "ApprovalResponse": [
+    {
+      "decoded": {
+        "decision": "accept"
+      },
+      "name": "legacy_reply",
+      "value": {
+        "decision": "accept"
+      }
+    },
+    {
+      "decoded": {
+        "approvalId": "approval",
+        "decision": "decline",
+        "threadId": "thread",
+        "turnId": "turn"
+      },
+      "name": "bound_reply",
+      "value": {
+        "approvalId": "approval",
+        "decision": "decline",
+        "threadId": "thread",
+        "turnId": "turn"
+      }
+    }
+  ],
+  "ComputerUseTurnStatusParams": [
+    {
+      "decoded": {
+        "threadId": "thread",
+        "turnId": "turn"
+      },
+      "name": "exact-original-turn",
+      "value": {
+        "threadId": "thread",
+        "turnId": "turn"
+      }
+    }
+  ],
+  "ComputerUseTurnStatusResult": [
+    {
+      "decoded": {
+        "sequence": 4,
+        "threadId": "thread",
+        "turnId": "turn"
+      },
+      "name": "unobservable-is-not-stopped",
+      "value": {
+        "sequence": 4,
+        "threadId": "thread",
+        "turnId": "turn"
+      }
+    },
+    {
+      "decoded": {
+        "observation": {
+          "diagnostic": {
+            "authorization": "revoked",
+            "channel": "unavailable",
+            "cleanup": "confirmed"
+          },
+          "recoveryAvailable": false,
+          "state": "stopped",
+          "target": "local_windows_desktop"
+        },
+        "sequence": 5,
+        "threadId": "thread",
+        "turnId": "turn"
+      },
+      "name": "host-confirmed-retirement",
+      "value": {
+        "observation": {
+          "diagnostic": {
+            "authorization": "revoked",
+            "channel": "unavailable",
+            "cleanup": "confirmed"
+          },
+          "recoveryAvailable": false,
+          "state": "stopped",
+          "target": "local_windows_desktop"
+        },
+        "sequence": 5,
+        "threadId": "thread",
+        "turnId": "turn"
+      }
+    },
+    {
+      "decoded": {
+        "observation": {
+          "diagnostic": {
+            "authorization": "valid",
+            "channel": "available",
+            "cleanup": "unknown"
+          },
+          "state": "active",
+          "target": "local_windows_desktop"
+        },
+        "sequence": 6,
+        "threadId": "thread",
+        "turnId": "turn"
+      },
+      "name": "live-host-not-yet-cleaned",
+      "value": {
+        "observation": {
+          "diagnostic": {
+            "authorization": "valid",
+            "channel": "available",
+            "cleanup": "unknown"
+          },
+          "state": "active",
+          "target": "local_windows_desktop"
+        },
+        "sequence": 6,
+        "threadId": "thread",
+        "turnId": "turn"
+      }
+    }
+  ],
+  "ExecutionDefaultsReadResult": [
+    {
+      "decoded": {
+        "cliPermissionModeOverride": "bypass",
+        "effectivePermissionMode": "ask",
+        "persistedPermissionMode": null
+      },
+      "name": "unset-user-value-with-cli-override",
+      "value": {
+        "cliPermissionModeOverride": "bypass",
+        "effectivePermissionMode": "ask",
+        "persistedPermissionMode": null
+      }
+    },
+    {
+      "decoded": {
+        "cliPermissionModeOverride": null,
+        "effectivePermissionMode": "accept_edits",
+        "persistedPermissionMode": "accept_edits"
+      },
+      "name": "persisted-value-without-cli-override",
+      "value": {
+        "cliPermissionModeOverride": null,
+        "effectivePermissionMode": "accept_edits",
+        "persistedPermissionMode": "accept_edits"
+      }
+    }
+  ],
+  "ExecutionDefaultsSaveParams": [
+    {
+      "decoded": {
+        "permissionMode": null
+      },
+      "name": "clear-user-value",
+      "value": {
+        "permissionMode": null
+      }
+    },
+    {
+      "decoded": {
+        "permissionMode": "yolo"
+      },
+      "name": "save-mode",
+      "value": {
+        "permissionMode": "yolo"
+      }
+    }
+  ],
+  "ExecutionPermissionMode": [
+    {
+      "decoded": "ask",
+      "name": "ask",
+      "value": "ask"
+    },
+    {
+      "decoded": "auto",
+      "name": "auto",
+      "value": "auto"
+    },
+    {
+      "decoded": "accept_edits",
+      "name": "accept_edits",
+      "value": "accept_edits"
+    },
+    {
+      "decoded": "dont_ask",
+      "name": "dont_ask",
+      "value": "dont_ask"
+    },
+    {
+      "decoded": "bypass",
+      "name": "bypass",
+      "value": "bypass"
+    },
+    {
+      "decoded": "yolo",
+      "name": "yolo",
+      "value": "yolo"
+    }
+  ],
+  "InitializeParams": [
+    {
+      "decoded": {
+        "capabilities": {
+          "experimental": {}
+        },
+        "clientInfo": {
+          "name": "contract-client",
+          "version": "1"
+        },
+        "protocolVersion": "2026-07-27"
+      },
+      "name": "default_capabilities",
+      "value": {
+        "clientInfo": {
+          "name": "contract-client",
+          "version": "1"
+        },
+        "protocolVersion": "2026-07-27"
+      }
+    },
+    {
+      "decoded": {
+        "capabilities": {
+          "experimental": {}
+        },
+        "clientInfo": {
+          "name": "contract-client",
+          "version": "1"
+        },
+        "protocolVersion": "2026-07-27"
+      },
+      "name": "default_experimental_map",
+      "value": {
+        "capabilities": {},
+        "clientInfo": {
+          "name": "contract-client",
+          "version": "1"
+        },
+        "protocolVersion": "2026-07-27"
+      }
+    },
+    {
+      "decoded": {
+        "capabilities": {
+          "experimental": {
+            "futureFlag": false,
+            "threadTranscriptSnapshotV1": true
+          }
+        },
+        "clientInfo": {
+          "name": "contract-client",
+          "version": "1"
+        },
+        "protocolVersion": "2026-07-27"
+      },
+      "name": "bool_map",
+      "value": {
+        "capabilities": {
+          "experimental": {
+            "futureFlag": false,
+            "threadTranscriptSnapshotV1": true
+          }
+        },
+        "clientInfo": {
+          "name": "contract-client",
+          "version": "1"
+        },
+        "protocolVersion": "2026-07-27"
+      }
+    },
+    {
+      "decoded": {
+        "capabilities": {
+          "experimental": {}
+        },
+        "clientInfo": {
+          "name": "contract-client",
+          "version": "1"
+        },
+        "protocolVersion": "2026-07-27"
+      },
+      "name": "unknown_fields_compatible",
+      "value": {
+        "capabilities": {
+          "futureDetail": true
+        },
+        "clientInfo": {
+          "futureDetail": "ignored",
+          "name": "contract-client",
+          "version": "1"
+        },
+        "futureDetail": {
+          "ignored": true
+        },
+        "protocolVersion": "2026-07-27"
+      }
+    }
+  ],
+  "InteractionStatusReadParamsV1": [
+    {
+      "decoded": {
+        "appServerEpoch": "epoch-1",
+        "approvalId": "approval-2000001",
+        "kind": "approval",
+        "requestId": 2000001,
+        "serverId": "server-1",
+        "threadId": "thread-1",
+        "turnId": "turn-1"
+      },
+      "name": "approval-request",
+      "value": {
+        "appServerEpoch": "epoch-1",
+        "approvalId": "approval-2000001",
+        "kind": "approval",
+        "requestId": 2000001,
+        "serverId": "server-1",
+        "threadId": "thread-1",
+        "turnId": "turn-1"
+      }
+    },
+    {
+      "decoded": {
+        "appServerEpoch": "epoch-1",
+        "kind": "question",
+        "questionId": "question-1000002",
+        "requestId": 1000002,
+        "serverId": "server-1",
+        "threadId": "thread-1",
+        "turnId": "turn-2"
+      },
+      "name": "question-request",
+      "value": {
+        "appServerEpoch": "epoch-1",
+        "kind": "question",
+        "questionId": "question-1000002",
+        "requestId": 1000002,
+        "serverId": "server-1",
+        "threadId": "thread-1",
+        "turnId": "turn-2"
+      }
+    }
+  ],
+  "InteractionStatusReadResultV1": [
+    {
+      "decoded": {
+        "appServerEpoch": "epoch-1",
+        "approvalId": "approval-2000001",
+        "kind": "approval",
+        "requestId": 2000001,
+        "serverId": "server-1",
+        "status": "pending",
+        "threadId": "thread-1",
+        "turnId": "turn-1"
+      },
+      "name": "pending-approval",
+      "value": {
+        "appServerEpoch": "epoch-1",
+        "approvalId": "approval-2000001",
+        "kind": "approval",
+        "requestId": 2000001,
+        "serverId": "server-1",
+        "status": "pending",
+        "threadId": "thread-1",
+        "turnId": "turn-1"
+      }
+    },
+    {
+      "decoded": {
+        "appServerEpoch": "epoch-1",
+        "kind": "question",
+        "questionId": "question-1000002",
+        "requestId": 1000002,
+        "serverId": "server-1",
+        "status": "resolved",
+        "threadId": "thread-1",
+        "turnId": "turn-2"
+      },
+      "name": "resolved-question",
+      "value": {
+        "appServerEpoch": "epoch-1",
+        "kind": "question",
+        "questionId": "question-1000002",
+        "requestId": 1000002,
+        "serverId": "server-1",
+        "status": "resolved",
+        "threadId": "thread-1",
+        "turnId": "turn-2"
+      }
+    },
+    {
+      "decoded": {
+        "appServerEpoch": "epoch-1",
+        "kind": "question",
+        "questionId": "question-1000003",
+        "requestId": 1000003,
+        "serverId": "server-1",
+        "status": "unknown",
+        "threadId": "thread-1",
+        "turnId": "turn-3"
+      },
+      "name": "unknown-evicted-receipt",
+      "value": {
+        "appServerEpoch": "epoch-1",
+        "kind": "question",
+        "questionId": "question-1000003",
+        "requestId": 1000003,
+        "serverId": "server-1",
+        "status": "unknown",
+        "threadId": "thread-1",
+        "turnId": "turn-3"
+      }
+    }
+  ],
+  "ModelConfigurationBoundary": [
+    {
+      "decoded": "next_turn",
+      "name": "next_turn",
+      "value": "next_turn"
+    },
+    {
+      "decoded": "session_snapshot",
+      "name": "session_snapshot",
+      "value": "session_snapshot"
+    }
+  ],
+  "ModelConfigurationSummary": [
+    {
+      "decoded": {
+        "apiFormat": null,
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      },
+      "name": "legacy_no_policy",
+      "value": {
+        "apiFormat": null,
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      }
+    },
+    {
+      "decoded": {
+        "apiFormat": null,
+        "boundary": "session_snapshot",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "reasoningPolicy": {
+          "efforts": [
+            "none",
+            "vendor_effort"
+          ],
+          "mode": "optional"
+        },
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      },
+      "name": "current_snapshot",
+      "value": {
+        "apiFormat": null,
+        "boundary": "session_snapshot",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "reasoningPolicy": {
+          "efforts": [
+            "none",
+            "vendor_effort"
+          ],
+          "mode": "optional"
+        },
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      }
+    },
+    {
+      "decoded": {
+        "apiFormat": null,
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "contextWindowTokens": null,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": null,
+        "modelId": "model",
+        "outputHeadroomTokens": null,
+        "providerId": null,
+        "reasoning": true,
+        "reasoningEffort": null,
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      },
+      "name": "omitted_nullable_fields",
+      "value": {
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "extraBodyConfigured": false,
+        "modelId": "model",
+        "reasoning": true,
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      }
+    },
+    {
+      "decoded": {
+        "apiFormat": null,
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      },
+      "name": "duplicate_source_labels",
+      "value": {
+        "apiFormat": null,
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "max_output_tokens": [
+            "user",
+            "user"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "tools": true,
+        "vision": false
+      }
+    },
+    {
+      "decoded": {
+        "apiFormat": null,
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "tools.profile": [
+            "cli_environment"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "toolSet": {
+          "profile": "nano",
+          "registeredToolCount": 2,
+          "registryScope": "session_role"
+        },
+        "tools": true,
+        "vision": false
+      },
+      "name": "actual-registered-tools-exposure-unknown",
+      "value": {
+        "apiFormat": null,
+        "boundary": "next_turn",
+        "chatProtocol": "auto",
+        "contextWindowTokens": 64000,
+        "extraBodyConfigured": false,
+        "maxOutputTokens": 2048,
+        "modelId": "model",
+        "outputHeadroomTokens": 2048,
+        "providerId": "provider",
+        "reasoning": true,
+        "reasoningEffort": "high",
+        "requestOutputLimits": {
+          "max_tokens": 2048
+        },
+        "requestOverrideFields": [],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sources": {
+          "tools.profile": [
+            "cli_environment"
+          ]
+        },
+        "structuredOutput": false,
+        "text": true,
+        "toolSet": {
+          "profile": "nano",
+          "registeredToolCount": 2,
+          "registryScope": "session_role"
+        },
+        "tools": true,
+        "vision": false
+      }
+    }
+  ],
+  "ModelReasoningPolicy": [
+    {
+      "decoded": {
+        "efforts": [],
+        "mode": "hidden"
+      },
+      "name": "legacy_default_efforts",
+      "value": {
+        "mode": "hidden"
+      }
+    },
+    {
+      "decoded": {
+        "efforts": [
+          "none",
+          "vendor_effort",
+          "max",
+          "﻿"
+        ],
+        "mode": "optional"
+      },
+      "name": "custom_efforts",
+      "value": {
+        "efforts": [
+          "none",
+          "vendor_effort",
+          " max ",
+          "﻿"
+        ],
+        "mode": "optional"
+      }
+    },
+    {
+      "decoded": {
+        "efforts": [],
+        "mode": "always_off"
+      },
+      "name": "fixed_empty",
+      "value": {
+        "efforts": [],
+        "mode": "always_off"
+      }
+    }
+  ],
+  "NativeStartupDiagnosticV1": [
+    {
+      "decoded": {
+        "code": "settings_parse_failed",
+        "phase": "initialize",
+        "version": 1
+      },
+      "name": "settings_parse_failed",
+      "value": {
+        "code": "settings_parse_failed",
+        "phase": "initialize",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "code": "settings_schema_invalid",
+        "phase": "initialize",
+        "version": 1
+      },
+      "name": "settings_schema_invalid",
+      "value": {
+        "code": "settings_schema_invalid",
+        "phase": "initialize",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "code": "settings_overlay_unavailable",
+        "phase": "initialize",
+        "version": 1
+      },
+      "name": "settings_overlay_unavailable",
+      "value": {
+        "code": "settings_overlay_unavailable",
+        "phase": "initialize",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "code": "config_private_access",
+        "phase": "initialize",
+        "version": 1
+      },
+      "name": "config_private_access",
+      "value": {
+        "code": "config_private_access",
+        "phase": "initialize",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "code": "model_limits_missing",
+        "phase": "initialize",
+        "version": 1
+      },
+      "name": "model_limits_missing",
+      "value": {
+        "code": "model_limits_missing",
+        "phase": "initialize",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "code": "provider_unconfigured",
+        "phase": "initialize",
+        "version": 1
+      },
+      "name": "provider_unconfigured",
+      "value": {
+        "code": "provider_unconfigured",
+        "phase": "initialize",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "code": "config_private_access",
+        "phase": "launch",
+        "version": 1
+      },
+      "name": "launch_phase",
+      "value": {
+        "code": "config_private_access",
+        "phase": "launch",
+        "version": 1
+      }
+    }
+  ],
+  "ProviderDiscoverModelsParams": [
+    {
+      "decoded": {
+        "apiFormat": "openai_chat_completions",
+        "apiKey": "fixture",
+        "authentication": {
+          "mode": "api_key"
+        },
+        "endpoint": "https://example.invalid/v1",
+        "id": null
+      },
+      "name": "url-key-without-model-or-id",
+      "value": {
+        "apiFormat": "openai_chat_completions",
+        "apiKey": "fixture",
+        "endpoint": "https://example.invalid/v1"
+      }
+    },
+    {
+      "decoded": {
+        "apiFormat": "anthropic_messages",
+        "apiKey": null,
+        "authentication": {
+          "mode": "api_key"
+        },
+        "endpoint": "https://example.invalid/v1",
+        "id": "owned"
+      },
+      "name": "saved-connection-key",
+      "value": {
+        "apiFormat": "anthropic_messages",
+        "endpoint": "https://example.invalid/v1",
+        "id": "owned"
+      }
+    },
+    {
+      "decoded": {
+        "apiFormat": "openai_chat_completions",
+        "apiKey": null,
+        "authentication": {
+          "mode": "none"
+        },
+        "endpoint": "http://127.0.0.1:8080/v1",
+        "id": null
+      },
+      "name": "keyless-local",
+      "value": {
+        "apiFormat": "openai_chat_completions",
+        "authentication": {
+          "mode": "none"
+        },
+        "endpoint": "http://127.0.0.1:8080/v1"
+      }
+    }
+  ],
+  "ProviderDiscoveredModels": [
+    {
+      "decoded": {
+        "models": [
+          "Model-A",
+          "Model-B"
+        ]
+      },
+      "name": "models",
+      "value": {
+        "models": [
+          "Model-A",
+          "Model-B"
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "models": []
+      },
+      "name": "empty",
+      "value": {
+        "models": []
+      }
+    }
+  ],
+  "ProviderProbeParams": [
+    {
+      "decoded": {
+        "expectedRevision": "settings-v1:x",
+        "id": "local",
+        "model": "sample:latest"
+      },
+      "name": "ordinary-legacy",
+      "value": {
+        "expectedRevision": "settings-v1:x",
+        "id": "local",
+        "model": "sample:latest"
+      }
+    },
+    {
+      "decoded": {
+        "checkOllamaContextWindow": true,
+        "expectedRevision": "settings-v1:x",
+        "id": "local",
+        "model": "sample:latest"
+      },
+      "name": "explicit-read-only-window",
+      "value": {
+        "checkOllamaContextWindow": true,
+        "expectedRevision": "settings-v1:x",
+        "id": "local",
+        "model": "sample:latest"
+      }
+    }
+  ],
+  "ProviderProbeResult": [
+    {
+      "decoded": {
+        "configurationRevision": "config-x",
+        "model": "sample:latest",
+        "provider": "local",
+        "revision": "settings-v1:x",
+        "success": true
+      },
+      "name": "ordinary-legacy-success",
+      "value": {
+        "configurationRevision": "config-x",
+        "model": "sample:latest",
+        "provider": "local",
+        "revision": "settings-v1:x",
+        "success": true
+      }
+    },
+    {
+      "decoded": {
+        "configurationRevision": "config-x",
+        "model": "sample:latest",
+        "ollamaContextWindow": {
+          "configuredTokens": 32768
+        },
+        "provider": "local",
+        "revision": "settings-v1:x",
+        "success": false
+      },
+      "name": "window-unverified",
+      "value": {
+        "configurationRevision": "config-x",
+        "model": "sample:latest",
+        "ollamaContextWindow": {
+          "configuredTokens": 32768
+        },
+        "provider": "local",
+        "revision": "settings-v1:x",
+        "success": false
+      }
+    },
+    {
+      "decoded": {
+        "configurationRevision": "config-x",
+        "model": "sample:latest",
+        "ollamaContextWindow": {
+          "configuredTokens": 32768,
+          "observedTokens": 4096
+        },
+        "provider": "local",
+        "revision": "settings-v1:x",
+        "success": true
+      },
+      "name": "endpoint-window-observed",
+      "value": {
+        "configurationRevision": "config-x",
+        "model": "sample:latest",
+        "ollamaContextWindow": {
+          "configuredTokens": 32768,
+          "observedTokens": 4096
+        },
+        "provider": "local",
+        "revision": "settings-v1:x",
+        "success": true
+      }
+    }
+  ],
+  "QuestionResponse": [
+    {
+      "decoded": {
+        "answers": {
+          "q": {
+            "answers": [
+              "yes"
+            ]
+          }
+        }
+      },
+      "name": "legacy_reply",
+      "value": {
+        "answers": {
+          "q": {
+            "answers": [
+              "yes"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "decoded": {
+        "answers": {},
+        "questionId": "question",
+        "threadId": "thread",
+        "turnId": "turn"
+      },
+      "name": "bound_reply",
+      "value": {
+        "answers": {},
+        "questionId": "question",
+        "threadId": "thread",
+        "turnId": "turn"
+      }
+    }
+  ],
+  "TaskStatus": [
+    {
+      "decoded": "pending",
+      "name": "known_pending",
+      "value": "pending"
+    },
+    {
+      "decoded": "completed",
+      "name": "known_completed",
+      "value": "completed"
+    },
+    {
+      "decoded": "future_review",
+      "name": "future",
+      "value": "future_review"
+    },
+    {
+      "decoded": "",
+      "name": "empty_unknown",
+      "value": ""
+    },
+    {
+      "decoded": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a",
+      "name": "utf8_256_bytes",
+      "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+    },
+    {
+      "decoded": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "name": "emoji_256_bytes",
+      "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+    }
+  ],
+  "TerminalKcoderTui": [
+    {
+      "decoded": {
+        "command": "/skills"
+      },
+      "name": "workspace command",
+      "value": {
+        "command": "/skills"
+      }
+    },
+    {
+      "decoded": {
+        "command": "/history 10",
+        "thread_id": "abcde"
+      },
+      "name": "exact thread",
+      "value": {
+        "command": "/history 10",
+        "thread_id": "abcde"
+      }
+    }
+  ],
+  "TerminalStartParams": [
+    {
+      "decoded": {
+        "cols": 80,
+        "cwd": "/work",
+        "rows": 24
+      },
+      "name": "legacy shell",
+      "value": {
+        "cwd": "/work"
+      }
+    },
+    {
+      "decoded": {
+        "cols": 80,
+        "cwd": "/work",
+        "kcoder_tui": {
+          "command": "/learn notes",
+          "thread_id": "abcde"
+        },
+        "rows": 24
+      },
+      "name": "native TUI command",
+      "value": {
+        "cols": 80,
+        "cwd": "/work",
+        "kcoder_tui": {
+          "command": "/learn notes",
+          "thread_id": "abcde"
+        },
+        "rows": 24
+      }
+    }
+  ],
+  "TurnAttemptStatus": [
+    {
+      "decoded": "accepted",
+      "name": "known_accepted",
+      "value": "accepted"
+    },
+    {
+      "decoded": "completed",
+      "name": "known_completed",
+      "value": "completed"
+    },
+    {
+      "decoded": "failed",
+      "name": "known_failed",
+      "value": "failed"
+    },
+    {
+      "decoded": "interrupted",
+      "name": "known_interrupted",
+      "value": "interrupted"
+    },
+    {
+      "decoded": "waiting_for_remote_cleanup",
+      "name": "future",
+      "value": "waiting_for_remote_cleanup"
+    },
+    {
+      "decoded": "Failed",
+      "name": "case_sensitive_unknown",
+      "value": "Failed"
+    },
+    {
+      "decoded": "",
+      "name": "empty_unknown",
+      "value": ""
+    },
+    {
+      "decoded": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a",
+      "name": "utf8_256_bytes",
+      "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+    },
+    {
+      "decoded": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "name": "emoji_256_bytes",
+      "value": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+    }
+  ],
+  "WorkflowAgentConfigurationSummary": [
+    {
+      "decoded": {
+        "agentId": "workflow-agent-1",
+        "artifactAttempt": 1,
+        "configuration": {
+          "apiFormat": null,
+          "boundary": "next_turn",
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "extraBodyConfigured": false,
+          "maxOutputTokens": 2048,
+          "modelId": "model",
+          "outputHeadroomTokens": 2048,
+          "providerId": "provider",
+          "reasoning": true,
+          "reasoningEffort": "high",
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "structuredOutput": false,
+          "text": true,
+          "tools": true,
+          "vision": false
+        },
+        "runId": "workflow-run-1",
+        "selectionSource": "inherited_session"
+      },
+      "name": "inherited-agent",
+      "value": {
+        "agentId": "workflow-agent-1",
+        "artifactAttempt": 1,
+        "configuration": {
+          "apiFormat": null,
+          "boundary": "next_turn",
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "extraBodyConfigured": false,
+          "maxOutputTokens": 2048,
+          "modelId": "model",
+          "outputHeadroomTokens": 2048,
+          "providerId": "provider",
+          "reasoning": true,
+          "reasoningEffort": "high",
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "structuredOutput": false,
+          "text": true,
+          "tools": true,
+          "vision": false
+        },
+        "runId": "workflow-run-1",
+        "selectionSource": "inherited_session"
+      }
+    },
+    {
+      "decoded": {
+        "agentId": "workflow-agent-1",
+        "artifactAttempt": 1,
+        "configuration": {
+          "apiFormat": null,
+          "boundary": "next_turn",
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "extraBodyConfigured": false,
+          "maxOutputTokens": 2048,
+          "modelId": "model",
+          "outputHeadroomTokens": 2048,
+          "providerId": "provider",
+          "reasoning": true,
+          "reasoningEffort": "high",
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "structuredOutput": false,
+          "text": true,
+          "tools": true,
+          "vision": false
+        },
+        "runId": "workflow-run-1",
+        "selectionSource": "explicit_runtime"
+      },
+      "name": "explicit-existing-persona-runtime",
+      "value": {
+        "agentId": "workflow-agent-1",
+        "artifactAttempt": 1,
+        "configuration": {
+          "apiFormat": null,
+          "boundary": "next_turn",
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "extraBodyConfigured": false,
+          "maxOutputTokens": 2048,
+          "modelId": "model",
+          "outputHeadroomTokens": 2048,
+          "providerId": "provider",
+          "reasoning": true,
+          "reasoningEffort": "high",
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "structuredOutput": false,
+          "text": true,
+          "tools": true,
+          "vision": false
+        },
+        "runId": "workflow-run-1",
+        "selectionSource": "explicit_runtime"
+      }
+    }
+  ]
+}

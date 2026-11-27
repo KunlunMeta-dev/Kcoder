@@ -1,0 +1,1348 @@
+import { usePageSurfaceTransition } from '@/components/layout/pageTransitionAnimation'
+import { useImportedHistory } from '@/kcoder/useImportedHistory'
+import { ImportedHistoryPanel } from './history/ImportedHistoryPanel'
+import { safeErrorDiagnostic } from '@/lib/error-diagnostics'
+import { ArrowDown } from 'lucide-react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import type { ReactNode } from 'react'
+import type { RefObject } from 'react'
+import { useTranslation } from '@/hooks/useTranslation'
+import { cn } from '@/lib/utils'
+import type {
+  DeviceInfo,
+  RuntimeTaskAddress,
+  RequestUserInputResponse,
+  RuntimeTurnNavigationItem,
+  TurnFileChangesSummary,
+} from '@/types/api'
+import type { WorkbenchMessage } from '@/types/workbench'
+import type { WorkspaceFileOpenOptions } from '@/types/workspace-files'
+import { MessageList } from './MessageList'
+import { ToolsCatalogProvider } from '@/kcoder/toolsCatalog'
+import { MessageTurnNavigation, type MessageTurnNavigationControl } from './MessageTurnNavigation'
+import type { RequestUserInputPayload } from './RequestUserInputCard'
+import type { AssistantPlanOpenRequest } from './AssistantPlanCard'
+import {
+  cacheConversationScrollSnapshot,
+  getConversationScrollSnapshot,
+  hasConversationScrollSnapshot,
+  type ConversationScrollSnapshot,
+} from '@/features/workbench/runtimeConversationCache'
+
+const BOTTOM_THRESHOLD = 48
+const SCROLLED_TO_BOTTOM_THRESHOLD = 8
+const STABLE_SCROLL_DELAYS = [0, 50, 150, 300]
+// Late layout (images, code blocks, fonts) is corrected every frame inside
+// this window. Corrections run in requestAnimationFrame, before paint, so an
+// intermediate position is never shown; timer-based steps could paint one.
+const STABLE_SCROLL_WINDOW_MS = Math.max(...STABLE_SCROLL_DELAYS) + 50
+const SCROLL_ANCHOR_SELECTOR = '[data-scroll-anchor]'
+const TURN_NAVIGATION_MIN_WIDTH = 1024
+interface RuntimeTranscriptGap {
+  start: number
+  end: number
+}
+
+interface RuntimeTranscriptRange {
+  start: number
+  end: number
+}
+
+interface UserViewportAnchor {
+  messageId: string
+  element: HTMLElement
+  offsetFromScrollerTop: number
+}
+
+interface ScrollableMessageAreaProps {
+  peerMessageAddress?: RuntimeTaskAddress
+  messages: WorkbenchMessage[]
+  showTransientToolStatus?: boolean
+  /** Null disables inherited activity while retaining the tool catalog address. */
+  toolActivityTaskId?: string | null
+  loading?: boolean
+  isWaitingForAssistant?: boolean
+  hasMoreBefore?: boolean
+  loadingMoreBefore?: boolean
+  turnNavigation?: RuntimeTurnNavigationItem[]
+  loadedTranscriptRanges?: RuntimeTranscriptRange[]
+  className?: string
+  scrollerClassName?: string
+  messageListClassName?: string
+  stickyFooter?: ReactNode
+  stickyFooterClassName?: string
+  scrollButtonClassName?: string
+  scrollTestId?: string
+  externalScrollRef?: RefObject<HTMLDivElement | null>
+  /** Receives transcript navigation for slash commands; owned by the pane that renders this area. */
+  transcriptNavigationRef?: RefObject<TranscriptNavigationControl | null>
+  turnNavigationPortalTarget?: Element | null
+  conversationKey?: string | number | null
+  processRunId?: string
+  toolsCatalogTaskId?: string
+  importedHistoryTaskId?: string
+  historyWorkspacePath?: string
+  toolsCatalogServerId?: string
+  devices?: DeviceInfo[]
+  onRetryFailedMessage?: (message: WorkbenchMessage) => void
+  onSwitchModelForFailedMessage?: (message: WorkbenchMessage) => void
+  onLoadFileChangesDiff?: (
+    subtaskId: string,
+    fileChanges?: TurnFileChangesSummary
+  ) => Promise<{ diff: string; truncated: boolean }>
+  onRevertFileChanges?: (
+    subtaskId: string,
+    fileChanges?: TurnFileChangesSummary
+  ) => Promise<TurnFileChangesSummary>
+  onOpenFileChangesReview?: (request: {
+    subtaskId: string
+    loadDiff: () => Promise<{ diff: string; truncated: boolean }>
+    reviewTitle?: string
+    defaultFileTreeVisible?: boolean
+    focusFilePath?: string
+  }) => void
+  fileChangesDiffPreviewDisabledSubtaskId?: string | null
+  onOpenWorkspaceFile?: (path: string, options?: WorkspaceFileOpenOptions) => void
+  onOpenLocalSkillFile?: (path: string) => void
+  onRequestUserInputSubmit?: (response: RequestUserInputResponse) => void
+  onRequestUserInputIgnore?: (payload: RequestUserInputPayload) => void
+  onOpenAssistantPlan?: (request: AssistantPlanOpenRequest) => void
+  onEditLastUserMessage?: (
+    message: WorkbenchMessage,
+    content: string
+  ) => Promise<boolean | void> | boolean | void
+  canEditLastUserMessage?: boolean
+  onForkMessage?: (message: WorkbenchMessage) => Promise<void> | void
+  hideRequestUserInputBlocks?: boolean
+  hiddenRequestUserInputIds?: ReadonlySet<string>
+  onAddSelectionToConversation?: (text: string) => void
+  onAskSelectionInSidebar?: (text: string) => void
+  autoScrollSuspended?: boolean
+  onLoadMoreBefore?: () => Promise<void> | void
+  onLoadFullTranscript?: () => Promise<void> | void
+  loadingFullTranscript?: boolean
+  onLoadTurnNavigationItem?: (item: RuntimeTurnNavigationItem) => Promise<void> | void
+  onLoadTranscriptGap?: (gap: RuntimeTranscriptGap) => Promise<void> | void
+}
+
+export interface TranscriptNavigationControl {
+  turns: MessageTurnNavigationControl['turns']
+  goToTurn: MessageTurnNavigationControl['goToTurn']
+  jump(action: 'start' | 'prev' | 'next' | 'latest'): boolean
+}
+
+export const ScrollableMessageArea = memo(function ScrollableMessageArea(
+  props: ScrollableMessageAreaProps
+) {
+  return <ScrollableMessagePaneContent {...props} />
+}, areScrollableMessageAreaPropsEqual)
+
+function areScrollableMessageAreaPropsEqual(
+  previous: ScrollableMessageAreaProps,
+  next: ScrollableMessageAreaProps
+): boolean {
+  const changed = [
+    previous.peerMessageAddress !== next.peerMessageAddress ? 'peerMessageAddress' : null,
+    previous.messages !== next.messages ? 'messages' : null,
+    previous.showTransientToolStatus !== next.showTransientToolStatus
+      ? 'showTransientToolStatus'
+      : null,
+    previous.toolActivityTaskId !== next.toolActivityTaskId ? 'toolActivityTaskId' : null,
+    previous.loading !== next.loading ? 'loading' : null,
+    previous.isWaitingForAssistant !== next.isWaitingForAssistant ? 'isWaitingForAssistant' : null,
+    previous.hasMoreBefore !== next.hasMoreBefore ? 'hasMoreBefore' : null,
+    previous.loadingMoreBefore !== next.loadingMoreBefore ? 'loadingMoreBefore' : null,
+    previous.turnNavigation !== next.turnNavigation ? 'turnNavigation' : null,
+    previous.loadedTranscriptRanges !== next.loadedTranscriptRanges
+      ? 'loadedTranscriptRanges'
+      : null,
+    previous.className !== next.className ? 'className' : null,
+    previous.scrollerClassName !== next.scrollerClassName ? 'scrollerClassName' : null,
+    previous.messageListClassName !== next.messageListClassName ? 'messageListClassName' : null,
+    previous.stickyFooter !== next.stickyFooter ? 'stickyFooter' : null,
+    previous.stickyFooterClassName !== next.stickyFooterClassName ? 'stickyFooterClassName' : null,
+    previous.scrollButtonClassName !== next.scrollButtonClassName ? 'scrollButtonClassName' : null,
+    previous.scrollTestId !== next.scrollTestId ? 'scrollTestId' : null,
+    previous.externalScrollRef !== next.externalScrollRef ? 'externalScrollRef' : null,
+    previous.transcriptNavigationRef !== next.transcriptNavigationRef
+      ? 'transcriptNavigationRef'
+      : null,
+    previous.turnNavigationPortalTarget !== next.turnNavigationPortalTarget
+      ? 'turnNavigationPortalTarget'
+      : null,
+    previous.conversationKey !== next.conversationKey ? 'conversationKey' : null,
+    previous.processRunId !== next.processRunId ? 'processRunId' : null,
+    previous.toolsCatalogTaskId !== next.toolsCatalogTaskId ? 'toolsCatalogTaskId' : null,
+    previous.toolsCatalogServerId !== next.toolsCatalogServerId ? 'toolsCatalogServerId' : null,
+    previous.historyWorkspacePath !== next.historyWorkspacePath ? 'historyWorkspacePath' : null,
+    previous.importedHistoryTaskId !== next.importedHistoryTaskId ? 'importedHistoryTaskId' : null,
+    previous.devices !== next.devices ? 'devices' : null,
+    previous.onRetryFailedMessage !== next.onRetryFailedMessage ? 'onRetryFailedMessage' : null,
+    previous.onSwitchModelForFailedMessage !== next.onSwitchModelForFailedMessage
+      ? 'onSwitchModelForFailedMessage'
+      : null,
+    previous.onLoadFileChangesDiff !== next.onLoadFileChangesDiff ? 'onLoadFileChangesDiff' : null,
+    previous.onRevertFileChanges !== next.onRevertFileChanges ? 'onRevertFileChanges' : null,
+    previous.onOpenFileChangesReview !== next.onOpenFileChangesReview
+      ? 'onOpenFileChangesReview'
+      : null,
+    previous.fileChangesDiffPreviewDisabledSubtaskId !==
+    next.fileChangesDiffPreviewDisabledSubtaskId
+      ? 'fileChangesDiffPreviewDisabledSubtaskId'
+      : null,
+    previous.onOpenWorkspaceFile !== next.onOpenWorkspaceFile ? 'onOpenWorkspaceFile' : null,
+    previous.onOpenLocalSkillFile !== next.onOpenLocalSkillFile ? 'onOpenLocalSkillFile' : null,
+    previous.onRequestUserInputSubmit !== next.onRequestUserInputSubmit
+      ? 'onRequestUserInputSubmit'
+      : null,
+    previous.onRequestUserInputIgnore !== next.onRequestUserInputIgnore
+      ? 'onRequestUserInputIgnore'
+      : null,
+    previous.onOpenAssistantPlan !== next.onOpenAssistantPlan ? 'onOpenAssistantPlan' : null,
+    previous.onEditLastUserMessage !== next.onEditLastUserMessage ? 'onEditLastUserMessage' : null,
+    previous.onForkMessage !== next.onForkMessage ? 'onForkMessage' : null,
+    previous.canEditLastUserMessage !== next.canEditLastUserMessage
+      ? 'canEditLastUserMessage'
+      : null,
+    previous.hideRequestUserInputBlocks !== next.hideRequestUserInputBlocks
+      ? 'hideRequestUserInputBlocks'
+      : null,
+    previous.hiddenRequestUserInputIds !== next.hiddenRequestUserInputIds
+      ? 'hiddenRequestUserInputIds'
+      : null,
+    previous.onAddSelectionToConversation !== next.onAddSelectionToConversation
+      ? 'onAddSelectionToConversation'
+      : null,
+    previous.onAskSelectionInSidebar !== next.onAskSelectionInSidebar
+      ? 'onAskSelectionInSidebar'
+      : null,
+    previous.autoScrollSuspended !== next.autoScrollSuspended ? 'autoScrollSuspended' : null,
+    previous.onLoadMoreBefore !== next.onLoadMoreBefore ? 'onLoadMoreBefore' : null,
+    previous.onLoadFullTranscript !== next.onLoadFullTranscript ? 'onLoadFullTranscript' : null,
+    previous.loadingFullTranscript !== next.loadingFullTranscript ? 'loadingFullTranscript' : null,
+    previous.onLoadTurnNavigationItem !== next.onLoadTurnNavigationItem
+      ? 'onLoadTurnNavigationItem'
+      : null,
+    previous.onLoadTranscriptGap !== next.onLoadTranscriptGap ? 'onLoadTranscriptGap' : null,
+  ].filter((key): key is string => key !== null)
+
+  return changed.length === 0
+}
+
+function ScrollableMessagePaneContent({
+  peerMessageAddress,
+  messages,
+  showTransientToolStatus = true,
+  toolActivityTaskId,
+  loading = false,
+  isWaitingForAssistant = false,
+  hasMoreBefore = false,
+  loadingMoreBefore = false,
+  turnNavigation,
+  loadedTranscriptRanges,
+  className,
+  scrollerClassName,
+  messageListClassName,
+  stickyFooter,
+  stickyFooterClassName,
+  scrollButtonClassName,
+  scrollTestId = 'chat-message-scroll-area',
+  externalScrollRef,
+  transcriptNavigationRef,
+  turnNavigationPortalTarget,
+  conversationKey,
+  processRunId,
+  toolsCatalogTaskId,
+  toolsCatalogServerId,
+  historyWorkspacePath,
+  importedHistoryTaskId,
+  devices,
+  onRetryFailedMessage,
+  onSwitchModelForFailedMessage,
+  onLoadFileChangesDiff,
+  onRevertFileChanges,
+  onOpenFileChangesReview,
+  fileChangesDiffPreviewDisabledSubtaskId,
+  onOpenWorkspaceFile,
+  onOpenLocalSkillFile,
+  onRequestUserInputSubmit,
+  onRequestUserInputIgnore,
+  onOpenAssistantPlan,
+  onEditLastUserMessage,
+  canEditLastUserMessage,
+  onForkMessage,
+  hideRequestUserInputBlocks,
+  hiddenRequestUserInputIds,
+  onAddSelectionToConversation,
+  onAskSelectionInSidebar,
+  autoScrollSuspended = false,
+  onLoadMoreBefore,
+  onLoadFullTranscript,
+  loadingFullTranscript = false,
+  onLoadTurnNavigationItem,
+  onLoadTranscriptGap,
+}: ScrollableMessageAreaProps) {
+  const { t } = useTranslation('common')
+  const importedHistory = useImportedHistory(
+    toolsCatalogServerId,
+    importedHistoryTaskId,
+    historyWorkspacePath
+  )
+  const internalScrollRef = useRef<HTMLDivElement>(null)
+  const scrollRef = externalScrollRef ?? internalScrollRef
+  const activeScrollRefRef = useRef(scrollRef)
+  const contentRef = usePageSurfaceTransition<HTMLDivElement>(conversationKey)
+  const stickyFooterRef = useRef<HTMLDivElement>(null)
+  const [turnNavigationVisible, setTurnNavigationVisible] = useState(false)
+
+  useLayoutEffect(() => {
+    const container = internalScrollRef.current
+    if (!container) return
+    const update = () => setTurnNavigationVisible(
+      container.getBoundingClientRect().width >= TURN_NAVIGATION_MIN_WIDTH
+    )
+    update()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(update)
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [])
+  const isAtBottomRef = useRef(true)
+  const turnNavigationLoadingRef = useRef(false)
+  const turnNavigationScrollingRef = useRef(false)
+  const cancelTurnNavigationRef = useRef<(() => void) | null>(null)
+  const turnNavigationControlRef = useRef<MessageTurnNavigationControl | null>(null)
+  const previousConversationKeyRef = useRef<string | number | null | undefined>(undefined)
+  const previousLastMessageIdRef = useRef<string | null>(null)
+  const previousMessageCountRef = useRef(0)
+  const scrollTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([])
+  const scrollFrameRef = useRef<number | null>(null)
+  const restoringScrollKeyRef = useRef<string | null>(null)
+  const followingBottomKeyRef = useRef<string | null>(null)
+  const userScrollPausedAutoFollowRef = useRef(false)
+  const userViewportAnchorRef = useRef<UserViewportAnchor | null>(null)
+  const lastScrollTopRef = useRef<number | null>(null)
+  const lastScrollHeightRef = useRef<number | null>(null)
+  const scheduledScrollStateSignatureRef = useRef<string | null>(null)
+  const completedScrollStateSignatureRef = useRef<string | null>(null)
+  const loadingTranscriptGapKeyRef = useRef<string | null>(null)
+  const autoLoadedTranscriptGapKeysRef = useRef(new Set<string>())
+  const [showScrollButton, setShowScrollButton] = useState(false)
+  const [followBottom, setFollowBottom] = useState(true)
+  const updateFollowBottom = useCallback((following: boolean) => {
+    userScrollPausedAutoFollowRef.current = !following
+    setFollowBottom(following)
+  }, [])
+  const [turnNavigationLoading, setTurnNavigationLoading] = useState(false)
+  const [turnNavigationTargetMessageId, setTurnNavigationTargetMessageId] = useState<string | null>(
+    null
+  )
+  const [loadingTranscriptGapKey, setLoadingTranscriptGapKey] = useState<string | null>(null)
+  const lastMessage = messages[messages.length - 1]
+  const currentScrollKey = useMemo(() => scrollPositionKey(conversationKey), [conversationKey])
+  const scrollEnvironmentRef = useRef({ key: currentScrollKey, suspended: autoScrollSuspended })
+  const touchYRef = useRef<number | null>(null)
+  const messageScrollSignature = useMemo(() => {
+    if (!lastMessage) return 'empty'
+
+    const blockSignature = (lastMessage.blocks ?? [])
+      .map(block => {
+        if (block.type === 'thinking' || block.type === 'text' || block.type === 'plan') {
+          return `${block.id}:${block.status}:${block.content.length}`
+        }
+        if (block.type === 'file_changes') {
+          return `${block.id}:${block.status}:${block.fileChanges.file_count}:${block.fileChanges.diff?.length ?? 0}`
+        }
+        return `${block.id}:${block.status}:${String(block.toolOutput ?? '').length}`
+      })
+      .join('|')
+
+    return [
+      messages.length,
+      lastMessage.id,
+      lastMessage.role,
+      lastMessage.status,
+      lastMessage.content.length,
+      blockSignature,
+      isWaitingForAssistant ? 'waiting' : 'idle',
+    ].join(':')
+  }, [isWaitingForAssistant, lastMessage, messages.length])
+  const scrollStateFrameSignature = useMemo(
+    () => [currentScrollKey ?? 'none', messageScrollSignature].join(':'),
+    [currentScrollKey, messageScrollSignature]
+  )
+
+  useLayoutEffect(() => {
+    activeScrollRefRef.current = scrollRef
+    scrollEnvironmentRef.current = { key: currentScrollKey, suspended: autoScrollSuspended }
+  }, [scrollRef, currentScrollKey, autoScrollSuspended])
+
+  const scrollLoopFrameRef = useRef<number | null>(null)
+  const clearScheduledScrolls = useCallback(() => {
+    scrollTimersRef.current.forEach(timer => clearTimeout(timer))
+    scrollTimersRef.current = []
+    if (scrollLoopFrameRef.current !== null) {
+      cancelAnimationFrame(scrollLoopFrameRef.current)
+      scrollLoopFrameRef.current = null
+    }
+    restoringScrollKeyRef.current = null
+    followingBottomKeyRef.current = null
+
+    if (scrollFrameRef.current !== null) {
+      cancelAnimationFrame(scrollFrameRef.current)
+      scrollFrameRef.current = null
+    }
+  }, [])
+
+  const scheduleScrollTimer = useCallback((callback: () => void, delay: number) => {
+    const timer = setTimeout(() => {
+      scrollTimersRef.current = scrollTimersRef.current.filter(current => current !== timer)
+      callback()
+    }, delay)
+    scrollTimersRef.current.push(timer)
+  }, [])
+
+  const scheduleFrameLoop = useCallback((callback: () => void, durationMs: number) => {
+    if (scrollLoopFrameRef.current !== null) cancelAnimationFrame(scrollLoopFrameRef.current)
+    const until = performance.now() + durationMs
+    // Also bounded by frame count, so a synchronous frame source cannot spin.
+    let frames = Math.ceil(durationMs / 16) + 2
+    const tick = () => {
+      scrollLoopFrameRef.current = null
+      callback()
+      if (--frames > 0 && performance.now() < until)
+        scrollLoopFrameRef.current = requestAnimationFrame(tick)
+    }
+    scrollLoopFrameRef.current = requestAnimationFrame(tick)
+  }, [])
+
+  const isTurnNavigationAutoScrollSuspended = useCallback(
+    () => turnNavigationLoadingRef.current || turnNavigationScrollingRef.current,
+    []
+  )
+
+  const handleTurnNavigationScrollTargetChange = useCallback(
+    (messageId: string | null) => {
+      const scrolling = messageId !== null
+      turnNavigationScrollingRef.current = scrolling
+      setTurnNavigationTargetMessageId(messageId)
+      const element = activeScrollRefRef.current.current
+      console.debug('[KCoder Studio] Message turn navigation scroll ownership', {
+        scrolling,
+        messageId,
+        conversationKey: currentScrollKey,
+        scrollTop: element?.scrollTop ?? null,
+        scrollHeight: element?.scrollHeight ?? null,
+        clientHeight: element?.clientHeight ?? null,
+      })
+      if (scrolling) {
+        clearScheduledScrolls()
+      }
+    },
+    [clearScheduledScrolls, currentScrollKey]
+  )
+
+  const handleTurnNavigationLoadStateChange = useCallback(
+    (loading: boolean) => {
+      turnNavigationLoadingRef.current = loading
+      setTurnNavigationLoading(loading)
+      if (loading) {
+        clearScheduledScrolls()
+      }
+    },
+    [clearScheduledScrolls]
+  )
+
+  const loadTranscriptGap = useCallback(
+    async (gap: RuntimeTranscriptGap, reason: 'visible' | 'click') => {
+      if (!onLoadTranscriptGap) return
+      const gapKey = runtimeTranscriptGapKey(gap)
+      if (loadingTranscriptGapKeyRef.current !== null) return
+      if (reason === 'visible') {
+        if (autoLoadedTranscriptGapKeysRef.current.has(gapKey)) return
+        autoLoadedTranscriptGapKeysRef.current.add(gapKey)
+      }
+
+      loadingTranscriptGapKeyRef.current = gapKey
+      setLoadingTranscriptGapKey(gapKey)
+      try {
+        await onLoadTranscriptGap(gap)
+      } catch (error) {
+        console.error('[KCoder Studio] Message area transcript gap load failed', {
+          gap,
+          gapKey,
+          reason,
+          error: safeErrorDiagnostic(error),
+        })
+      } finally {
+        loadingTranscriptGapKeyRef.current = null
+        setLoadingTranscriptGapKey(current => (current === gapKey ? null : current))
+      }
+    },
+    [onLoadTranscriptGap]
+  )
+
+  useEffect(() => {
+    autoLoadedTranscriptGapKeysRef.current.clear()
+  }, [currentScrollKey])
+
+  const renderTranscriptGapAfterMessage = useCallback(
+    (message: WorkbenchMessage, nextMessage: WorkbenchMessage | undefined) => {
+      const gap = runtimeTranscriptGapBetween(message, nextMessage, loadedTranscriptRanges)
+      if (!gap) return null
+      const gapKey = runtimeTranscriptGapKey(gap)
+      return (
+        <RuntimeTranscriptGapMarker
+          key={gapKey}
+          gap={gap}
+          loading={loadingTranscriptGapKey === gapKey}
+          scrollRef={scrollRef}
+          onLoad={loadTranscriptGap}
+        />
+      )
+    },
+    [loadTranscriptGap, loadedTranscriptRanges, loadingTranscriptGapKey, scrollRef]
+  )
+
+  const saveCurrentScrollPosition = useCallback(
+    (scrollTop?: number) => {
+      const element = activeScrollRefRef.current.current
+      if (!element || currentScrollKey === null || messages.length === 0) return
+      const snapshot = createScrollSnapshot(element, scrollTop)
+      if (userScrollPausedAutoFollowRef.current) snapshot.pinnedToBottom = false
+      setConversationScrollSnapshot(currentScrollKey, snapshot)
+    },
+    [currentScrollKey, messages.length]
+  )
+
+  useLayoutEffect(
+    () => () => {
+      saveCurrentScrollPosition()
+    },
+    [saveCurrentScrollPosition]
+  )
+
+  const updateScrollState = useCallback(
+    (options: { forceSave?: boolean; skipSave?: boolean } = {}) => {
+      const element = activeScrollRefRef.current.current
+      if (!element) return
+
+      if (messages.length === 0) {
+        isAtBottomRef.current = true
+        setShowScrollButton(false)
+        return
+      }
+
+      const overflow = element.scrollHeight > element.clientHeight + 8
+      const distanceToBottom = element.scrollHeight - element.clientHeight - element.scrollTop
+      const isAtBottom = distanceToBottom <= BOTTOM_THRESHOLD
+      const isScrolledToBottom = distanceToBottom <= SCROLLED_TO_BOTTOM_THRESHOLD
+      const scrolledUp =
+        lastScrollTopRef.current !== null && element.scrollTop < lastScrollTopRef.current - 0.5
+      const scrolledDown =
+        lastScrollTopRef.current !== null && element.scrollTop > lastScrollTopRef.current + 0.5
+      const layoutChanged =
+        lastScrollHeightRef.current !== null && lastScrollHeightRef.current !== element.scrollHeight
+      lastScrollTopRef.current = element.scrollTop
+      if (options.forceSave) lastScrollHeightRef.current = element.scrollHeight
+      // Preserve bottom ownership across growth and browser scroll anchoring.
+      // Explicit input below revokes it before the resulting scroll event.
+      isAtBottomRef.current =
+        isAtBottom ||
+        ((!options.forceSave || layoutChanged) &&
+          isAtBottomRef.current &&
+          !userScrollPausedAutoFollowRef.current)
+      // A collapsed process window can make a paused viewport appear at the
+      // bottom. Only an actual downward scroll may resume that user's follow.
+      if (
+        isScrolledToBottom &&
+        (!userScrollPausedAutoFollowRef.current || (options.forceSave && scrolledDown))
+      ) {
+        updateFollowBottom(true)
+        userViewportAnchorRef.current = null
+      } else if (options.forceSave && !layoutChanged && !isScrolledToBottom && scrolledUp) {
+        updateFollowBottom(false)
+      }
+      if (
+        userScrollPausedAutoFollowRef.current &&
+        options.forceSave &&
+        (scrolledUp || scrolledDown)
+      ) {
+        clearScheduledScrolls()
+      }
+      if (
+        !options.skipSave &&
+        (options.forceSave || restoringScrollKeyRef.current !== currentScrollKey)
+      ) {
+        saveCurrentScrollPosition()
+      }
+      setShowScrollButton(overflow && !isAtBottom)
+    },
+    [
+      clearScheduledScrolls,
+      currentScrollKey,
+      messages.length,
+      saveCurrentScrollPosition,
+      updateFollowBottom,
+    ]
+  )
+
+  const setScrollToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto', options: { saveSnapshot?: boolean } = {}) => {
+      const element = activeScrollRefRef.current.current
+      if (!element) return
+
+      if (typeof element.scrollTo === 'function') {
+        element.scrollTo({
+          top: element.scrollHeight,
+          behavior,
+        })
+      } else {
+        element.scrollTop = element.scrollHeight
+      }
+      lastScrollTopRef.current = element.scrollTop
+      lastScrollHeightRef.current = element.scrollHeight
+      if (options.saveSnapshot) {
+        saveCurrentScrollPosition(element.scrollHeight)
+      }
+      isAtBottomRef.current = true
+      updateFollowBottom(true)
+      userViewportAnchorRef.current = null
+      setShowScrollButton(false)
+    },
+    [saveCurrentScrollPosition, updateFollowBottom]
+  )
+
+  const restoreSavedScrollPosition = useCallback(
+    (key: string) => {
+      const element = activeScrollRefRef.current.current
+      const savedSnapshot = getConversationScrollSnapshot(key)
+      if (!element || !savedSnapshot) return
+
+      const maxScrollTop = Math.max(0, element.scrollHeight - element.clientHeight)
+      const nextScrollTop = Math.min(getRestoredScrollTop(element, savedSnapshot), maxScrollTop)
+      if (typeof element.scrollTo === 'function') {
+        element.scrollTo({
+          top: nextScrollTop,
+          behavior: 'auto',
+        })
+      } else {
+        element.scrollTop = nextScrollTop
+      }
+      lastScrollTopRef.current = element.scrollTop
+      lastScrollHeightRef.current = element.scrollHeight
+
+      const overflow = element.scrollHeight > element.clientHeight + 8
+      const distanceToBottom = element.scrollHeight - element.clientHeight - nextScrollTop
+      const isAtBottom = distanceToBottom <= BOTTOM_THRESHOLD
+      const isScrolledToBottom = distanceToBottom <= SCROLLED_TO_BOTTOM_THRESHOLD
+      isAtBottomRef.current = isAtBottom
+      updateFollowBottom(savedSnapshot.pinnedToBottom && isScrolledToBottom)
+      setShowScrollButton(overflow && !isAtBottom)
+      setConversationScrollSnapshot(key, savedSnapshot)
+    },
+    [updateFollowBottom]
+  )
+
+  const scheduleStableRestoreSavedScrollPosition = useCallback(
+    (key: string) => {
+      clearScheduledScrolls()
+      restoringScrollKeyRef.current = key
+      followingBottomKeyRef.current = getConversationScrollSnapshot(key)?.pinnedToBottom
+        ? key
+        : null
+
+      scheduleFrameLoop(() => {
+        if (restoringScrollKeyRef.current === key) restoreSavedScrollPosition(key)
+      }, STABLE_SCROLL_WINDOW_MS)
+      // Timed passes remain a fallback where frames are throttled (hidden or
+      // background windows); after per-frame correction they are no-ops.
+      STABLE_SCROLL_DELAYS.forEach(delay => {
+        scheduleScrollTimer(() => {
+          if (restoringScrollKeyRef.current === key) restoreSavedScrollPosition(key)
+        }, delay)
+      })
+
+      scheduleScrollTimer(() => {
+        if (restoringScrollKeyRef.current === key) {
+          restoringScrollKeyRef.current = null
+        }
+      }, STABLE_SCROLL_WINDOW_MS)
+    },
+    [clearScheduledScrolls, restoreSavedScrollPosition, scheduleFrameLoop, scheduleScrollTimer]
+  )
+
+  const scrollToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto', options: { saveSnapshot?: boolean } = {}) => {
+      const element = activeScrollRefRef.current.current
+      if (!element) return
+
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current)
+      }
+
+      scrollFrameRef.current = requestAnimationFrame(() => {
+        scrollFrameRef.current = null
+        // Cancellation alone cannot revoke a frame already dequeued by the
+        // browser. Recheck the owner and user intent before moving the viewport.
+        if (
+          activeScrollRefRef.current.current !== element ||
+          scrollEnvironmentRef.current.key !== currentScrollKey ||
+          scrollEnvironmentRef.current.suspended ||
+          isTurnNavigationAutoScrollSuspended() ||
+          userScrollPausedAutoFollowRef.current
+        )
+          return
+        setScrollToBottom(behavior, options)
+      })
+    },
+    [currentScrollKey, isTurnNavigationAutoScrollSuspended, setScrollToBottom]
+  )
+
+  const scheduleStableScrollToBottom = useCallback(
+    (behavior: ScrollBehavior = 'auto', options: { saveSnapshot?: boolean } = {}) => {
+      clearScheduledScrolls()
+      followingBottomKeyRef.current = currentScrollKey
+      STABLE_SCROLL_DELAYS.forEach(delay => {
+        scheduleScrollTimer(() => {
+          scrollToBottom(behavior, options)
+        }, delay)
+      })
+    },
+    [clearScheduledScrolls, currentScrollKey, scheduleScrollTimer, scrollToBottom]
+  )
+
+  const cancelTurnNavigation = useCallback(() => {
+    cancelTurnNavigationRef.current?.()
+    turnNavigationLoadingRef.current = false
+    turnNavigationScrollingRef.current = false
+    setTurnNavigationLoading(false)
+    setTurnNavigationTargetMessageId(null)
+  }, [])
+
+  useLayoutEffect(() => {
+    const conversationChanged = previousConversationKeyRef.current !== conversationKey
+    const messagesLoaded = previousMessageCountRef.current === 0 && messages.length > 0
+    const lastMessageChanged = previousLastMessageIdRef.current !== (lastMessage?.id ?? null)
+    const shouldRestoreScroll = Boolean(
+      currentScrollKey &&
+      messages.length > 0 &&
+      (conversationChanged || messagesLoaded) &&
+      hasConversationScrollSnapshot(currentScrollKey)
+    )
+    const shouldForceBottom =
+      !shouldRestoreScroll &&
+      (conversationChanged ||
+        messagesLoaded ||
+        (lastMessageChanged && lastMessage?.role === 'user'))
+
+    const newUserMessage =
+      !conversationChanged && !messagesLoaded && lastMessageChanged && lastMessage?.role === 'user'
+    if (conversationChanged || newUserMessage) cancelTurnNavigation()
+    if (newUserMessage) {
+      // A new user submission supersedes historical navigation and resumes the existing bottom follower.
+      updateFollowBottom(true)
+      isAtBottomRef.current = true
+      userViewportAnchorRef.current = null
+    }
+
+    previousConversationKeyRef.current = conversationKey
+    previousLastMessageIdRef.current = lastMessage?.id ?? null
+    previousMessageCountRef.current = messages.length
+
+    if (conversationChanged) {
+      userViewportAnchorRef.current = null
+    }
+
+    if (messages.length === 0) {
+      return
+    }
+
+    if (autoScrollSuspended || isTurnNavigationAutoScrollSuspended()) {
+      clearScheduledScrolls()
+      return
+    }
+
+    if (shouldRestoreScroll && currentScrollKey) {
+      scheduleStableRestoreSavedScrollPosition(currentScrollKey)
+      return
+    }
+
+    if (shouldForceBottom) {
+      setScrollToBottom('auto', { saveSnapshot: false })
+      scheduleStableScrollToBottom('auto', { saveSnapshot: false })
+      return
+    }
+
+    if (isAtBottomRef.current && !userScrollPausedAutoFollowRef.current) {
+      scrollToBottom('auto', { saveSnapshot: false })
+    }
+  }, [
+    conversationKey,
+    autoScrollSuspended,
+    currentScrollKey,
+    clearScheduledScrolls,
+    cancelTurnNavigation,
+    updateFollowBottom,
+    isTurnNavigationAutoScrollSuspended,
+    lastMessage,
+    messageScrollSignature,
+    messages.length,
+    scheduleStableRestoreSavedScrollPosition,
+    scheduleStableScrollToBottom,
+    scrollToBottom,
+    setScrollToBottom,
+  ])
+
+  useLayoutEffect(() => {
+    if (
+      completedScrollStateSignatureRef.current === scrollStateFrameSignature ||
+      scheduledScrollStateSignatureRef.current === scrollStateFrameSignature
+    ) {
+      return
+    }
+
+    scheduledScrollStateSignatureRef.current = scrollStateFrameSignature
+    const frame = requestAnimationFrame(() => {
+      if (scheduledScrollStateSignatureRef.current !== scrollStateFrameSignature) return
+      scheduledScrollStateSignatureRef.current = null
+      completedScrollStateSignatureRef.current = scrollStateFrameSignature
+      updateScrollState({ skipSave: true })
+    })
+    return () => {
+      cancelAnimationFrame(frame)
+      if (scheduledScrollStateSignatureRef.current === scrollStateFrameSignature) {
+        scheduledScrollStateSignatureRef.current = null
+      }
+    }
+  }, [scrollStateFrameSignature, updateScrollState])
+
+  const captureUserViewportAnchor = useCallback(() => {
+    const scroller = activeScrollRefRef.current.current
+    const content = contentRef.current
+    if (!scroller || !content) return
+    userViewportAnchorRef.current = createUserViewportAnchor(scroller, content)
+  }, [])
+
+  const restoreUserViewportAnchor = useCallback(() => {
+    const scroller = activeScrollRefRef.current.current
+    const content = contentRef.current
+    const anchor = userViewportAnchorRef.current
+    if (!scroller || !content || !anchor) return
+
+    const anchorElement = findUserViewportAnchor(content, anchor)
+    if (!anchorElement) return
+    const offsetFromScrollerTop =
+      anchorElement.getBoundingClientRect().top - scroller.getBoundingClientRect().top
+    const offsetDelta = offsetFromScrollerTop - anchor.offsetFromScrollerTop
+    if (Math.abs(offsetDelta) < 0.5) return
+    scroller.scrollTop += offsetDelta
+    lastScrollTopRef.current = scroller.scrollTop
+  }, [])
+
+  useEffect(() => {
+    const content = contentRef.current
+    const footer = stickyFooterRef.current
+    if (!content || typeof ResizeObserver === 'undefined') return
+
+    const resizeObserver = new ResizeObserver(() => {
+      if (autoScrollSuspended || isTurnNavigationAutoScrollSuspended()) {
+        if (turnNavigationScrollingRef.current) {
+          console.warn('[KCoder Studio] Message turn navigation ignored content resize', {
+            conversationKey: currentScrollKey,
+            scrollTop: activeScrollRefRef.current.current?.scrollTop ?? null,
+            scrollHeight: activeScrollRefRef.current.current?.scrollHeight ?? null,
+            clientHeight: activeScrollRefRef.current.current?.clientHeight ?? null,
+          })
+        }
+        return
+      }
+
+      const restoringKey = restoringScrollKeyRef.current
+      if (restoringKey && restoringKey === currentScrollKey) {
+        restoreSavedScrollPosition(restoringKey)
+        return
+      }
+
+      if (userScrollPausedAutoFollowRef.current) {
+        restoreUserViewportAnchor()
+        return
+      }
+
+      if (
+        isAtBottomRef.current ||
+        (followingBottomKeyRef.current !== null &&
+          followingBottomKeyRef.current === currentScrollKey)
+      ) {
+        scrollToBottom('auto', { saveSnapshot: false })
+      }
+    })
+
+    resizeObserver.observe(content)
+    if (footer) {
+      resizeObserver.observe(footer)
+    }
+    return () => resizeObserver.disconnect()
+  }, [
+    currentScrollKey,
+    autoScrollSuspended,
+    isTurnNavigationAutoScrollSuspended,
+    restoreSavedScrollPosition,
+    restoreUserViewportAnchor,
+    scrollToBottom,
+    stickyFooter,
+  ])
+
+  useEffect(() => clearScheduledScrolls, [clearScheduledScrolls])
+
+  const handleScrollToBottom = () => {
+    cancelTurnNavigation()
+    updateFollowBottom(true)
+    userViewportAnchorRef.current = null
+    scrollToBottom('smooth', { saveSnapshot: true })
+  }
+
+  const scrollToBottomRef = useRef(handleScrollToBottom)
+  useLayoutEffect(() => {
+    scrollToBottomRef.current = handleScrollToBottom
+  })
+  useLayoutEffect(() => {
+    if (!transcriptNavigationRef) return
+    const control: TranscriptNavigationControl = {
+      turns: () => turnNavigationControlRef.current?.turns() ?? [],
+      goToTurn: id => turnNavigationControlRef.current?.goToTurn(id) ?? false,
+      jump: action => {
+        if (action !== 'latest') return turnNavigationControlRef.current?.jump(action) ?? false
+        scrollToBottomRef.current()
+        return true
+      },
+    }
+    transcriptNavigationRef.current = control
+    return () => {
+      if (transcriptNavigationRef.current === control) transcriptNavigationRef.current = null
+    }
+  }, [transcriptNavigationRef])
+
+  const handleScroll = useCallback(() => {
+    updateScrollState({ forceSave: true })
+    if (userScrollPausedAutoFollowRef.current) {
+      captureUserViewportAnchor()
+    }
+  }, [captureUserViewportAnchor, updateScrollState])
+
+  const handleUserScrollIntent = useCallback(
+    (direction: number) => {
+      const element = activeScrollRefRef.current.current
+      const atBottom = Boolean(
+        element &&
+        element.scrollHeight - element.clientHeight - element.scrollTop <=
+          SCROLLED_TO_BOTTOM_THRESHOLD
+      )
+      if (direction < 0 || (direction > 0 && !atBottom)) {
+        updateFollowBottom(false)
+        isAtBottomRef.current = false
+        clearScheduledScrolls()
+        captureUserViewportAnchor()
+      } else if (direction > 0) {
+        if (atBottom) {
+          updateFollowBottom(true)
+          userViewportAnchorRef.current = null
+          isAtBottomRef.current = true
+        }
+      }
+    },
+    [captureUserViewportAnchor, clearScheduledScrolls, updateFollowBottom]
+  )
+
+  useEffect(() => {
+    const externalScroller = externalScrollRef?.current
+    if (!externalScroller || externalScroller === internalScrollRef.current) return
+
+    externalScroller.addEventListener('scroll', handleScroll)
+    return () => externalScroller.removeEventListener('scroll', handleScroll)
+  }, [externalScrollRef, handleScroll])
+
+  const scrollToBottomButton = showScrollButton ? (
+    <button
+      type="button"
+      data-testid="scroll-to-bottom-button"
+      onClick={handleScrollToBottom}
+      className={cn(
+        'absolute bottom-4 left-1/2 z-10 flex h-9 w-9 -translate-x-1/2 items-center justify-center rounded-full border border-border bg-surface text-text-primary shadow-sm hover:bg-muted',
+        scrollButtonClassName
+      )}
+      aria-label={t('workbench.scroll_to_bottom', '下拉到底')}
+    >
+      <ArrowDown className="h-4 w-4" />
+    </button>
+  ) : null
+
+  return (
+    <div className={cn('relative min-h-0 flex-1', className)}>
+      <MessageTurnNavigation
+        visible={turnNavigationVisible}
+        messages={messages}
+        turnNavigation={turnNavigation}
+        scrollRef={scrollRef}
+        contentRef={contentRef}
+        onLoadTurnNavigationItem={onLoadTurnNavigationItem}
+        onNavigationLoadStateChange={handleTurnNavigationLoadStateChange}
+        onNavigationScrollTargetChange={handleTurnNavigationScrollTargetChange}
+        portalTarget={turnNavigationPortalTarget}
+        cancelNavigationRef={cancelTurnNavigationRef}
+        controlRef={turnNavigationControlRef}
+      />
+      {turnNavigationLoading && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-5 z-30 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border bg-background/95 px-3 py-1.5 text-xs font-medium text-text-secondary shadow-[0_8px_22px_rgba(15,23,42,0.12)]"
+          data-testid="message-turn-navigation-loading"
+        >
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary opacity-80" />
+          <span>{t('chat:message_navigation.loading_target')}</span>
+        </div>
+      )}
+      <div
+        ref={internalScrollRef}
+        data-testid={scrollTestId}
+        className={cn(
+          // Reserve the scrollbar so a reply crossing one screen does not re-wrap.
+          'h-full overflow-y-auto [scrollbar-gutter:stable]',
+          stickyFooter && 'flex flex-col',
+          (turnNavigationLoading || turnNavigationTargetMessageId || autoScrollSuspended) &&
+            '[overflow-anchor:none]',
+          scrollerClassName
+        )}
+        onScroll={handleScroll}
+        onWheelCapture={event => handleUserScrollIntent(event.deltaY)}
+        onTouchStartCapture={event => {
+          touchYRef.current = event.touches[0]?.clientY ?? null
+        }}
+        onTouchMoveCapture={event => {
+          const y = event.touches[0]?.clientY
+          if (y !== undefined && touchYRef.current !== null)
+            handleUserScrollIntent(touchYRef.current - y)
+          touchYRef.current = y ?? null
+        }}
+        onKeyDownCapture={event => {
+          if (
+            (event.target as HTMLElement).closest(
+              'input, textarea, select, [contenteditable="true"]'
+            )
+          )
+            return
+          if (
+            ['ArrowUp', 'PageUp', 'Home'].includes(event.key) ||
+            (event.key === ' ' && event.shiftKey)
+          )
+            handleUserScrollIntent(-1)
+          if (
+            ['ArrowDown', 'PageDown', 'End'].includes(event.key) ||
+            (event.key === ' ' && !event.shiftKey)
+          )
+            handleUserScrollIntent(1)
+        }}
+      >
+        <div
+          ref={contentRef}
+          data-testid={`${scrollTestId}-content`}
+          className={cn(
+            'min-w-0',
+            turnNavigationVisible && 'px-12',
+            stickyFooter && 'flex-1 shrink-0',
+            (turnNavigationLoading || turnNavigationTargetMessageId || autoScrollSuspended) &&
+              '[overflow-anchor:none]'
+          )}
+        >
+          {importedHistory.source && toolsCatalogServerId && (
+            <div className={cn('px-4', messageListClassName)}>
+              <ImportedHistoryPanel
+                key={`${toolsCatalogServerId}:${importedHistoryTaskId}:${historyWorkspacePath}:${importedHistory.source.operationId}`}
+                deviceId={toolsCatalogServerId}
+                workspacePath={historyWorkspacePath}
+                source={importedHistory.source}
+                isCurrent={importedHistory.isCurrent}
+              />
+            </div>
+          )}
+          {messages.length === 0 ? (
+            importedHistory.source ? null : loading ? (
+              <div
+                data-testid="chat-loading-state"
+                className="flex min-h-full items-center justify-center px-6 py-16 text-center text-sm text-text-muted"
+              >
+                {t('workbench.loading_conversation', '正在加载会话...')}
+              </div>
+            ) : (
+              <div
+                data-testid="chat-empty-state"
+                className="flex min-h-full flex-col items-center justify-center px-6 py-16 text-center"
+              >
+                <h2 className="text-sm font-medium text-text-primary">
+                  {t('workbench.empty_conversation_title', '开始新的对话')}
+                </h2>
+                <p className="mt-2 max-w-sm text-xs leading-5 text-text-muted">
+                  {t(
+                    'workbench.empty_conversation_description',
+                    '在下方输入问题、粘贴上下文或添加附件，KCoder Studio 会在这里展示回复。'
+                  )}
+                </p>
+              </div>
+            )
+          ) : (
+            <>
+              {hasMoreBefore && (
+                <div className="flex justify-center px-4 pb-2 pt-4">
+                  <button
+                    type="button"
+                    data-testid="load-older-runtime-transcript-button"
+                    onClick={() => void onLoadMoreBefore?.()}
+                    disabled={loadingMoreBefore}
+                    className="flex h-11 min-w-[44px] items-center justify-center rounded-md border border-border bg-surface px-4 text-xs font-medium text-text-secondary hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {loadingMoreBefore
+                      ? t('workbench.loading_older_messages')
+                      : t('workbench.load_older_messages')}
+                  </button>
+                </div>
+              )}
+              <ToolsCatalogProvider
+                taskId={toolsCatalogTaskId}
+                serverId={toolsCatalogServerId}
+                progressEnabled={showTransientToolStatus && toolActivityTaskId !== null}
+                progressTaskId={toolActivityTaskId ?? toolsCatalogTaskId}
+                messages={messages}
+                isWaitingForAssistant={isWaitingForAssistant}
+              >
+                <MessageList
+                  peerMessageAddress={peerMessageAddress}
+                  messages={messages}
+                  scrollElementRef={scrollRef}
+                  initialDistanceFromBottomPx={getInitialDistanceFromBottomPx(currentScrollKey)}
+                  followBottom={followBottom}
+                  className={messageListClassName}
+                  conversationKey={conversationKey}
+                  processRunId={processRunId}
+                  providerRetryTarget={toolsCatalogServerId}
+                  providerRetryTask={toolActivityTaskId === null ? undefined : toolActivityTaskId ?? toolsCatalogTaskId}
+                  forceVirtualMessageId={turnNavigationTargetMessageId}
+                  isWaitingForAssistant={isWaitingForAssistant}
+                  disableContentVisibility={turnNavigationLoading}
+                  devices={devices}
+                  onRetryFailedMessage={onRetryFailedMessage}
+                  onSwitchModelForFailedMessage={onSwitchModelForFailedMessage}
+                  onLoadFileChangesDiff={onLoadFileChangesDiff}
+                  onRevertFileChanges={onRevertFileChanges}
+                  onOpenFileChangesReview={onOpenFileChangesReview}
+                  fileChangesDiffPreviewDisabledSubtaskId={fileChangesDiffPreviewDisabledSubtaskId}
+                  onOpenWorkspaceFile={onOpenWorkspaceFile}
+                  onOpenLocalSkillFile={onOpenLocalSkillFile}
+                  onRequestUserInputSubmit={onRequestUserInputSubmit}
+                  onRequestUserInputIgnore={onRequestUserInputIgnore}
+                  onOpenAssistantPlan={onOpenAssistantPlan}
+                  onEditLastUserMessage={onEditLastUserMessage}
+                  canEditLastUserMessage={canEditLastUserMessage}
+                  onForkMessage={onForkMessage}
+                  onLoadFullTranscript={onLoadFullTranscript}
+                  loadingFullTranscript={loadingFullTranscript}
+                  hideRequestUserInputBlocks={hideRequestUserInputBlocks}
+                  hiddenRequestUserInputIds={hiddenRequestUserInputIds}
+                  onAddSelectionToConversation={onAddSelectionToConversation}
+                  onAskSelectionInSidebar={onAskSelectionInSidebar}
+                  renderGapAfterMessage={renderTranscriptGapAfterMessage}
+                />
+              </ToolsCatalogProvider>
+            </>
+          )}
+        </div>
+        {stickyFooter ? (
+          <div
+            ref={stickyFooterRef}
+            data-testid={`${scrollTestId}-sticky-footer`}
+            className={cn('sticky bottom-0 z-10 w-full shrink-0', stickyFooterClassName)}
+          >
+            <div className="relative h-0">{scrollToBottomButton}</div>
+            {stickyFooter}
+          </div>
+        ) : null}
+      </div>
+      {!stickyFooter ? scrollToBottomButton : null}
+    </div>
+  )
+}
+
+function scrollPositionKey(conversationKey: string | number | null | undefined): string | null {
+  return conversationKey == null ? null : String(conversationKey)
+}
+
+function setConversationScrollSnapshot(key: string, snapshot: ConversationScrollSnapshot) {
+  cacheConversationScrollSnapshot(key, snapshot)
+}
+
+function getInitialDistanceFromBottomPx(key: string | null): number {
+  if (key === null) return 0
+  const distance = getConversationScrollSnapshot(key)?.distanceFromBottomPx
+  return typeof distance === 'number' && Number.isFinite(distance) ? Math.max(0, distance) : 0
+}
+
+function createUserViewportAnchor(
+  scroller: HTMLElement,
+  content: HTMLElement
+): UserViewportAnchor | null {
+  const scrollerRect = scroller.getBoundingClientRect()
+  const visibleAnchor = Array.from(
+    content.querySelectorAll<HTMLElement>(SCROLL_ANCHOR_SELECTOR)
+  ).find(anchor => {
+    const rect = anchor.getBoundingClientRect()
+    return rect.bottom > scrollerRect.top && rect.top < scrollerRect.bottom
+  })
+  if (!visibleAnchor) return null
+
+  const message = visibleAnchor.closest<HTMLElement>('[data-message-id]')
+  const messageId = message?.dataset.messageId
+  if (!message || !messageId) return null
+  return {
+    messageId,
+    element: visibleAnchor,
+    offsetFromScrollerTop: visibleAnchor.getBoundingClientRect().top - scrollerRect.top,
+  }
+}
+
+function findUserViewportAnchor(
+  content: HTMLElement,
+  anchor: UserViewportAnchor
+): HTMLElement | null {
+  const message = Array.from(content.querySelectorAll<HTMLElement>('[data-message-id]')).find(
+    candidate => candidate.dataset.messageId === anchor.messageId
+  )
+  if (!message) return null
+  // Mounted sibling indexes change as processing blocks and virtual rows update.
+  // If the exact reading node was replaced, skip correction instead of jumping
+  // to an unrelated paragraph that inherited its index.
+  return anchor.element.isConnected && message.contains(anchor.element) ? anchor.element : null
+}
+
+function createScrollSnapshot(
+  scroller: HTMLElement,
+  scrollTop?: number
+): ConversationScrollSnapshot {
+  const resolvedScrollTop = scrollTop ?? scroller.scrollTop
+  const distanceFromBottomPx = Math.max(
+    0,
+    scroller.scrollHeight - scroller.clientHeight - resolvedScrollTop
+  )
+  return {
+    distanceFromBottomPx,
+    pinnedToBottom: distanceFromBottomPx <= SCROLLED_TO_BOTTOM_THRESHOLD,
+  }
+}
+
+function getRestoredScrollTop(scroller: HTMLElement, snapshot: ConversationScrollSnapshot): number {
+  const storedDistance = Number.isFinite(snapshot.distanceFromBottomPx)
+    ? snapshot.distanceFromBottomPx
+    : 0
+  const distance = snapshot.pinnedToBottom ? 0 : storedDistance
+  return Math.max(0, scroller.scrollHeight - scroller.clientHeight - distance)
+}
+
+function RuntimeTranscriptGapMarker({
+  gap,
+  loading,
+  scrollRef,
+  onLoad,
+}: {
+  gap: RuntimeTranscriptGap
+  loading: boolean
+  scrollRef: RefObject<HTMLDivElement | null>
+  onLoad: (gap: RuntimeTranscriptGap, reason: 'visible' | 'click') => Promise<void>
+}) {
+  const { t } = useTranslation('chat')
+  const markerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (loading) return
+    const marker = markerRef.current
+    const scroller = scrollRef.current
+    if (!marker || !scroller || typeof IntersectionObserver === 'undefined') return
+
+    let triggered = false
+    const observer = new IntersectionObserver(
+      entries => {
+        if (triggered || !entries.some(entry => entry.isIntersecting)) return
+        triggered = true
+        void onLoad(gap, 'visible')
+      },
+      {
+        root: scroller,
+        rootMargin: '160px 0px',
+        threshold: 0.01,
+      }
+    )
+    observer.observe(marker)
+    return () => observer.disconnect()
+  }, [gap, loading, onLoad, scrollRef])
+
+  return (
+    <div
+      ref={markerRef}
+      className="mx-auto flex w-full max-w-3xl justify-center px-6 py-1"
+      data-runtime-transcript-gap={`${gap.start}:${gap.end}`}
+      data-testid="runtime-transcript-gap-marker"
+    >
+      <button
+        type="button"
+        disabled={loading}
+        onClick={() => void onLoad(gap, 'click')}
+        className="flex min-h-[36px] min-w-[44px] items-center gap-2 rounded-full border border-border bg-background px-3 text-xs font-medium text-text-secondary shadow-sm hover:bg-muted disabled:cursor-wait disabled:opacity-80"
+      >
+        <span
+          className={cn(
+            'h-1.5 w-1.5 rounded-full bg-primary opacity-80',
+            loading && 'animate-pulse'
+          )}
+        />
+        <span>
+          {loading ? t('message_navigation.loading_gap') : t('message_navigation.gap_missing')}
+        </span>
+      </button>
+    </div>
+  )
+}
+
+function runtimeTranscriptGapBetween(
+  message: WorkbenchMessage,
+  nextMessage: WorkbenchMessage | undefined,
+  loadedRanges: RuntimeTranscriptRange[] | undefined
+): RuntimeTranscriptGap | null {
+  if (!nextMessage) return null
+  const currentIndex = runtimeMessageIndex(message)
+  const nextIndex = runtimeMessageIndex(nextMessage)
+  if (currentIndex === null || nextIndex === null || nextIndex <= currentIndex + 1) return null
+
+  let gapStart = currentIndex + 1
+  const gapEnd = nextIndex
+  const sortedRanges = [...(loadedRanges ?? [])]
+    .filter(range => range.end > range.start)
+    .sort((left, right) => left.start - right.start)
+
+  for (const range of sortedRanges) {
+    if (range.end <= gapStart) continue
+    if (range.start > gapStart) {
+      return { start: gapStart, end: Math.min(range.start, gapEnd) }
+    }
+    gapStart = Math.max(gapStart, range.end)
+    if (gapStart >= gapEnd) return null
+  }
+
+  return { start: gapStart, end: gapEnd }
+}
+
+function runtimeMessageIndex(message: WorkbenchMessage): number | null {
+  return typeof message.runtimeMessageIndex === 'number' &&
+    Number.isFinite(message.runtimeMessageIndex)
+    ? message.runtimeMessageIndex
+    : null
+}
+
+function runtimeTranscriptGapKey(gap: RuntimeTranscriptGap): string {
+  return `${gap.start}:${gap.end}`
+}

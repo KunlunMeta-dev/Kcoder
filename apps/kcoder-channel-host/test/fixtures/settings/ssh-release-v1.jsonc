@@ -1,0 +1,16 @@
+// Synthetic data matching the v0.6.0 and 2026-11-04 Windows package SSH reader.
+{
+  "meta": { "config_version": 1 },
+  "terminal": {
+    "ssh": {
+      "connections": [{
+        "id": "release-connection",
+        "label": "Release fixture",
+        "host": "localhost",
+        "port": 2222,
+        "username": "fixture",
+        "authMethod": "agent",
+      }],
+    },
+  },
+}

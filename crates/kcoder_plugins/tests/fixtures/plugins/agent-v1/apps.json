@@ -1,0 +1,8 @@
+{
+  "apps": [
+    {
+      "name": "fixture-app",
+      "connectorId": "fixture-connector"
+    }
+  ]
+}

@@ -1,0 +1,339 @@
+{
+  "page": {
+    "title": "Self-evolution",
+    "description": "Let KCoder learn from feedback on this runtime target and improve skills, preferences and project knowledge. Learned changes are evaluated and can be rolled back.",
+    "target": "Runtime target",
+    "hostUnsupported": "Self-evolution settings are available through a KCoder Gateway target.",
+    "targetsLoadFailed": "Could not load runtime targets. Try again later.",
+    "loading": "Loading…",
+    "currentTarget": "Current runtime target: {{name}}",
+    "unsupportedTitle": "Not supported by this target's version",
+    "unsupported": "Upgrade KCoder on this target to use self-evolution.",
+    "probeFailed": "Could not check whether this target supports self-evolution.",
+    "projectScopeIssue": {
+      "data_root_inside_project": "Project-scope learning is skipped because the evolution data directory is inside the project.",
+      "unavailable": "Project-scope learning is skipped because project storage is unavailable."
+    }
+  },
+  "actions": {
+    "retry": "Retry",
+    "refresh": "Refresh",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss"
+  },
+  "notice": {
+    "load_failed": "Could not load self-evolution settings.",
+    "conflict": "These settings were changed elsewhere. Refresh to see the current values before changing them again.",
+    "unconfirmed": "Could not confirm whether the change was saved. Refresh to check the current values.",
+    "save_failed": "The change was not saved. Try again.",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "promoted": "Skill {{name}} learned a new lesson.",
+    "promotionUndone": "The new lesson for {{name}} was rolled back.",
+    "promotionUndoFailed": "Could not roll back the new lesson for {{name}}.",
+    "view": "View",
+    "undo": "Undo"
+  },
+  "disabledReason": {
+    "training_mode": "Self-evolution is paused while training mode is on. Settings cannot be changed.",
+    "project_disabled": "The current project's settings turn self-evolution off. Settings cannot be changed here.",
+    "model_unavailable": "The selected model is unavailable, so self-evolution has paused its model calls. Choose another model.",
+    "usage_limit": "This month's usage limit has been reached. Learning resumes next month or after you raise the limit."
+  },
+  "master": {
+    "label": "Turn on self-evolution",
+    "description": "When off, nothing is collected, learned or rolled out, and candidate versions return to their stable versions. Existing data is kept."
+  },
+  "mode": {
+    "label": "How it runs",
+    "options": {
+      "observe": "Only record feedback",
+      "propose": "Learn and propose changes (I confirm)",
+      "auto": "Learn and apply automatically"
+    },
+    "descriptions": {
+      "observe": "Collects feedback and statistics without proposing changes.",
+      "propose": "Proposed changes wait for your review.",
+      "auto": "Changes are applied after they pass evaluation."
+    },
+    "autoWarning": "Automatic changes still go through evaluation and a gradual rollout, and you can roll them back at any time."
+  },
+  "targets": {
+    "title": "What to learn",
+    "types": {
+      "skill": "Skills",
+      "preference": "Personal preferences",
+      "project_knowledge": "Project knowledge",
+      "tool_usage": "Tool usage",
+      "workflow_template": "Workflow and subagent templates"
+    },
+    "comingSoon": "Coming soon",
+    "counts": "Learned items: {{learned}} · Pending proposals: {{pending}}",
+    "notImplemented": "This type is not available on this target yet.",
+    "showObjects": "Show items",
+    "hideObjects": "Hide items",
+    "allowFileEdits": "Allow direct edits of skills I created",
+    "allowFileEditsDescription": "Applies only to skills you or an agent created. Other skills always learn through an overlay.",
+    "scopeLabel": "Items to learn",
+    "scope": {
+      "all": "All items",
+      "selected": "Only items I select"
+    },
+    "sourceFilter": "Source",
+    "allSources": "All sources",
+    "loadFailed": "Could not load items.",
+    "empty": "No items have been used yet.",
+    "evolutionMode": {
+      "overlay": "Overlay",
+      "skill_file": "Skill file"
+    },
+    "channelCandidate": "Candidate · {{traffic}}% traffic",
+    "channelStable": "Stable",
+    "scoreLine": "Score {{score}} · {{count}} observations",
+    "pendingProposals": "{{count}} pending proposals",
+    "itemToggle": "Learn from {{name}}",
+    "loading": "Loading items…",
+    "loadMore": "Load more"
+  },
+  "signals": {
+    "title": "Feedback signals",
+    "artifact_edits": {
+      "label": "Edits to produced output",
+      "description": "Learn from how you change files and documents a skill produced."
+    },
+    "procedure_results": {
+      "label": "Command and task results",
+      "description": "Learn from command, test and task outcomes."
+    },
+    "chat_corrections": {
+      "label": "Corrections in conversation",
+      "description": "Learn when you correct or redirect a response."
+    },
+    "rating_ui": {
+      "label": "Show rating controls",
+      "description": "Show thumbs up and down under replies that used a skill."
+    }
+  },
+  "preferences": {
+    "title": "Personal preferences",
+    "description": "View, edit or clear the preferences learned about you.",
+    "show": "View preferences",
+    "hide": "Hide preferences",
+    "onlyYou": "Preferences apply only to you.",
+    "notice": {
+      "load_failed": "Could not load preferences.",
+      "conflict": "Preferences changed elsewhere. Refresh before editing again.",
+      "unconfirmed": "Could not confirm the change. Refresh to check.",
+      "save_failed": "The preference was not saved."
+    },
+    "loading": "Loading preferences…",
+    "empty": "No preferences have been learned yet.",
+    "meta": "Evidence: {{count}} · Updated {{date}}",
+    "delete": "Clear"
+  },
+  "model": {
+    "label": "Model used by self-evolution",
+    "description": "Choose from models already configured on this target. No extra provider or key is needed.",
+    "catalogFailed": "Could not load configured models.",
+    "unavailable": "The selected model is not available. Self-evolution model calls are paused until you choose another model.",
+    "followSession": "Follow current session model",
+    "optionUnavailable": "{{label}} (unavailable)"
+  },
+  "usage": {
+    "title": "Usage",
+    "frequency": "Learning frequency",
+    "frequencyDescription": "How many uses are collected before a learning pass runs.",
+    "frequencies": {
+      "low": "Low",
+      "standard": "Standard",
+      "high": "High",
+      "custom": "Custom ({{count}} uses)"
+    },
+    "thisMonth": "This month",
+    "tokens": "{{input}} input tokens · {{output}} output tokens",
+    "cost": "estimated {{cost}}",
+    "costUnknown": "cost estimate unavailable",
+    "unavailable": "Usage is unavailable.",
+    "loading": "Loading usage…"
+  },
+  "data": {
+    "title": "Data and privacy",
+    "ttl": "Keep evidence for",
+    "ttlDescription": "Older evidence is deleted automatically.",
+    "days": "{{count}} days",
+    "clear": "Clear local evolution data",
+    "clearDescription": "Deletes recorded evidence, statistics, proposals and overlays on this target. Running learning jobs are cancelled first.",
+    "outcome": {
+      "cleared": "Local evolution data was cleared.",
+      "failed": "Local evolution data was not cleared.",
+      "unconfirmed": "Could not confirm whether the data was cleared. Check again before retrying."
+    },
+    "clearAction": "Clear data…",
+    "confirmTitle": "Clear local evolution data?",
+    "confirmAgainTitle": "Confirm again",
+    "confirmBody": "Choose what to delete. Learned overlays return to the original versions.",
+    "confirmAgainBody": "This cannot be undone. Clear {{scope}} on this target now?",
+    "continue": "Continue",
+    "confirmAction": "Clear data",
+    "scopeLabel": "What to clear",
+    "scopes": {
+      "all": "All local evolution data",
+      "project": "This project only",
+      "user": "Personal data only"
+    },
+    "scopeDescriptions": {
+      "all": "Project and personal evidence, statistics, proposals and overlays.",
+      "project": "Evidence and learned project knowledge for the current workspace.",
+      "user": "Your preferences and user-level evidence, statistics and overlays."
+    },
+    "scopeProjectUnavailable": "Open a workspace on this target to clear only its data."
+  },
+  "advanced": {
+    "title": "Advanced",
+    "description": "Change these only if you understand how evaluation and rollout work.",
+    "fields": {
+      "candidate_traffic": "Candidate traffic",
+      "promote_threshold": "Promotion threshold",
+      "rollback_threshold": "Rollback threshold",
+      "monthly_max_tokens": "Monthly token limit",
+      "win_rate": "Evaluation win rate",
+      "max_diversity_drop": "Maximum diversity drop"
+    },
+    "hints": {
+      "candidate_traffic": "Share of conversations that use a candidate, greater than 0 and at most 1.",
+      "promote_threshold": "Confidence a candidate is better before it becomes stable, greater than 0 and at most 1.",
+      "rollback_threshold": "Confidence below which a candidate is rolled back; lower than the promotion threshold.",
+      "monthly_max_tokens": "Leave empty for no limit.",
+      "win_rate": "Share of comparisons a candidate must win in evaluation, from 0.5 to 1.",
+      "max_diversity_drop": "Largest allowed loss of output diversity versus stable, from 0 to 0.5."
+    },
+    "errors": {
+      "range_fraction": "Enter a number between 0 and 1.",
+      "range_traffic": "Enter a number greater than 0 and at most 1.",
+      "rollback_not_below": "Must be lower than the promotion threshold.",
+      "positive_integer": "Enter a positive whole number or leave it empty.",
+      "range_win_rate": "Enter a number from 0.5 to 1.",
+      "range_diversity_drop": "Enter a number from 0 to 0.5."
+    },
+    "unlimited": "No limit",
+    "stageModels": "Models for each stage",
+    "stages": {
+      "classifier": "Signal classification",
+      "distill": "Learning",
+      "eval": "Evaluation"
+    },
+    "sameAsMain": "Same as above",
+    "restoreDefaults": "Restore defaults"
+  },
+  "costDialog": {
+    "title": "Turn on self-evolution?",
+    "body": "Signal classification, learning and evaluation make extra calls to the selected model and use tokens. Usage is unlimited by default; you can set a monthly limit in Advanced.",
+    "confirm": "Turn on"
+  },
+  "rating": {
+    "up": "Helpful",
+    "down": "Not helpful",
+    "prompt": "Rate this skill result",
+    "addReason": "Add a reason",
+    "reasonSaved": "Reason recorded",
+    "failed": "Rating was not recorded.",
+    "failedNoUsage": "This turn has no recorded skill use to rate; the rating was not recorded.",
+    "failedDisabled": "Self-evolution is off; the rating was not recorded.",
+    "failedNotFound": "This conversation or subagent was not found; the rating was not recorded.",
+    "failedUnconfirmed": "The rating could not be confirmed; try again later.",
+    "reasonLabel": "Reason (optional)",
+    "reasonPlaceholder": "What worked or what was wrong?",
+    "sendReason": "Send"
+  },
+  "detail": {
+    "title": "Evolution",
+    "loading": "Loading evolution data…",
+    "empty": "No evolution data for this item yet.",
+    "loadFailed": "Could not load evolution data.",
+    "notice": {
+      "saved": "Saved",
+      "unsupported": "This target does not support this action.",
+      "conflict": "This item changed elsewhere. Refresh before trying again.",
+      "rejected": "The content was rejected.",
+      "too_large": "The content is too large.",
+      "not_found": "The item or proposal no longer exists.",
+      "invalid_transition": "This action is not allowed in the proposal's current state.",
+      "disabled": "Self-evolution is turned off.",
+      "unconfirmed": "Could not confirm the result. Refresh to check.",
+      "invalid": "The target returned an invalid response.",
+      "unavailable": "The action failed. Try again.",
+      "decided": {
+        "approve": "Approved. The proposal will be evaluated and then rolled out gradually.",
+        "promote": "Promoted to the stable version.",
+        "reject": "Proposal rejected.",
+        "rollback": "Rolled back to the previous stable version.",
+        "pin_stable": "The stable version is pinned and the canary has stopped."
+      },
+      "distill": {
+        "queued": "Distillation is queued. New proposals appear here when it finishes.",
+        "disabled": "Self-evolution or learning for this item is turned off.",
+        "unknown_target": "The target no longer knows this item.",
+        "model_unavailable": "The selected self-evolution model is unavailable. Choose another model in settings."
+      }
+    },
+    "rejectReason": "Reason: {{reason}}",
+    "stableScore": "Stable {{score}} · {{count}} observations",
+    "candidateScore": "Candidate {{score}} · {{count}} observations · {{traffic}}% traffic",
+    "pinned": "Pinned",
+    "needsRevalidation": "Needs revalidation",
+    "disable": "Turn off evolution",
+    "enable": "Turn on evolution",
+    "overlay": "Learned overlay",
+    "lessons": "Lessons",
+    "checklist": "Checklist",
+    "examples": "Examples: {{count}}",
+    "patterns": "Learned patterns",
+    "noPatterns": "No patterns yet.",
+    "evidence": "Uses {{usages}} · sessions {{sessions}} · users {{users}} · counter-evidence {{counter}}",
+    "proposals": "Proposals",
+    "noProposals": "No proposals.",
+    "actor": {
+      "auto": "Automatic",
+      "user": "You"
+    },
+    "evaluation": "Win rate {{winRate}} · ties {{ties}} · hard check regressions {{regressions}}",
+    "evaluationRunning": "Evaluating: win rate so far {{winRate}} · ties {{ties}} · hard check regressions {{regressions}}",
+    "diff": "View change",
+    "decision": {
+      "approve": "Approve evaluation and canary",
+      "promote": "Promote",
+      "reject": "Reject",
+      "rollback": "Roll back",
+      "pin_stable": "Pin stable version"
+    },
+    "decisionHint": {
+      "approve": "Run the offline evaluation and, if it passes, start a gradual canary rollout. Nothing becomes stable yet.",
+      "promote": "Make this canary the new stable version for everyone.",
+      "reject": "Discard this proposal.",
+      "rollback": "Return to the previous stable version.",
+      "pin_stable": "Keep the current stable version and stop the canary."
+    },
+    "distill": "Distill feedback",
+    "distillHint": "Learn from the feedback collected so far for this item now.",
+    "unknownValue": "unknown",
+    "diversityDelta": "diversity {{delta}}",
+    "patternScope": {
+      "target_overlay": "Learned for this item",
+      "user_preference": "Personal preference",
+      "insufficient": "Not enough evidence"
+    },
+    "state": {
+      "draft": "Draft",
+      "evaluated": "Evaluated",
+      "canary": "Canary",
+      "promoted": "Promoted",
+      "rolled_back": "Rolled back",
+      "rejected": "Rejected"
+    },
+    "modelHint": "Choose a model in Self-evolution settings, or open a conversation so evolution can follow its model.",
+    "openSettings": "Open Self-evolution settings",
+    "decisionWarning": "Note: {{notice}}"
+  }
+}

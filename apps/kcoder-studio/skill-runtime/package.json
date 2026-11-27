@@ -1,0 +1,12 @@
+{
+  "name": "@kcoder/studio-skill-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned pure-JavaScript packages for local Studio skill scripts and the bundled Playwright MCP launcher",
+  "dependencies": {
+    "@playwright/mcp": "0.0.84",
+    "docx": "9.16.0",
+    "pptxgenjs": "4.0.1"
+  },
+  "packageManager": "pnpm@11.24.0"
+}

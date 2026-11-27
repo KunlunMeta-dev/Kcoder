@@ -1,0 +1,508 @@
+{
+  "name": "@kcoder/studio",
+  "version": "2.0.57",
+  "description": "Multi-server KCoder desktop client",
+  "author": "KCoder contributors",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.mjs",
+  "scripts": {
+    "dev": "node web-dev.mjs",
+    "dev:static": "node web-dev.mjs --static",
+    "demo": "KCODER_STUDIO_SCENARIO=full-turn KCODER_STUDIO_SERVERS_FILE=./servers.demo.json node dev-server.mjs",
+    "demo:tailscale": "KCODER_STUDIO_HOST=0.0.0.0 KCODER_STUDIO_SCENARIO=full-turn KCODER_STUDIO_SERVERS_FILE=./servers.demo.json node dev-server.mjs",
+    "mock": "KCODER_STUDIO_MOCK=1 node dev-server.mjs",
+    "desktop": "electron ./desktop/main.mjs",
+    "desktop:remote": "electron ./desktop/remote-main.mjs",
+    "release:version:check": "node ../../scripts/release/client-version.mjs --check",
+    "desktop:pack:dir": "pnpm release:version:check && pnpm build:renderer && node ../../scripts/release/cli-native-build.mjs --build -- build --release --locked -p kcoder_cli --bin kcoder && electron-builder --dir --linux --publish never",
+    "desktop:pack:linux": "pnpm release:version:check && pnpm build:renderer && node ../../scripts/release/cli-native-build.mjs --build -- build --release --locked -p kcoder_cli --bin kcoder && electron-builder --linux --publish never",
+    "desktop:pack:win": "node desktop/build-windows.mjs",
+    "desktop:pack:mac": "node desktop/build-macos.mjs",
+    "pack:web": "pnpm release:version:check && pnpm build:renderer && node -e \"require('node:fs').mkdirSync('../../target/packages/kcoder-studio-gateway',{recursive:true})\" && node ../../scripts/release/stage-studio-gateway-npm.mjs",
+    "desktop:remote:pack:win": "pnpm release:version:check && cargo build --release --manifest-path ../../Cargo.toml -p kcoder_process_supervisor --bin kcoder-process-supervisor && electron-builder --config electron-builder.remote.json --dir --win --x64 --publish never && node desktop/archive-windows-remote.mjs",
+    "test:desktop:artifact": "KCODER_STUDIO_PACKAGED_DIR=./dist/linux-unpacked node --test desktop/packaged-artifact.test.mjs",
+    "check": "node --check dev-server.mjs && node --check desktop/main.mjs && node --check desktop/gateway-process.mjs && node --check integration/gateway/runtime-target-local.integration.mjs && node --check integration/gateway/runtime-target-local-runner.mjs && node --check integration/gateway/runtime-target-ssh.integration.mjs && node --check integration/gateway/runtime-target-ssh-runner.mjs && node --check e2e/suites/browser/runtime-target-conversation-ui.e2e.mjs && pnpm --dir renderer typecheck",
+    "test": "node --test test/*.test.js test/retention-authority.review.test.mjs test/broker-async*.test.mjs test/broker-interaction-*.test.mjs test/broker-question-*.test.mjs test/broker-resume-notification-buffer.test.mjs desktop/*.test.mjs src/*.test.js src/*.test.mjs src/__tests__/*.test.js",
+    "test:renderer": "TZ=Asia/Shanghai pnpm --dir renderer exec vitest run --maxWorkers=2",
+    "build:renderer": "pnpm --dir renderer build",
+    "test:integration": "node e2e/run-all.mjs --model-independent --kind integration",
+    "test:integration:local": "node integration/gateway/runtime-target-local.integration.mjs",
+    "test:integration:ssh": "node integration/gateway/runtime-target-ssh.integration.mjs",
+    "test:integration:real-model": "node e2e/run-all.mjs --real-model --kind integration --suite real-model-task",
+    "test:studio:smoke": "node e2e/run-all.mjs --model-independent",
+    "test:e2e": "node e2e/run-all.mjs --model-independent --kind e2e",
+    "test:e2e:harness": "node --test e2e/harness/*.test.mjs e2e/harness/model-stream/*.test.mjs integration/model/*.test.mjs",
+    "test:e2e:studio": "node e2e/run-all.mjs",
+    "test:e2e:studio:smoke": "node e2e/run-all.mjs --model-independent",
+    "test:e2e:studio:full": "node e2e/run-all.mjs --model-independent --full-integration",
+    "test:e2e:studio:real-model": "node e2e/run-all.mjs --real-model --suite real-model-task",
+    "test:e2e:studio:all": "node e2e/run-all.mjs --real-model",
+    "test:ssh-e2e": "node integration/gateway/runtime-target-ssh.integration.mjs",
+    "test:ui-e2e": "node e2e/run-all.mjs --suite runtime-target-conversation-ui",
+    "prepack": "node ../../scripts/release/artifact-manifest.mjs --npm . studio-web"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dev-server.mjs",
+    "web-dev.mjs",
+    "src",
+    "bin",
+    "gateway-resources",
+    "shared/gatewayRequestDeadline.js",
+    "shared/channelInventoryEvents.js",
+    "shared/channelInventoryEvents.d.ts",
+    "shared/runtimeActivityEvents.js",
+    "shared/runtimeActivityEvents.d.ts",
+    "shared/migrationInstructions.mjs",
+    "shared/integrationControlMethods.mjs",
+    "shared/threadRuntimeHandoff.mjs",
+    "shared/taskStateObservations.mjs",
+    "shared/webSearchMethods.mjs",
+    "shared/webSearchMethods.d.mts",
+    "shared/integrationControlMethods.d.mts",
+    "shared/generated/validator.mjs",
+    "shared/generated/storage-migration.schema.json",
+    "renderer/dist",
+    "README.md",
+    "shared/gatewayConnectionRoutes.js",
+    "shared/gatewayConnectionRoutes.d.ts",
+    "kcoder-release-manifest.json",
+    "!src/**/*.test.*",
+    "!src/**/__tests__/**",
+    "!src/**/__fixtures__/**",
+    "shared/agentMessageMethods.mjs",
+    "shared/agentMessageReadDiagnostic.mjs",
+    "shared/threadOwnership.mjs",
+    "shared/threadOwnership.d.mts",
+    "shared/generated/schemas.integrations-remotes.json",
+    "shared/nativeStartupDiagnostic.mjs",
+    "shared/remotes/controlContracts.mjs",
+    "shared/sessionAddressExpectation.mjs",
+    "shared/generated/contractGuards.core.mjs",
+    "shared/generated/contractGuards.peer-ssh.mjs",
+    "shared/generated/contractGuards.attachment-drafts.mjs",
+    "shared/generated/schemas.attachment-drafts.json",
+    "shared/generated/schemas.json"
+  ],
+  "devDependencies": {
+    "electron": "42.3.3",
+    "electron-builder": "26.15.2"
+  },
+  "build": {
+    "npmRebuild": false,
+    "beforePack": "desktop/stage-desktop-resources.mjs",
+    "appId": "dev.kcoder.studio",
+    "productName": "KCoder Studio",
+    "executableName": "kcoder-studio",
+    "asar": true,
+    "files": [
+      "!node_modules/**/*",
+      "desktop/main.mjs",
+      "desktop/storage-startup.mjs",
+      "desktop/storage-installation.mjs",
+      "desktop/storage-browser-cache.mjs",
+      "desktop/storage-locations-controller.mjs",
+      "desktop/gateway-owner.mjs",
+      "desktop/window-recovery.mjs",
+      "desktop/gateway-diagnostics.mjs",
+      "desktop/native-component-image.mjs",
+      "desktop/startup-window.mjs",
+      "desktop/packaged-resource-startup.mjs",
+      "desktop/resource-preparation-owner.mjs",
+      "desktop/application-menu.mjs",
+      "desktop/application-menu-labels.mjs",
+      "desktop/additional-window.mjs",
+      "desktop/desktop-menu-controller.mjs",
+      "desktop/directory-dialog-controller.mjs",
+      "desktop/window-responsiveness.mjs",
+      "desktop/workspace-open-controller.mjs",
+      "desktop/tray-controller.mjs",
+      "desktop/taskbar-badge.mjs",
+      "desktop/desktop-icons.mjs",
+      "desktop/icons/icon.ico",
+      "desktop/icons/128x128.png",
+      "desktop/icons/32x32.png",
+      "desktop/menu-preload.cjs",
+      "desktop/gateway-process.mjs",
+      {
+        "from": "src",
+        "to": "src",
+        "filter": [
+          "studio-login-link.js",
+          "storage-paths.mjs",
+          "storage-operation-client.mjs",
+          "migrations/storage-startup.mjs",
+          "migrations/windows-registered-sources.mjs",
+          "storage-lease.mjs",
+          "storage-source-retirement.mjs",
+          "storage-active-operation.mjs",
+          "storage-component-publication-scope.mjs",
+          "storage-runtime-resources.mjs",
+          "storage-startup.mjs",
+          "mobile-device-auth.js",
+          "source-app-server-binary.js",
+          "migrations/gateway-storage-domains.mjs",
+          "migrations/offline-owner-child.mjs",
+          "windows-current-identity.mjs",
+          "gateway-connectivity.js",
+          "gateway-relay-instance.js",
+          "gateway-relay-auth.js"
+        ]
+      },
+      {
+        "from": "shared",
+        "to": "shared",
+        "filter": [
+          "gatewayRequestDeadline.js",
+          "generated/validator.mjs",
+          "generated/storage-migration.schema.json"
+        ]
+      },
+      "desktop/gateway-startup-failure.mjs",
+      "desktop/session-renewal.mjs",
+      "desktop/gateway-env.mjs",
+      "desktop/windows-profile-startup.mjs",
+      "desktop/desktop-port.mjs",
+      "desktop/packaged-paths.mjs",
+      "desktop/download-controller.mjs",
+      "desktop/feedback-controller.mjs",
+      "desktop/security-policy.mjs",
+      "desktop/widget-isolation/*.mjs",
+      "!desktop/widget-isolation/**/*.test.*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "desktop/gateway-package.json",
+        "to": "gateway/package.json"
+      },
+      {
+        "from": "../../target/packages/kcoder-studio/gateway-dependencies/node_modules",
+        "to": "gateway/node_modules"
+      },
+      {
+        "from": "../../target/packages/kcoder-studio/skill-runtime/node_modules",
+        "to": "skill-runtime/node_modules"
+      },
+      {
+        "from": "dev-server.mjs",
+        "to": "gateway/dev-server.mjs"
+      },
+      {
+        "from": "src",
+        "to": "gateway/src",
+        "filter": [
+          "**/*",
+          "!**/*.test.*",
+          "!**/__tests__/**",
+          "!**/__fixtures__/**"
+        ]
+      },
+      {
+        "from": "shared/gatewayRequestDeadline.js",
+        "to": "gateway/shared/gatewayRequestDeadline.js"
+      },
+      {
+        "from": "shared/channelInventoryEvents.js",
+        "to": "gateway/shared/channelInventoryEvents.js"
+      },
+      {
+        "from": "shared/runtimeActivityEvents.js",
+        "to": "gateway/shared/runtimeActivityEvents.js"
+      },
+      {
+        "from": "shared/gatewayConnectionRoutes.js",
+        "to": "gateway/shared/gatewayConnectionRoutes.js"
+      },
+      {
+        "from": "shared/gatewayConnectionRoutes.d.ts",
+        "to": "gateway/shared/gatewayConnectionRoutes.d.ts"
+      },
+      {
+        "from": "shared/migrationInstructions.mjs",
+        "to": "gateway/shared/migrationInstructions.mjs"
+      },
+      {
+        "from": "shared/integrationControlMethods.mjs",
+        "to": "gateway/shared/integrationControlMethods.mjs"
+      },
+      {
+        "from": "shared/threadRuntimeHandoff.mjs",
+        "to": "gateway/shared/threadRuntimeHandoff.mjs"
+      },
+      {
+        "from": "shared/taskStateObservations.mjs",
+        "to": "gateway/shared/taskStateObservations.mjs"
+      },
+      {
+        "from": "shared/webSearchMethods.mjs",
+        "to": "gateway/shared/webSearchMethods.mjs"
+      },
+      {
+        "from": "shared/webSearchMethods.d.mts",
+        "to": "gateway/shared/webSearchMethods.d.mts"
+      },
+      {
+        "from": "shared/remotes",
+        "to": "gateway/shared/remotes"
+      },
+      {
+        "from": "shared/generated/schemas.integrations-remotes.json",
+        "to": "gateway/shared/generated/schemas.integrations-remotes.json"
+      },
+      {
+        "from": "../kcoder-relay/src/client-identity.mjs",
+        "to": "kcoder-relay/src/client-identity.mjs"
+      },
+      {
+        "from": "../kcoder-relay/src/client.mjs",
+        "to": "kcoder-relay/src/client.mjs"
+      },
+      {
+        "from": "../kcoder-relay/src/config.mjs",
+        "to": "kcoder-relay/src/config.mjs"
+      },
+      {
+        "from": "../kcoder-relay/src/admin-auth.mjs",
+        "to": "kcoder-relay/src/admin-auth.mjs"
+      },
+      {
+        "from": "../kcoder-relay/src/transport.mjs",
+        "to": "kcoder-relay/src/transport.mjs"
+      },
+      {
+        "from": "../kcoder-relay/src/gateway-origin.mjs",
+        "to": "kcoder-relay/src/gateway-origin.mjs"
+      },
+      {
+        "from": "node_modules/ws",
+        "to": "kcoder-relay/node_modules/ws",
+        "filter": [
+          "**/*",
+          "!node_modules{,/**/*}",
+          "!test{,/**/*}",
+          "!tests{,/**/*}"
+        ]
+      },
+      {
+        "from": "shared/generated/validator.mjs",
+        "to": "gateway/shared/generated/validator.mjs"
+      },
+      {
+        "from": "shared/generated/storage-migration.schema.json",
+        "to": "gateway/shared/generated/storage-migration.schema.json"
+      },
+      {
+        "from": "renderer/dist",
+        "to": "renderer-dist"
+      },
+      {
+        "from": "renderer/LICENSE.upstream",
+        "to": "licenses/Wegent-Apache-2.0.txt"
+      },
+      {
+        "from": "renderer/UPSTREAM.md",
+        "to": "licenses/Wegent-UPSTREAM.md"
+      },
+      {
+        "from": "renderer/KCODER_CHANGES.md",
+        "to": "licenses/Wegent-KCODER_CHANGES.md"
+      },
+      {
+        "from": "../../crates/kcoder_knowledge/prompts/llm_wiki/LICENSE",
+        "to": "licenses/llm_wiki-GPL-3.0.txt"
+      },
+      {
+        "from": "../../crates/kcoder_knowledge/prompts/llm_wiki/NOTICE.md",
+        "to": "licenses/llm_wiki-NOTICE.md"
+      },
+      {
+        "from": "shared/agentMessageMethods.mjs",
+        "to": "gateway/shared/agentMessageMethods.mjs"
+      },
+      {
+        "from": "shared/agentMessageReadDiagnostic.mjs",
+        "to": "gateway/shared/agentMessageReadDiagnostic.mjs"
+      },
+      {
+        "from": "shared/threadOwnership.mjs",
+        "to": "gateway/shared/threadOwnership.mjs"
+      },
+      {
+        "from": "shared/nativeStartupDiagnostic.mjs",
+        "to": "gateway/shared/nativeStartupDiagnostic.mjs"
+      },
+      {
+        "from": "shared/sessionAddressExpectation.mjs",
+        "to": "gateway/shared/sessionAddressExpectation.mjs"
+      },
+      {
+        "from": "shared/generated/contractGuards.core.mjs",
+        "to": "gateway/shared/generated/contractGuards.core.mjs"
+      },
+      {
+        "from": "shared/generated/contractGuards.peer-ssh.mjs",
+        "to": "gateway/shared/generated/contractGuards.peer-ssh.mjs"
+      },
+      {
+        "from": "shared/generated/contractGuards.attachment-drafts.mjs",
+        "to": "gateway/shared/generated/contractGuards.attachment-drafts.mjs"
+      },
+      {
+        "from": "shared/generated/schemas.attachment-drafts.json",
+        "to": "gateway/shared/generated/schemas.attachment-drafts.json"
+      },
+      {
+        "from": "shared/generated/schemas.json",
+        "to": "gateway/shared/generated/schemas.json"
+      }
+    ],
+    "linux": {
+      "icon": "desktop/icons/icon.png",
+      "category": "Development",
+      "extraResources": [
+        {
+          "from": "../../target/packages/kcoder-studio/linux-input/searxng",
+          "to": "searxng"
+        },
+        {
+          "from": "../../target/release/kcoder",
+          "to": "bin/kcoder"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/linux-input/bin/kcoder-native-storage.node",
+          "to": "bin/kcoder-native-storage.node"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/linux-input/bin/chrome",
+          "to": "bin/chrome"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/linux-input/lark-cli",
+          "to": "lark-cli"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/linux-input/channel",
+          "to": "kcoder-channel-host"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/linux-input/channel/node_modules",
+          "to": "kcoder-channel-host/node_modules",
+          "filter": [
+            "**/*",
+            "**/.*"
+          ]
+        }
+      ],
+      "target": [
+        "AppImage"
+      ]
+    },
+    "mac": {
+      "icon": "desktop/icons/icon.icns",
+      "bundleVersion": "75"
+    },
+    "win": {
+      "icon": "desktop/icons/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "KCoder-Studio-Setup-${version}-win-${arch}.${ext}",
+      "signAndEditExecutable": true,
+      "signExecutable": false,
+      "extraFiles": [
+        {
+          "from": "desktop/WINDOWS-README.txt",
+          "to": "\u4f7f\u7528\u8bf4\u660e.txt"
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/searxng",
+          "to": "searxng"
+        },
+        {
+          "from": "desktop/windows-shell",
+          "to": "shell"
+        },
+        {
+          "from": "desktop/icons/icon.ico",
+          "to": "shell/icon.ico"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/kcoder.exe",
+          "to": "bin/kcoder.exe"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/kcoder-process-supervisor.exe",
+          "to": "bin/kcoder-process-supervisor.exe"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/kcoder-native-image.node",
+          "to": "bin/kcoder-native-image.node"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/kcoder-native-storage.node",
+          "to": "bin/kcoder-native-storage.node"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/chrome",
+          "to": "bin/chrome"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/bin/pdf",
+          "to": "bin/pdf"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/lark-cli",
+          "to": "lark-cli"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/channel",
+          "to": "kcoder-channel-host"
+        },
+        {
+          "from": "../../target/packages/kcoder-studio/windows-input/channel/node_modules",
+          "to": "kcoder-channel-host/node_modules",
+          "filter": [
+            "**/*",
+            "**/.*"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "include": "desktop/windows-shell-installer.nsh",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "KCoder Studio",
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ]
+    },
+    "afterPack": "desktop/release-artifact-hook.mjs"
+  },
+  "dependencies": {
+    "compression": "1.8.1",
+    "jsonc-parser": "^3.3.1",
+    "ssh2": "^1.17.0",
+    "ws": "8.22.0"
+  },
+  "packageManager": "pnpm@11.24.0",
+  "optionalDependencies": {
+    "@steipete/peekaboo": "4.9.6"
+  }
+}

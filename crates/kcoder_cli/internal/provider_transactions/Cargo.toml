@@ -1,0 +1,31 @@
+[package]
+name = "kcoder_provider_transactions"
+description = "KCoder provider configuration transactions and connection probes."
+publish = false
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+fs2 = "0.4"
+futures.workspace = true
+kcoder_api = { path = "../../../kcoder_api" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types" }
+reqwest.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+kcoder_config = { path = "../../../kcoder_config", features = ["provider-test-fixtures"] }
+kcoder_engine = { path = "../../../kcoder_engine" }
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/provider_transactions/lib.rs"

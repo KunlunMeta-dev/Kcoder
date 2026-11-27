@@ -1,0 +1,313 @@
+{
+  "TurnReviewEvidence": {
+    "valid": [
+      {
+        "name": "collecting",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "collecting",
+          "observations": [],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "settled",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "partial",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "partial",
+          "observations": [],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "interrupted",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "interrupted",
+          "observations": [],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "unknown",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "unknown",
+          "observations": [],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "native-process-failure",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [
+            {
+              "ordinal": 1,
+              "toolCallId": "call-1",
+              "toolName": "bash",
+              "command": "cargo test",
+              "executionObservedAtMs": 1,
+              "resultObservedAtMs": 2,
+              "outcome": "recorded",
+              "toolFailed": true,
+              "process": {
+                "exitCode": 1,
+                "signal": null,
+                "cwd": "/workspace"
+              },
+              "artifacts": [],
+              "validation": null,
+              "outputPreview": "one test failed",
+              "detailsTruncated": false
+            }
+          ],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "native-file-and-check",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [
+            {
+              "ordinal": 1,
+              "toolCallId": "call-1",
+              "toolName": "bash",
+              "command": "cargo test",
+              "executionObservedAtMs": 1,
+              "resultObservedAtMs": 2,
+              "outcome": "recorded",
+              "toolFailed": false,
+              "process": null,
+              "artifacts": [
+                {
+                  "path": "/workspace/report.md",
+                  "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
+              ],
+              "validation": {
+                "runId": "run-1",
+                "declarationsSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "observedAtMs": 3,
+                "entries": [
+                  {
+                    "index": 0,
+                    "path": "report.md",
+                    "status": "passed",
+                    "sizeBytes": 42,
+                    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  }
+                ]
+              },
+              "outputPreview": "one test failed",
+              "detailsTruncated": false
+            }
+          ],
+          "omittedCount": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-root",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [],
+          "omittedCount": 0,
+          "trusted": true
+        }
+      },
+      {
+        "name": "invented-state",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "verified",
+          "observations": [],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "bad-process-type",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [
+            {
+              "ordinal": 1,
+              "toolCallId": "call-1",
+              "toolName": "bash",
+              "command": "cargo test",
+              "executionObservedAtMs": 1,
+              "resultObservedAtMs": 2,
+              "outcome": "recorded",
+              "toolFailed": true,
+              "process": {
+                "exitCode": "0",
+                "signal": null,
+                "cwd": "/workspace"
+              },
+              "artifacts": [],
+              "validation": null,
+              "outputPreview": "one test failed",
+              "detailsTruncated": false
+            }
+          ],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "unknown-observation",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [
+            {
+              "ordinal": 1,
+              "toolCallId": "call-1",
+              "toolName": "bash",
+              "command": "cargo test",
+              "executionObservedAtMs": 1,
+              "resultObservedAtMs": 2,
+              "outcome": "recorded",
+              "toolFailed": true,
+              "process": {
+                "exitCode": 1,
+                "signal": null,
+                "cwd": "/workspace"
+              },
+              "artifacts": [],
+              "validation": null,
+              "outputPreview": "one test failed",
+              "detailsTruncated": false,
+              "authorized": true
+            }
+          ],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "int32-overflow--2147483649",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [
+            {
+              "ordinal": 1,
+              "toolCallId": "call-1",
+              "toolName": "bash",
+              "command": "cargo test",
+              "executionObservedAtMs": 1,
+              "resultObservedAtMs": 2,
+              "outcome": "recorded",
+              "toolFailed": true,
+              "process": {
+                "exitCode": -2147483649,
+                "signal": null,
+                "cwd": "/workspace"
+              },
+              "artifacts": [],
+              "validation": null,
+              "outputPreview": "one test failed",
+              "detailsTruncated": false
+            }
+          ],
+          "omittedCount": 0
+        }
+      },
+      {
+        "name": "int32-overflow-2147483648",
+        "value": {
+          "version": 1,
+          "evidenceId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "turn-1",
+          "state": "settled",
+          "observations": [
+            {
+              "ordinal": 1,
+              "toolCallId": "call-1",
+              "toolName": "bash",
+              "command": "cargo test",
+              "executionObservedAtMs": 1,
+              "resultObservedAtMs": 2,
+              "outcome": "recorded",
+              "toolFailed": true,
+              "process": {
+                "exitCode": 2147483648,
+                "signal": null,
+                "cwd": "/workspace"
+              },
+              "artifacts": [],
+              "validation": null,
+              "outputPreview": "one test failed",
+              "detailsTruncated": false
+            }
+          ],
+          "omittedCount": 0
+        }
+      }
+    ]
+  }
+}

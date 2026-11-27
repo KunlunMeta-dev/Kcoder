@@ -1,0 +1,1035 @@
+{
+  "OfficeArtifactActionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "action": {
+        "type": "string"
+      },
+      "destination": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeResourceRef"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "inputs": true,
+      "reference": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      }
+    },
+    "required": [
+      "action",
+      "reference"
+    ],
+    "title": "OfficeArtifactActionParams",
+    "type": "object"
+  },
+  "OfficeArtifactListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "language": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "default": 10,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "personalOnly": {
+        "default": false,
+        "type": "boolean"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "OfficeArtifactListParams",
+    "type": "object"
+  },
+  "OfficeArtifactManifest": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeActionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "due": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sourceRefs": {
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/definitions/OfficeActionItemStatus"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sourceRefs",
+          "status",
+          "text"
+        ],
+        "type": "object"
+      },
+      "OfficeActionItemStatus": {
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "OfficeArtifactKind": {
+        "enum": [
+          "document",
+          "table",
+          "chart",
+          "action_items",
+          "research",
+          "operation_receipt",
+          "file_collection",
+          "form"
+        ],
+        "type": "string"
+      },
+      "OfficeArtifactPresentation": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "document"
+                ],
+                "type": "string"
+              },
+              "paragraphs": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "kind",
+              "paragraphs"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "dataset": {
+                "$ref": "#/definitions/OfficeArtifactRef"
+              },
+              "kind": {
+                "enum": [
+                  "table"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "dataset",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "chartType": {
+                "$ref": "#/definitions/OfficeChartType"
+              },
+              "dataset": {
+                "$ref": "#/definitions/OfficeArtifactRef"
+              },
+              "kind": {
+                "enum": [
+                  "chart"
+                ],
+                "type": "string"
+              },
+              "labelColumn": {
+                "type": "string"
+              },
+              "valueColumns": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "chartType",
+              "dataset",
+              "kind",
+              "labelColumn",
+              "valueColumns"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/definitions/OfficeActionItem"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "enum": [
+                  "action_items"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "items",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "findings": {
+                "items": {
+                  "$ref": "#/definitions/OfficeResearchFinding"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "enum": [
+                  "research"
+                ],
+                "type": "string"
+              },
+              "observedAt": {
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "findings",
+              "kind",
+              "observedAt",
+              "summary"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "detail": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "operation_receipt"
+                ],
+                "type": "string"
+              },
+              "operationId": {
+                "type": "string"
+              },
+              "phase": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "detail",
+              "kind",
+              "operationId",
+              "phase"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/definitions/OfficeArtifactRef"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "enum": [
+                  "file_collection"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "items",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "initialValues": true,
+              "kind": {
+                "enum": [
+                  "form"
+                ],
+                "type": "string"
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "schema": true
+            },
+            "required": [
+              "initialValues",
+              "kind",
+              "purpose",
+              "schema"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeChartType": {
+        "enum": [
+          "bar",
+          "line",
+          "pie"
+        ],
+        "type": "string"
+      },
+      "OfficeFileFormat": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx",
+          "pdf",
+          "csv",
+          "json"
+        ],
+        "type": "string"
+      },
+      "OfficeResearchFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "sourceRefs": {
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceRefs",
+          "text"
+        ],
+        "type": "object"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeTaskRef": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "OfficeVerification": {
+        "additionalProperties": false,
+        "properties": {
+          "completedChecks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "formulaCalculation": {
+            "type": "string"
+          },
+          "pendingChecks": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "readerStatus": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/OfficeVerificationStatus"
+              }
+            ],
+            "description": "A structural pass never establishes reader, numeric or business correctness."
+          },
+          "status": {
+            "$ref": "#/definitions/OfficeVerificationStatus"
+          }
+        },
+        "required": [
+          "completedChecks",
+          "formulaCalculation",
+          "pendingChecks",
+          "readerStatus",
+          "status"
+        ],
+        "type": "object"
+      },
+      "OfficeVerificationStatus": {
+        "enum": [
+          "pending",
+          "passed",
+          "partial",
+          "failed",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "dataset": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeArtifactRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "format": {
+        "$ref": "#/definitions/OfficeFileFormat"
+      },
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/definitions/OfficeArtifactKind"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "presentation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeArtifactPresentation"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "sourceRefs": {
+        "items": {
+          "$ref": "#/definitions/OfficeResourceRef"
+        },
+        "type": "array"
+      },
+      "task": {
+        "$ref": "#/definitions/OfficeTaskRef"
+      },
+      "title": {
+        "type": "string"
+      },
+      "verification": {
+        "$ref": "#/definitions/OfficeVerification"
+      }
+    },
+    "required": [
+      "bytes",
+      "createdAtMs",
+      "format",
+      "id",
+      "kind",
+      "owner",
+      "revision",
+      "schemaVersion",
+      "sha256",
+      "sourceRefs",
+      "task",
+      "title",
+      "verification"
+    ],
+    "title": "OfficeArtifactManifest",
+    "type": "object"
+  },
+  "OfficeArtifactPresentation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "OfficeActionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "assignee": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "due": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "sourceRefs": {
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "status": {
+            "$ref": "#/definitions/OfficeActionItemStatus"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "sourceRefs",
+          "status",
+          "text"
+        ],
+        "type": "object"
+      },
+      "OfficeActionItemStatus": {
+        "enum": [
+          "pending",
+          "in_progress",
+          "completed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeChartType": {
+        "enum": [
+          "bar",
+          "line",
+          "pie"
+        ],
+        "type": "string"
+      },
+      "OfficeResearchFinding": {
+        "additionalProperties": false,
+        "properties": {
+          "sourceRefs": {
+            "items": {
+              "$ref": "#/definitions/OfficeResourceRef"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceRefs",
+          "text"
+        ],
+        "type": "object"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "document"
+            ],
+            "type": "string"
+          },
+          "paragraphs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "paragraphs"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "dataset": {
+            "$ref": "#/definitions/OfficeArtifactRef"
+          },
+          "kind": {
+            "enum": [
+              "table"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset",
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "chartType": {
+            "$ref": "#/definitions/OfficeChartType"
+          },
+          "dataset": {
+            "$ref": "#/definitions/OfficeArtifactRef"
+          },
+          "kind": {
+            "enum": [
+              "chart"
+            ],
+            "type": "string"
+          },
+          "labelColumn": {
+            "type": "string"
+          },
+          "valueColumns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "chartType",
+          "dataset",
+          "kind",
+          "labelColumn",
+          "valueColumns"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/OfficeActionItem"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "action_items"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "findings": {
+            "items": {
+              "$ref": "#/definitions/OfficeResearchFinding"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "research"
+            ],
+            "type": "string"
+          },
+          "observedAt": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "findings",
+          "kind",
+          "observedAt",
+          "summary"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "operation_receipt"
+            ],
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "phase": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail",
+          "kind",
+          "operationId",
+          "phase"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/OfficeArtifactRef"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "file_collection"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "initialValues": true,
+          "kind": {
+            "enum": [
+              "form"
+            ],
+            "type": "string"
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "schema": true
+        },
+        "required": [
+          "initialValues",
+          "kind",
+          "purpose",
+          "schema"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "OfficeArtifactPresentation"
+  },
+  "OfficeArtifactReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "reference": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      }
+    },
+    "required": [
+      "reference"
+    ],
+    "title": "OfficeArtifactReadParams",
+    "type": "object"
+  },
+  "OfficeExecuteArtifactActionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "preparedOperationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "preparedOperationId"
+    ],
+    "title": "OfficeExecuteArtifactActionParams",
+    "type": "object"
+  }
+}

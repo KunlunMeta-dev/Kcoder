@@ -1,0 +1,21 @@
+[package]
+name = "kcoder_application_receipts"
+description = "Validation of original application receipts and exported content."
+version.workspace = true
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+kcoder_integration_storage = { path = "../../../kcoder_state/internal/integration_storage" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json.workspace = true
+sha2.workspace = true
+
+[lib]
+path = "../../src/internal/application_receipts/lib.rs"

@@ -1,0 +1,778 @@
+{
+  "ThreadContextUsage": {
+    "valid": [
+      {"name":"restored_without_window","value":{"total":{"totalTokens":40336,"inputTokens":609,"cachedInputTokens":39168,"outputTokens":559,"reasoningOutputTokens":0},"last":{"totalTokens":40336,"inputTokens":609,"cachedInputTokens":39168,"outputTokens":559,"reasoningOutputTokens":0}}}
+    ],
+    "invalid": [
+      {"name":"missing_counts","value":{"last":{},"total":{}}}
+    ]
+  },
+  "ThreadAttachParams": {
+    "valid": [
+      {
+        "name": "real-client-slot",
+        "value": {
+          "threadId": "task",
+          "clientId": "00000000-0000-4000-8000-000000000001",
+          "generation": "00000000-0000-4000-8000-000000000002"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-generation",
+        "value": {
+          "threadId": "task",
+          "clientId": "client"
+        }
+      }
+    ]
+  },
+  "ThreadGoalStatusBatchParams": {
+    "valid": [
+      {
+        "name": "thread-ids",
+        "value": {
+          "threadIds": [
+            "thread-1",
+            "thread-2"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private-path",
+        "value": {
+          "threadIds": [
+            "thread-1"
+          ],
+          "path": "/private"
+        }
+      },
+      {
+        "name": "missing-ids",
+        "value": {}
+      },
+      {
+        "name": "empty-ids",
+        "value": {
+          "threadIds": []
+        }
+      },
+      {
+        "name": "duplicate-ids",
+        "value": {
+          "threadIds": [
+            "thread-1",
+            "thread-1"
+          ]
+        }
+      }
+    ]
+  },
+  "ThreadGoalStatusBatchResult": {
+    "valid": [
+      {
+        "name": "available-and-unavailable",
+        "value": {
+          "observations": [
+            {
+              "threadId": "thread-1",
+              "availability": "available",
+              "status": "active"
+            },
+            {
+              "threadId": "thread-2",
+              "availability": "available",
+              "status": null
+            },
+            {
+              "threadId": "thread-3",
+              "availability": "unavailable"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-status",
+        "value": {
+          "observations": [
+            {
+              "threadId": "thread-1",
+              "availability": "available"
+            }
+          ]
+        }
+      },
+      {
+        "name": "unavailable-with-status",
+        "value": {
+          "observations": [
+            {
+              "threadId": "thread-1",
+              "availability": "unavailable",
+              "status": null
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "ThreadLifetimeReadParams": {
+    "valid": [
+      {
+        "name": "original-task",
+        "value": {
+          "threadId": "task"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-task",
+        "value": {}
+      }
+    ]
+  },
+  "ThreadLifetimeResult": {
+    "valid": [
+      {
+        "name": "ungranted-background",
+        "value": {
+          "threadId": "task",
+          "setting": {
+            "revision": 1,
+            "mode": "background"
+          },
+          "attachedClients": 0,
+          "reconnectGraceMs": 3000,
+          "backgroundAuthorized": false,
+          "pausedReason": "background_authorization_required"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-policy",
+        "value": {
+          "threadId": "task"
+        }
+      }
+    ]
+  },
+  "ThreadLifetimeSetParams": {
+    "valid": [
+      {
+        "name": "revisioned-background",
+        "value": {
+          "threadId": "task",
+          "expectedRevision": 2,
+          "mode": "background"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-revision",
+        "value": {
+          "threadId": "task",
+          "mode": "background"
+        }
+      }
+    ]
+  },
+  "ThreadModelSelectionParams": {
+    "valid": [
+      {
+        "name": "qualified-selection",
+        "value": {
+          "threadId": "thread-1",
+          "model": "provider::model"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-thread",
+        "value": {
+          "model": "provider::model"
+        }
+      }
+    ]
+  },
+  "ThreadModelSelectionResult": {
+    "valid": [
+      {
+        "name": "queued-at-safe-boundary",
+        "value": {
+          "accepted": true,
+          "model": "provider::model",
+          "appliesAt": "next_tool_result_or_response_boundary"
+        }
+      },
+      {
+        "name": "next-turn-fallback",
+        "value": {
+          "accepted": false,
+          "model": "provider::model",
+          "appliesAt": "next_turn"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-model",
+        "value": {
+          "accepted": true,
+          "appliesAt": "next_turn"
+        }
+      }
+    ]
+  },
+  "ThreadPresenceReadParams": {
+    "valid": [
+      {
+        "name": "thread-id-only",
+        "value": {
+          "threadId": "thread-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private-path-field",
+        "value": {
+          "threadId": "thread-1",
+          "path": "/private/history.jsonl"
+        }
+      },
+      {
+        "name": "missing-thread-id",
+        "value": {}
+      }
+    ]
+  },
+  "ThreadPresenceReadResultV1": {
+    "valid": [
+      {
+        "name": "resident-present",
+        "value": {
+          "status": "present",
+          "threadId": "thread-1",
+          "reason": "residentRuntime"
+        }
+      },
+      {
+        "name": "bound-deleted-absent",
+        "value": {
+          "status": "absent",
+          "threadId": "thread-1",
+          "reason": "boundDeletedPrimarySource"
+        }
+      },
+      {
+        "name": "cold-source-unknown",
+        "value": {
+          "status": "unknown",
+          "threadId": "thread-1",
+          "reason": "coldSourceNotAuthorized"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "snake-case-thread-id-rejected",
+        "value": {
+          "status": "present",
+          "thread_id": "thread-1",
+          "reason": "residentRuntime"
+        }
+      },
+      {
+        "name": "unknown-reason",
+        "value": {
+          "status": "unknown",
+          "threadId": "thread-1",
+          "reason": "privateDiagnostic"
+        }
+      },
+      {
+        "name": "path-leak",
+        "value": {
+          "status": "unknown",
+          "threadId": "thread-1",
+          "reason": "observationFailed",
+          "path": "/private/history.jsonl"
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReadParams": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "operationId": "release-operation"
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReadResult": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
+            "threadId": "thread",
+            "ownerRef": "runtime-owner",
+            "clientTurnCount": 2,
+            "releasable": true
+          },
+          "operation": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "operation": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          }
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
+            "threadId": "thread",
+            "ownerRef": "runtime-owner",
+            "clientTurnCount": 2,
+            "releasable": true
+          },
+          "operation": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          },
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReceipt": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "status": "released"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "status": "released"
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "status": "released",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReleaseParams": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "expectedServerId": "server",
+          "expectedOwnerRef": "runtime-owner",
+          "expectedClientTurnCount": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "operationId": "release-operation",
+          "expectedServerId": "server",
+          "expectedOwnerRef": "runtime-owner",
+          "expectedClientTurnCount": 2
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "threadId": "thread",
+          "operationId": "release-operation",
+          "expectedServerId": "server",
+          "expectedOwnerRef": "runtime-owner",
+          "expectedClientTurnCount": 2,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffReleaseResult": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
+            "threadId": "thread",
+            "ownerRef": null,
+            "clientTurnCount": null,
+            "releasable": false
+          },
+          "receipt": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "receipt": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          }
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "snapshot": {
+            "serverId": "server",
+            "threadId": "thread",
+            "ownerRef": null,
+            "clientTurnCount": null,
+            "releasable": false
+          },
+          "receipt": {
+            "serverId": "server",
+            "threadId": "thread",
+            "operationId": "release-operation",
+            "ownerRef": "runtime-owner",
+            "status": "released"
+          },
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffSnapshot": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "ownerRef": "runtime-owner",
+          "clientTurnCount": 2,
+          "releasable": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_required_field",
+        "value": {
+          "threadId": "thread",
+          "ownerRef": "runtime-owner",
+          "clientTurnCount": 2,
+          "releasable": true
+        }
+      },
+      {
+        "name": "untrusted_authority",
+        "value": {
+          "serverId": "server",
+          "threadId": "thread",
+          "ownerRef": "runtime-owner",
+          "clientTurnCount": 2,
+          "releasable": true,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "ThreadRuntimeHandoffStatus": {
+    "valid": [
+      {
+        "name": "original_runtime_owner",
+        "value": "released"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_outcome",
+        "value": "completed"
+      },
+      {
+        "name": "wrong_type",
+        "value": false
+      }
+    ]
+  },
+  "ThreadTranscriptObservationV1": {
+    "valid": [
+      {
+        "name": "request-local-observation",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-view",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "short-observation",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "uppercase-view",
+        "value": {
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        }
+      },
+      {
+        "name": "cannot-claim-committed",
+        "value": {
+          "status": "available",
+          "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    ]
+  },
+  "ThreadTranscriptSnapshotV1": {
+    "valid": [
+      {
+        "name": "committed-projection",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "legacy-reader",
+        "value": {
+          "status": "unavailable",
+          "code": "legacyReader"
+        }
+      },
+      {
+        "name": "unproven-source",
+        "value": {
+          "status": "unavailable",
+          "code": "unprovenSource"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "snapshot-not-string",
+        "value": {
+          "status": "available",
+          "snapshotId": 1,
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "short-snapshot",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "long-view",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "non-lowercase-hex",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"
+        }
+      },
+      {
+        "name": "missing-view",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "wrong-status",
+        "value": {
+          "status": "ready",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      },
+      {
+        "name": "history-error-is-not-snapshot-error",
+        "value": {
+          "status": "unavailable",
+          "code": "readFailed"
+        }
+      },
+      {
+        "name": "unavailable-with-invented-identity",
+        "value": {
+          "status": "unavailable",
+          "code": "unprovenSource",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "unknown-sensitive-field",
+        "value": {
+          "status": "available",
+          "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "token": "fixture-must-be-rejected"
+        }
+      }
+    ]
+  },
+  "ThreadEvictedParams": {
+    "valid": [
+      {"name":"capacity","value":{"threadId":"thread-1","reason":"capacity"}}
+    ],
+    "invalid": [
+      {"name":"unknown-reason","value":{"threadId":"thread-1","reason":"deleted"}},
+      {"name":"private-path","value":{"threadId":"thread-1","reason":"capacity","path":"/private"}}
+    ]
+  },
+  "ThreadNotResidentErrorDataV1": {
+    "valid": [
+      {"name":"evicted","value":{"threadId":"thread-1","reason":"capacity"}}
+    ],
+    "invalid": [
+      {"name":"missing-thread","value":{"reason":"capacity"}},
+      {"name":"extra-field","value":{"threadId":"thread-1","reason":"capacity","owner":"x"}}
+    ]
+  },
+  "ThreadMaintenanceParams": {
+    "valid": [
+      {"name":"compact-started","value":{"threadId":"thread-1","operation":"compact","status":"started"}},
+      {"name":"addressable-compact","value":{"threadId":"thread-1","operation":"compact","status":"started","maintenanceId":"00000000-0000-4000-8000-000000000001"}},
+      {"name":"rollback-failed","value":{"threadId":"thread-1","operation":"rollback","status":"failed"}},
+      {"name":"compact-cancelled","value":{"threadId":"thread-1","operation":"compact","status":"cancelled"}}
+    ],
+    "invalid": [
+      {"name":"unknown-operation","value":{"threadId":"thread-1","operation":"delete","status":"started"}},
+      {"name":"unknown-status","value":{"threadId":"thread-1","operation":"compact","status":"queued"}}
+    ]
+  },
+  "ThreadMaintenanceCancelParams": {
+    "valid": [
+      {"name":"exact-compaction","value":{"threadId":"thread-1","maintenanceId":"00000000-0000-4000-8000-000000000001"}}
+    ],
+    "invalid": [
+      {"name":"no-maintenance-id","value":{"threadId":"thread-1"}},
+      {"name":"numeric-id","value":{"threadId":"thread-1","maintenanceId":1}},
+      {"name":"other-operation","value":{"threadId":"thread-1","maintenanceId":"00000000-0000-4000-8000-000000000001","operation":"rollback"}}
+    ]
+  },
+  "ThreadMaintenanceCancelResult": {
+    "valid": [
+      {"name":"requested","value":{"cancellationRequested":true}},
+      {"name":"no-matching-job","value":{"cancellationRequested":false}}
+    ],
+    "invalid": [
+      {"name":"terminal-outcome","value":{"cancelled":true}}
+    ]
+  },
+  "ThreadMaintenanceBusyErrorDataV1": {
+    "valid": [
+      {"name":"compact","value":{"threadId":"thread-1","operation":"compact"}}
+    ],
+    "invalid": [
+      {"name":"missing-operation","value":{"threadId":"thread-1"}},
+      {"name":"extra-field","value":{"threadId":"thread-1","operation":"compact","status":"started"}}
+    ]
+  }
+}

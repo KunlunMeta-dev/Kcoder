@@ -1,0 +1,1253 @@
+{
+  "TaskWorkspaceAvailability": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "available",
+      "partial",
+      "unavailable",
+      "unknown"
+    ],
+    "title": "TaskWorkspaceAvailability",
+    "type": "string"
+  },
+  "TaskWorkspaceEntry": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "TaskWorkspaceNativeRef": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "thread"
+                ],
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "goalId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "goal"
+                ],
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "goalId",
+              "kind",
+              "revision",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "type": "string"
+              },
+              "backgroundRun": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/BackgroundRunKey"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "agent"
+                ],
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agentId",
+              "kind",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "definitionRef": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/IntegrationRevisionRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "workflow_run"
+                ],
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "runId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "revision",
+              "runId",
+              "threadId"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "nativeRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "nativeStatus": {
+        "description": "Exact native label. Consumers must preserve unfamiliar/future labels.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reference": {
+        "$ref": "#/definitions/TaskWorkspaceNativeRef"
+      },
+      "sourceMethod": {
+        "type": "string"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "reference",
+      "sourceMethod",
+      "title"
+    ],
+    "title": "TaskWorkspaceEntry",
+    "type": "object"
+  },
+  "TaskWorkspaceFacet": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskWorkspaceAvailability": {
+        "enum": [
+          "available",
+          "partial",
+          "unavailable",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TaskWorkspaceFacetKind": {
+        "enum": [
+          "thread",
+          "goal",
+          "agents",
+          "workflows",
+          "artifacts",
+          "runtime",
+          "sources"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "availability": {
+        "$ref": "#/definitions/TaskWorkspaceAvailability"
+      },
+      "kind": {
+        "$ref": "#/definitions/TaskWorkspaceFacetKind"
+      },
+      "observedCount": {
+        "description": "None is unknown, never an inferred zero.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "availability",
+      "kind"
+    ],
+    "title": "TaskWorkspaceFacet",
+    "type": "object"
+  },
+  "TaskWorkspaceFacetKind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "thread",
+      "goal",
+      "agents",
+      "workflows",
+      "artifacts",
+      "runtime",
+      "sources"
+    ],
+    "title": "TaskWorkspaceFacetKind",
+    "type": "string"
+  },
+  "TaskWorkspaceMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/tasks/readWorkspace"
+    ],
+    "title": "TaskWorkspaceMethod",
+    "type": "string"
+  },
+  "TaskWorkspaceNativeRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "thread"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "goalId": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "goal"
+            ],
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "goalId",
+          "kind",
+          "revision",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "backgroundRun": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/BackgroundRunKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "agent"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "kind",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "definitionRef": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationRevisionRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "enum": [
+              "workflow_run"
+            ],
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "revision",
+          "runId",
+          "threadId"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "TaskWorkspaceNativeRef"
+  },
+  "TaskWorkspaceReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourceTarget": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Explicit original tuple selected by the user; this is never a grant. `sourceTarget` is the existing RPC field name."
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "TaskWorkspaceReadParams",
+    "type": "object"
+  },
+  "TaskWorkspaceSnapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BackgroundRunKey": {
+        "description": "A durable execution identity; wall-clock timestamps are not identifiers.",
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "parentSessionId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "parentSessionId",
+          "runId"
+        ],
+        "type": "object"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationInteractionKind": {
+        "enum": [
+          "question",
+          "approval"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationPendingInteraction": {
+        "additionalProperties": false,
+        "properties": {
+          "interactionId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationInteractionKind"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "interactionId",
+          "kind",
+          "prompt",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationRuntimeTask": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactRefs": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/IntegrationEntityRef"
+            },
+            "type": "array"
+          },
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "pendingInteractions": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/IntegrationPendingInteraction"
+            },
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/definitions/IntegrationTaskState"
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeBoundary": {
+        "enum": [
+          "current_snapshot",
+          "next_tool_boundary"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeControlTarget": {
+        "additionalProperties": false,
+        "description": "These are lookup data. The native host must still observe the original private Accepted record, held session owner and saved source binding.",
+        "properties": {
+          "initialAttempt": {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          "runtimeOperationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "initialAttempt"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeMode": {
+        "enum": [
+          "inherit_current",
+          "selected",
+          "none"
+        ],
+        "type": "string"
+      },
+      "IntegrationTaskCapabilityScopeSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeMode"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "sources"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilityScopeSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "effectiveFrom": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeBoundary"
+          },
+          "effectiveResourceBindings": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceBinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "effectiveSources": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+            },
+            "type": "array"
+          },
+          "resourceBindings": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceBinding"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "selection": {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeSelection"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "effectiveFrom",
+          "effectiveSources",
+          "revision",
+          "selection",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceBinding": {
+        "additionalProperties": false,
+        "description": "Selection metadata only. The native owner resolves current granted resources and their URI/epoch from the existing owned application source.",
+        "properties": {
+          "connectionRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "resourceRefs": {
+            "items": {
+              "$ref": "#/definitions/IntegrationTaskResourceRef"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+          }
+        },
+        "required": [
+          "connectionRef",
+          "resourceRefs",
+          "source"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "TaskWorkspaceAvailability": {
+        "enum": [
+          "available",
+          "partial",
+          "unavailable",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TaskWorkspaceEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "nativeRevision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nativeStatus": {
+            "description": "Exact native label. Consumers must preserve unfamiliar/future labels.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reference": {
+            "$ref": "#/definitions/TaskWorkspaceNativeRef"
+          },
+          "sourceMethod": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sourceMethod",
+          "title"
+        ],
+        "type": "object"
+      },
+      "TaskWorkspaceFacet": {
+        "additionalProperties": false,
+        "properties": {
+          "availability": {
+            "$ref": "#/definitions/TaskWorkspaceAvailability"
+          },
+          "kind": {
+            "$ref": "#/definitions/TaskWorkspaceFacetKind"
+          },
+          "observedCount": {
+            "description": "None is unknown, never an inferred zero.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "availability",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "TaskWorkspaceFacetKind": {
+        "enum": [
+          "thread",
+          "goal",
+          "agents",
+          "workflows",
+          "artifacts",
+          "runtime",
+          "sources"
+        ],
+        "type": "string"
+      },
+      "TaskWorkspaceNativeRef": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "thread"
+                ],
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "goalId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "goal"
+                ],
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "goalId",
+              "kind",
+              "revision",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "type": "string"
+              },
+              "backgroundRun": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/BackgroundRunKey"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "agent"
+                ],
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agentId",
+              "kind",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "definitionRef": {
+                "anyOf": [
+                  {
+                    "$ref": "#/definitions/IntegrationRevisionRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "kind": {
+                "enum": [
+                  "workflow_run"
+                ],
+                "type": "string"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "runId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "revision",
+              "runId",
+              "threadId"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "artifactRefs": {
+        "items": {
+          "$ref": "#/definitions/IntegrationEntityRef"
+        },
+        "type": "array"
+      },
+      "entries": {
+        "items": {
+          "$ref": "#/definitions/TaskWorkspaceEntry"
+        },
+        "type": "array"
+      },
+      "facets": {
+        "items": {
+          "$ref": "#/definitions/TaskWorkspaceFacet"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "observedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runtime": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationRuntimeTask"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Present only when the exact original runtime reference was read."
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "scope": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/IntegrationScope"
+          }
+        ],
+        "description": "Identity fence only; actual authority remains in the Native source."
+      },
+      "snapshotId": {
+        "type": "string"
+      },
+      "sourceSelection": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeSnapshot"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Absence means not observed. It never selects an implicit account. `sourceSelection` is the existing RPC and stored-session field name."
+      },
+      "sourceTarget": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationTaskCapabilityScopeControlTarget"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Echoes only the explicitly requested tuple, binding paginated observations. `sourceTarget` is the existing RPC field name."
+      },
+      "thread": {
+        "$ref": "#/definitions/TaskWorkspaceEntry"
+      }
+    },
+    "required": [
+      "artifactRefs",
+      "entries",
+      "facets",
+      "observedAtMs",
+      "schemaVersion",
+      "scope",
+      "snapshotId",
+      "thread"
+    ],
+    "title": "TaskWorkspaceSnapshot",
+    "type": "object"
+  }
+}

@@ -1,0 +1,246 @@
+{
+  "OfficeExportAcknowledgement": [
+    {
+      "decoded": "client_acknowledged",
+      "name": "explicit-client-acknowledgement",
+      "value": "client_acknowledged"
+    }
+  ],
+  "OfficeExportAcknowledgementKind": [
+    {
+      "decoded": "office_export_acknowledgement",
+      "name": "native-client-bytes-receipt",
+      "value": "office_export_acknowledgement"
+    }
+  ],
+  "OfficeExportAcknowledgementParams": [
+    {
+      "decoded": {
+        "automationRunId": "fixture-run",
+        "bytes": 1234,
+        "exportId": "export-case",
+        "leaseRevision": "lease-case",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "bounded-original-export-acknowledgement",
+      "value": {
+        "automationRunId": "fixture-run",
+        "bytes": 1234,
+        "exportId": "export-case",
+        "leaseRevision": "lease-case",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "decoded": {
+        "bytes": 1234,
+        "exportId": "export-case",
+        "leaseRevision": "lease-case",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "ordinary-original-byte-ack-no-d-run",
+      "value": {
+        "bytes": 1234,
+        "exportId": "export-case",
+        "leaseRevision": "lease-case",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "OfficeExportAcknowledgementReceipt": [
+    {
+      "decoded": {
+        "acknowledgedAtMs": 1001,
+        "bytes": 1234,
+        "exportId": "export-case",
+        "kind": "office_export_acknowledgement",
+        "operationId": "ordinary-original-ack",
+        "owner": {
+          "accountId": "fixture-account",
+          "organizationId": null,
+          "targetId": "fixture-target",
+          "workspaceId": null
+        },
+        "readCompletedAtMs": 1000,
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceIdentities": [],
+        "task": {
+          "threadId": "original-thread",
+          "turnId": "original-turn"
+        }
+      },
+      "name": "original-owner-byte-receipt",
+      "value": {
+        "acknowledgedAtMs": 1001,
+        "bytes": 1234,
+        "exportId": "export-case",
+        "kind": "office_export_acknowledgement",
+        "operationId": "ordinary-original-ack",
+        "owner": {
+          "accountId": "fixture-account",
+          "targetId": "fixture-target",
+          "workspaceId": null
+        },
+        "readCompletedAtMs": 1000,
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceIdentities": [],
+        "task": {
+          "threadId": "original-thread",
+          "turnId": "original-turn"
+        }
+      }
+    }
+  ],
+  "OfficeExportAcknowledgementResult": [
+    {
+      "decoded": {
+        "acknowledgement": "client_acknowledged",
+        "claim": {
+          "bytes": 29,
+          "completedAtMs": 1000,
+          "exportId": "fixture-native-export",
+          "manifestRef": {
+            "id": "fixture-artifact",
+            "kind": "artifact",
+            "revision": "1"
+          },
+          "nativeOperationId": "fixture-native-operation",
+          "owner": {
+            "accountId": "fixture-account",
+            "organizationId": null,
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "runId": "fixture-run",
+          "sha256": "e410f3a412c0d415ea85c89c588bf153e29fc5e181787900e246a4b760067b02"
+        },
+        "exportId": "export-case",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "bounded-original-export-acknowledgement",
+      "value": {
+        "acknowledgement": "client_acknowledged",
+        "claim": {
+          "bytes": 29,
+          "completedAtMs": 1000,
+          "exportId": "fixture-native-export",
+          "manifestRef": {
+            "id": "fixture-artifact",
+            "kind": "artifact",
+            "revision": "1"
+          },
+          "nativeOperationId": "fixture-native-operation",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "runId": "fixture-run",
+          "sha256": "e410f3a412c0d415ea85c89c588bf153e29fc5e181787900e246a4b760067b02"
+        },
+        "exportId": "export-case",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    },
+    {
+      "decoded": {
+        "acknowledgement": "client_acknowledged",
+        "exportId": "export-case",
+        "receipt": {
+          "acknowledgedAtMs": 1001,
+          "bytes": 1234,
+          "exportId": "export-case",
+          "kind": "office_export_acknowledgement",
+          "operationId": "ordinary-original-ack",
+          "owner": {
+            "accountId": "fixture-account",
+            "organizationId": null,
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "readCompletedAtMs": 1000,
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "schemaVersion": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceIdentities": [],
+          "task": {
+            "threadId": "original-thread",
+            "turnId": "original-turn"
+          }
+        },
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "ordinary-original-acknowledgement",
+      "value": {
+        "acknowledgement": "client_acknowledged",
+        "exportId": "export-case",
+        "receipt": {
+          "acknowledgedAtMs": 1001,
+          "bytes": 1234,
+          "exportId": "export-case",
+          "kind": "office_export_acknowledgement",
+          "operationId": "ordinary-original-ack",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "readCompletedAtMs": 1000,
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "schemaVersion": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceIdentities": [],
+          "task": {
+            "threadId": "original-thread",
+            "turnId": "original-turn"
+          }
+        },
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ]
+}

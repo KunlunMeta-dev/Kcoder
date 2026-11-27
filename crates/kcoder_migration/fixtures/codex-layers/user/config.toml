@@ -1,0 +1,6 @@
+model = "base-model"
+model_provider = "office"
+[model_providers.office]
+base_url = "https://example.invalid/v1"
+wire_api = "responses"
+env_key = "KCODER_CODEX_LAYER_ENV_FIXTURE"

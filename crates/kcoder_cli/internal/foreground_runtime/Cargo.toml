@@ -1,0 +1,31 @@
+[package]
+name = "kcoder_foreground_runtime"
+description = "Admitted foreground turn event-loop execution."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+futures = { workspace = true }
+kcoder_app_events = { path = "../app_events" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_foreground_work = { path = "../foreground_work" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_turn_evidence = { path = "../turn_evidence" }
+kcoder_turn_lifecycle = { path = "../turn_lifecycle" }
+kcoder_types = { path = "../../../kcoder_types" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[lib]
+path = "../../src/internal/foreground_runtime/lib.rs"

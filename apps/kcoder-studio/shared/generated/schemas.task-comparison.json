@@ -1,0 +1,575 @@
+{
+  "TaskComparisonBindParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "comparisonId": {
+        "type": "string"
+      },
+      "deviceId": {
+        "type": "string"
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "label": {
+        "type": "string"
+      },
+      "ownerThreadId": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      },
+      "requirement": {
+        "type": "string"
+      },
+      "sourcePath": {
+        "type": "string"
+      },
+      "taskId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "comparisonId",
+      "deviceId",
+      "expectedRevision",
+      "label",
+      "ownerThreadId",
+      "path",
+      "requirement",
+      "sourcePath",
+      "taskId",
+      "threadId"
+    ],
+    "title": "TaskComparisonBindParams",
+    "type": "object"
+  },
+  "TaskComparisonBinding": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskComparisonSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "contentToken": {
+            "type": "string"
+          },
+          "headCommit": {
+            "type": "string"
+          },
+          "selectedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "contentToken",
+          "headCommit",
+          "selectedAtMs"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Stored inside the existing managed-worktree registry, never a separate task store.",
+    "properties": {
+      "baseCommit": {
+        "type": "string"
+      },
+      "branch": {
+        "type": "string"
+      },
+      "comparisonId": {
+        "type": "string"
+      },
+      "deviceId": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "ownerThreadId": {
+        "type": "string"
+      },
+      "requirement": {
+        "type": "string"
+      },
+      "selection": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TaskComparisonSelection"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "taskId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "baseCommit",
+      "branch",
+      "comparisonId",
+      "deviceId",
+      "label",
+      "ownerThreadId",
+      "requirement",
+      "taskId",
+      "threadId"
+    ],
+    "title": "TaskComparisonBinding",
+    "type": "object"
+  },
+  "TaskComparisonReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "comparisonId": {
+        "type": "string"
+      },
+      "deviceId": {
+        "type": "string"
+      },
+      "ownerThreadId": {
+        "type": "string"
+      },
+      "sourcePath": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "comparisonId",
+      "deviceId",
+      "ownerThreadId",
+      "sourcePath"
+    ],
+    "title": "TaskComparisonReadParams",
+    "type": "object"
+  },
+  "TaskComparisonReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ReviewArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "TaskComparisonBinding": {
+        "additionalProperties": false,
+        "description": "Stored inside the existing managed-worktree registry, never a separate task store.",
+        "properties": {
+          "baseCommit": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "comparisonId": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "ownerThreadId": {
+            "type": "string"
+          },
+          "requirement": {
+            "type": "string"
+          },
+          "selection": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TaskComparisonSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "taskId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "baseCommit",
+          "branch",
+          "comparisonId",
+          "deviceId",
+          "label",
+          "ownerThreadId",
+          "requirement",
+          "taskId",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "TaskComparisonCandidate": {
+        "additionalProperties": false,
+        "properties": {
+          "artifacts": {
+            "items": {
+              "$ref": "#/definitions/ReviewArtifact"
+            },
+            "type": "array"
+          },
+          "binding": {
+            "$ref": "#/definitions/TaskComparisonBinding"
+          },
+          "checks": {
+            "items": {
+              "$ref": "#/definitions/TaskComparisonCheck"
+            },
+            "type": "array"
+          },
+          "evidencePartial": {
+            "type": "boolean"
+          },
+          "git": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TaskComparisonGit"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "resultPreview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourcePath": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "unavailable": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "usage": {
+            "$ref": "#/definitions/TaskComparisonUsage"
+          },
+          "worktreeId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifacts",
+          "binding",
+          "checks",
+          "evidencePartial",
+          "path",
+          "revision",
+          "sourcePath",
+          "state",
+          "unavailable",
+          "usage",
+          "worktreeId"
+        ],
+        "type": "object"
+      },
+      "TaskComparisonCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "command": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "cwd": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detailsTruncated": {
+            "type": "boolean"
+          },
+          "evidenceId": {
+            "type": "string"
+          },
+          "exitCode": {
+            "format": "int32",
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ordinal": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outcome": {
+            "$ref": "#/definitions/TaskComparisonCheckOutcome"
+          },
+          "outputPreview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "detailsTruncated",
+          "evidenceId",
+          "ordinal",
+          "outcome",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskComparisonCheckOutcome": {
+        "enum": [
+          "passed",
+          "failed",
+          "denied",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TaskComparisonGit": {
+        "additionalProperties": false,
+        "properties": {
+          "branch": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "contentToken": {
+            "type": "string"
+          },
+          "diffPreview": {
+            "type": "string"
+          },
+          "dirty": {
+            "type": "boolean"
+          },
+          "headCommit": {
+            "type": "string"
+          },
+          "statusPreview": {
+            "type": "string"
+          },
+          "truncated": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "contentToken",
+          "diffPreview",
+          "dirty",
+          "headCommit",
+          "statusPreview",
+          "truncated"
+        ],
+        "type": "object"
+      },
+      "TaskComparisonSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "contentToken": {
+            "type": "string"
+          },
+          "headCommit": {
+            "type": "string"
+          },
+          "selectedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "contentToken",
+          "headCommit",
+          "selectedAtMs"
+        ],
+        "type": "object"
+      },
+      "TaskComparisonUsage": {
+        "additionalProperties": false,
+        "properties": {
+          "assistantMessages": {
+            "description": "Counts cover the bounded visible transcript, not the entire provider bill.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "costMicrousd": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "usageSamples": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "assistantMessages",
+          "usageSamples"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "candidates": {
+        "items": {
+          "$ref": "#/definitions/TaskComparisonCandidate"
+        },
+        "type": "array"
+      },
+      "comparisonId": {
+        "type": "string"
+      },
+      "deviceId": {
+        "type": "string"
+      },
+      "ownerThreadId": {
+        "type": "string"
+      },
+      "requirement": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "selectedThreadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourcePath": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "candidates",
+      "comparisonId",
+      "deviceId",
+      "ownerThreadId",
+      "sourcePath"
+    ],
+    "title": "TaskComparisonReadResult",
+    "type": "object"
+  },
+  "TaskComparisonSelectParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "comparisonId": {
+        "type": "string"
+      },
+      "deviceId": {
+        "type": "string"
+      },
+      "expectedContentToken": {
+        "type": "string"
+      },
+      "expectedHeadCommit": {
+        "type": "string"
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "ownerThreadId": {
+        "type": "string"
+      },
+      "sourcePath": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "comparisonId",
+      "deviceId",
+      "expectedContentToken",
+      "expectedHeadCommit",
+      "expectedRevision",
+      "ownerThreadId",
+      "sourcePath",
+      "threadId"
+    ],
+    "title": "TaskComparisonSelectParams",
+    "type": "object"
+  }
+}

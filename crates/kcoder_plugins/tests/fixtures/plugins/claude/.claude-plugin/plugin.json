@@ -1,0 +1,7 @@
+{
+  "name": "claude-demo",
+  "version": "1.0.0",
+  "description": "Claude plugin manifest fixture",
+  "skills": "./skills",
+  "hooks": "./hooks/hooks.json"
+}

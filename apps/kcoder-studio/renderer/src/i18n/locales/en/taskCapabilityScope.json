@@ -1,0 +1,23 @@
+{
+  "title": "Task tools and resource scope",
+  "subtitle": "Review the tool and resource scope saved for a task before opening it.",
+  "list": "Saved task tool and resource scopes",
+  "refresh": "Refresh saved scopes",
+  "loading": "Reading saved scopes…",
+  "record": "Saved scope {{id}}",
+  "saved": "Saved",
+  "unknown": "Needs review",
+  "unreadable": "This saved scope could not be read.",
+  "none": "No external tool providers",
+  "count_one": "{{count}} tool provider",
+  "count_other": "{{count}} tool providers",
+  "pending": "A scope change is waiting for a safe tool boundary.",
+  "unknownDirectory": "Saved task scopes are not currently available.",
+  "moreToRead": "More saved scopes remain to be read.",
+  "empty": "No saved tool and resource scopes were found for this range.",
+  "loadFailed": "The scope directory could not be refreshed. Existing records are retained.",
+  "chooseFailed": "The original task scope could not be read. Its saved record is retained.",
+  "retry": "Read again",
+  "more": "Read more",
+  "authorityHint": "Opening a saved record does not resume a task. Current tool providers, resources, versions, and account permissions are checked separately."
+}

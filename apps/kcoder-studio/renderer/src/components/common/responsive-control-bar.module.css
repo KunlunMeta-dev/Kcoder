@@ -1,0 +1,3 @@
+.workBar[data-narrow='true'] .hideLabelOnNarrow {
+  display: none;
+}

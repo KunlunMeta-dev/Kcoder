@@ -1,0 +1,379 @@
+use std::path::PathBuf;
+use std::process::Command;
+
+fn workspace_root() -> PathBuf {
+    kcoder_test_harness::workspace_root().expect("应解析当前 KCoder 工作区")
+}
+
+#[test]
+fn every_github_workflow_is_valid_yaml() {
+    let workspace = workspace_root();
+    let workflows = workspace.join(".github/workflows");
+    let mut paths = std::fs::read_dir(&workflows)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .filter(|path| {
+            matches!(
+                path.extension().and_then(|extension| extension.to_str()),
+                Some("yml" | "yaml")
+            )
+        })
+        .collect::<Vec<PathBuf>>();
+    paths.sort();
+    assert!(!paths.is_empty(), "CI workflow 目录必须包含 YAML 文件");
+
+    for path in paths {
+        let source = std::fs::read_to_string(&path).unwrap();
+        let document: serde_yaml::Value = serde_yaml::from_str(&source)
+            .unwrap_or_else(|error| panic!("{} 不是合法 YAML: {error}", path.display()));
+        assert!(
+            document.is_mapping(),
+            "{} 的 YAML 根必须是 mapping",
+            path.display()
+        );
+    }
+}
+
+#[test]
+fn public_documentation_excludes_host_specific_product_history() {
+    let workspace = workspace_root();
+    let policy_path = workspace.join("docs/oss-snapshot-policy.md");
+    let policy = if policy_path.is_file() {
+        Some(std::fs::read_to_string(policy_path).unwrap())
+    } else {
+        assert!(
+            !workspace.join("docs").exists(),
+            "full source must retain its publication policy"
+        );
+        None
+    };
+    let allowed = policy.as_deref().map(|policy| {
+        policy
+            .split("```text\n")
+            .nth(1)
+            .expect("publication policy must list runtime Markdown")
+            .split("```")
+            .next()
+            .unwrap()
+            .lines()
+            .collect::<std::collections::BTreeSet<_>>()
+    });
+    let output = Command::new("git")
+        .args(["ls-files", "--", "*.md", "*.txt", "*.rst"])
+        .current_dir(&workspace)
+        .output()
+        .expect("应能枚举受版本控制的公开文档");
+    assert!(output.status.success(), "git ls-files 必须成功");
+
+    let account = ["h", "yf"].concat();
+    let historical_implementation = ["Go", "/", "Crush"].concat();
+    let historical_config = ["Go", " ", "版"].concat();
+    let forbidden = [
+        account,
+        historical_implementation,
+        historical_config,
+        ["/home/", "lrs"].concat(),
+    ];
+    let paths = String::from_utf8(output.stdout).expect("文档路径必须是 UTF-8");
+    for relative in paths.lines().filter(|line| !line.is_empty()) {
+        if let Some(allowed) = &allowed
+            && !published_document(relative, allowed)
+        {
+            continue;
+        }
+        let path = workspace.join(relative);
+        if !path.is_file() {
+            continue;
+        }
+        let source = std::fs::read_to_string(path)
+            .unwrap_or_else(|error| panic!("无法读取公开文档 {relative}: {error}"));
+        for value in &forbidden {
+            assert!(
+                !source.contains(value),
+                "公开文档 {relative} 不得包含部署主机历史信息"
+            );
+        }
+    }
+}
+
+fn published_document(relative: &str, allowed: &std::collections::BTreeSet<&str>) -> bool {
+    if relative.starts_with("docs/") || relative.rsplit('/').next() == Some("AGENTS.md") {
+        return false;
+    }
+    if !relative.to_ascii_lowercase().ends_with(".md") {
+        return true;
+    }
+    relative == "README.md"
+        || allowed.contains(relative)
+        || (relative.starts_with("skills/") && relative != "skills/README.md")
+}
+
+#[test]
+fn publication_scope_keeps_runtime_guidance_and_excludes_internal_audit_history() {
+    let allowed = std::collections::BTreeSet::from(["crates/example/runtime.md"]);
+    assert!(published_document("README.md", &allowed));
+    assert!(published_document("crates/example/runtime.md", &allowed));
+    assert!(published_document("skills/example/SKILL.md", &allowed));
+    assert!(!published_document(
+        "docs/phone/private-verification.md",
+        &allowed
+    ));
+    assert!(!published_document("crates/example/AGENTS.md", &allowed));
+    assert!(!published_document("skills/AGENTS.md", &allowed));
+    assert!(historical_product_evidence("docs/phone/diff/old-run.md"));
+    assert!(historical_product_evidence(
+        "apps/kcoder-studio/e2e/private/candidates/old-run/receipt.json"
+    ));
+    assert!(!historical_product_evidence("README.md"));
+    assert!(!historical_product_evidence(
+        "apps/kcoder-studio/desktop/main.mjs"
+    ));
+    assert!(!historical_product_evidence(
+        "apps/kcoder-studio/e2e/fixtures/mobile-cached-session/history.ts"
+    ));
+}
+
+fn historical_product_evidence(relative: &str) -> bool {
+    // These retained runs contain original paths, hashes and failure receipts.
+    // Rebranding their bytes would fabricate evidence rather than fix the product.
+    relative.starts_with("docs/phone/")
+        || relative.starts_with("apps/kcoder-studio/e2e/private/")
+        // The former `e2e/private/candidates/` closures were relocated here
+        // unchanged; their READMEs pin each file's SHA-256 and source paths.
+        || relative.starts_with("apps/kcoder-studio/e2e/harness/candidates/")
+        || relative
+            == "apps/kcoder-studio/e2e/suites/mobile/mobile-public-rust-relay-baseline.e2e.mjs"
+}
+
+#[test]
+fn public_documentation_uses_kcoder_as_its_product_identity() {
+    let workspace = workspace_root();
+    // The public snapshot's canonical product document is the root README.
+    // Internal audit notes are not published, and runtime skills / third-party
+    // attribution must retain truthful upstream and protocol references.
+    let readme = std::fs::read_to_string(workspace.join("README.md"))
+        .expect("canonical public README must exist");
+    // A company banner may precede the title; the first heading names the product.
+    let title = readme
+        .lines()
+        .find(|line| line.starts_with("# "))
+        .expect("README must have a title");
+    assert_eq!(
+        title.trim(),
+        "# KCoder",
+        "public product identity must be KCoder"
+    );
+    assert!(readme.contains("KCoder Studio"));
+    assert!(
+        readme.contains("`kcoder`"),
+        "public CLI entry must be kcoder"
+    );
+    let attribution =
+        std::fs::read_to_string(workspace.join("apps/kcoder-studio/renderer/UPSTREAM.md"))
+            .expect("packaged upstream attribution must be retained");
+    assert!(
+        attribution.contains("Apache License 2.0") && attribution.contains("LICENSE.upstream"),
+        "branding must not erase third-party attribution"
+    );
+}
+
+#[test]
+fn active_tracked_text_never_restores_retired_product_identifiers() {
+    let workspace = workspace_root();
+    let output = Command::new("git")
+        .args(["ls-files", "-z"])
+        .current_dir(&workspace)
+        .output()
+        .expect("应能枚举受版本控制的文件");
+    assert!(output.status.success(), "git ls-files 必须成功");
+
+    let retired_stem = String::from_utf8(vec![107, 117, 110, 108, 117, 110]).unwrap();
+    let forbidden = [
+        format!("{retired_stem}code"),
+        format!("{retired_stem} code"),
+        format!("{retired_stem}-code"),
+        format!("{retired_stem}_code"),
+        format!(".{retired_stem}/"),
+        format!("{retired_stem}.md"),
+    ];
+    for relative in output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+    {
+        let Ok(relative) = std::str::from_utf8(relative) else {
+            continue;
+        };
+        if historical_product_evidence(relative) {
+            continue;
+        }
+        let path = workspace.join(relative);
+        let Ok(source) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let normalized = source.to_lowercase();
+        for value in &forbidden {
+            assert!(
+                !normalized.contains(value),
+                "受版本控制的文本文件 {relative} 不得恢复已退役产品标识"
+            );
+        }
+    }
+}
+
+#[test]
+fn tests_resolve_workspace_paths_at_runtime() {
+    let workspace = workspace_root();
+    let compile_time_lookup = ["env!(\"CARGO_", "MANIFEST_DIR\")"].concat();
+    let output = Command::new("git")
+        .args(["ls-files", "-z", "--", "*.rs"])
+        .current_dir(&workspace)
+        .output()
+        .expect("应能枚举 Rust 源文件");
+    assert!(output.status.success(), "git ls-files 必须成功");
+
+    for relative in output
+        .stdout
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+    {
+        let relative = std::str::from_utf8(relative).expect("Rust 路径必须是 UTF-8");
+        let path = workspace.join(relative);
+        if !path.is_file() {
+            continue;
+        }
+        let source = std::fs::read_to_string(path).unwrap();
+        assert!(
+            !source.contains(&compile_time_lookup),
+            "测试路径不得把 checkout 绝对路径缓存进编译产物: {relative}"
+        );
+    }
+}
+
+#[test]
+fn build_identity_ignores_untracked_workspace_files() {
+    let workspace = workspace_root();
+    // Release facts are computed after Cargo by the release scripts; the CLI
+    // build script must not read Git state into compiler inputs.
+    let build_script = std::fs::read_to_string(workspace.join("crates/kcoder_cli/build.rs"))
+        .expect("应能读取 CLI build script");
+    assert!(
+        !build_script.contains("\"status\""),
+        "CLI build script 不得把 Git 状态编译进产物"
+    );
+    for script in [
+        "scripts/release/cli-native-build.mjs",
+        "scripts/release/artifact-manifest.mjs",
+    ] {
+        let source = std::fs::read_to_string(workspace.join(script))
+            .unwrap_or_else(|error| panic!("应能读取 {script}: {error}"));
+        let status_calls = source.matches("'status', '--porcelain'").count();
+        assert!(status_calls > 0, "{script} 必须由 Git 状态得出 dirty");
+        assert_eq!(
+            source
+                .matches("'status', '--porcelain', '--untracked-files=no'")
+                .count(),
+            status_calls,
+            "{script}: build identity 只应由受版本控制文件的差异标记为 dirty"
+        );
+        assert!(
+            !source.contains("--untracked-files=normal"),
+            "{script}: 未跟踪的本机配置和缓存不得污染 release build identity"
+        );
+    }
+}
+
+#[test]
+fn release_publishes_only_the_windows_studio_installer() {
+    let root = workspace_root();
+    let source = std::fs::read_to_string(root.join(".github/workflows/release.yml")).unwrap();
+    let workflow: serde_yaml::Value = serde_yaml::from_str(&source).unwrap();
+    let jobs = workflow["jobs"].as_mapping().unwrap();
+    assert_eq!(
+        jobs.len(),
+        2,
+        "release only builds Windows Studio and publishes it"
+    );
+    assert_eq!(
+        workflow["jobs"]["publish"]["needs"].as_str(),
+        Some("studio-windows")
+    );
+    let steps = workflow["jobs"]["publish"]["steps"].as_sequence().unwrap();
+    let publish = steps
+        .iter()
+        .find(|step| {
+            step["uses"]
+                .as_str()
+                .unwrap_or("")
+                .starts_with("softprops/action-gh-release@")
+        })
+        .unwrap();
+    // Publish exactly the file the build job produced and hashed; a glob could
+    // attach a different installer than the verified one.
+    let installer = "${{ needs.studio-windows.outputs.installer }}";
+    assert_eq!(
+        publish["with"]["files"].as_str(),
+        Some(format!("artifacts/{installer}").as_str())
+    );
+    assert_eq!(
+        workflow["jobs"]["studio-windows"]["outputs"]["installer"].as_str(),
+        Some("${{ steps.artifact.outputs.installer }}")
+    );
+    assert!(
+        source.contains(
+            "$installer = \"target/packages/kcoder-studio/windows/KCoder-Studio-Setup-$version-win-x64.exe\""
+        ),
+        "the build job must name only the versioned Windows Studio installer"
+    );
+    let verify = steps
+        .iter()
+        .find(|step| step["env"]["EXPECTED_INSTALLER"].as_str().is_some())
+        .expect("publish must verify the downloaded installer first");
+    assert_eq!(
+        verify["env"]["EXPECTED_INSTALLER"].as_str(),
+        Some(installer)
+    );
+    assert_eq!(
+        verify["env"]["EXPECTED_SHA256"].as_str(),
+        Some("${{ needs.studio-windows.outputs.sha256 }}")
+    );
+    let index_of = |target: &serde_yaml::Value| {
+        steps
+            .iter()
+            .position(|step| std::ptr::eq(step, target))
+            .unwrap()
+    };
+    assert!(
+        index_of(verify) < index_of(publish),
+        "identity verification must precede publishing"
+    );
+    assert_eq!(
+        publish["with"]["fail_on_unmatched_files"].as_bool(),
+        Some(true)
+    );
+    assert!(source.contains("target/packages/kcoder-studio/windows/win-unpacked"));
+    assert!(!source.contains("apps/kcoder-studio/dist/win-unpacked"));
+    assert!(!source.contains("desktop:remote:pack:win"));
+    assert!(!source.contains("mobile:pack:web"));
+}
+
+#[test]
+fn studio_dependency_build_policies_are_explicit_booleans() {
+    let root = workspace_root();
+    for path in [
+        "apps/kcoder-studio/pnpm-workspace.yaml",
+        "apps/kcoder-studio/renderer/pnpm-workspace.yaml",
+    ] {
+        let source = std::fs::read_to_string(root.join(path)).unwrap();
+        let policy: serde_yaml::Value = serde_yaml::from_str(&source).unwrap();
+        for (name, allowed) in policy["allowBuilds"]
+            .as_mapping()
+            .expect("explicit build policy")
+        {
+            assert!(
+                allowed.as_bool().is_some(),
+                "{path}: {name:?} must not be an unanswered build policy"
+            );
+        }
+    }
+}

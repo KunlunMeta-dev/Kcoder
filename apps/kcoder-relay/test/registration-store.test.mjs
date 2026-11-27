@@ -1,0 +1,285 @@
+import assert from 'node:assert/strict';
+import { createHash, randomBytes } from 'node:crypto';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, chmod, lstat } from 'node:fs/promises';
+import { hostname } from 'node:os';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL, fileURLToPath } from 'node:url';
+import test from 'node:test';
+import {
+  openRegistrationStore,
+  REGISTRATION_STORE_ERROR_CODES as CODES,
+} from '../src/registration-store.mjs';
+
+const MAX_STORE_BYTES = 256 * 1024;
+const MODULE_URL = new URL('../src/registration-store.mjs', import.meta.url).href;
+
+function token() {
+  return randomBytes(32).toString('base64url');
+}
+
+function gatewaySecret() {
+  return randomBytes(32).toString('hex');
+}
+
+async function makeStorePath(t, name = 'registration.json') {
+  const directory = await mkdtemp(join(tmpdir(), 'kcoder-registration-store-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  return join(directory, name);
+}
+
+async function assertCode(promise, code) {
+  await assert.rejects(promise, error => error?.code === code);
+}
+
+function gatewayKeys(gateway) {
+  return Object.keys(gateway).sort();
+}
+
+for (const version of [0, 2]) test(`unsupported registration format ${version} preserves the original file`, async t => {
+  const path = await makeStorePath(t);
+  const original = JSON.stringify({ version, gateways: [] }) + '\n';
+  await writeFile(path, original);
+  await assertCode(openRegistrationStore({ path }), CODES.corrupt);
+  assert.equal(await readFile(path, 'utf8'), original);
+});
+
+test('register saves isolated credentials, exposes no proof hash, and retries idempotently across restart', async t => {
+  const path = await makeStorePath(t);
+  const enrollmentToken = token();
+  const gatewayGatewaySecret = gatewaySecret();
+  const expectedKeys = ['id', 'secret', 'gatewaySecret', 'maxConnections', 'maxBytesPerWindow', 'trafficWindowMs'].sort();
+
+  const store = await openRegistrationStore({ path });
+  const first = await store.register({ enrollmentToken, gatewaySecret: gatewayGatewaySecret });
+  assert.deepEqual(gatewayKeys(first), expectedKeys);
+  assert.match(first.id, /^[a-f0-9]{32}$/);
+  assert.match(first.secret, /^[a-f0-9]{64}$/);
+  assert.notEqual(first.id, first.secret);
+  assert.notEqual(first.secret, gatewayGatewaySecret);
+  assert.deepEqual(first, {
+    id: first.id,
+    secret: first.secret,
+    gatewaySecret: gatewayGatewaySecret,
+    maxConnections: 128,
+    maxBytesPerWindow: 67_108_864,
+    trafficWindowMs: 60_000,
+  });
+
+  const returnedCopy = await store.register({ enrollmentToken, gatewaySecret: gatewayGatewaySecret });
+  assert.deepEqual(returnedCopy, first);
+  returnedCopy.secret = 'caller mutation';
+  const listed = store.list();
+  assert.deepEqual(listed, [first]);
+  listed[0].secret = 'list mutation';
+  assert.deepEqual(store.list(), [first]);
+
+  const storedBytes = await readFile(path);
+  assert.ok((await lstat(path)).isFile());
+  assert.ok((await lstat(join(path, '..'))).isDirectory());
+  const storedText = storedBytes.toString('utf8');
+  const document = JSON.parse(storedText);
+  assert.equal(storedText.includes(enrollmentToken), false);
+  assert.equal(document.gateways[0].enrollmentTokenHash, createHash('sha256').update(enrollmentToken).digest('hex'));
+  assert.deepEqual(Object.keys(document.gateways[0]).sort(), ['id', 'secret', 'gatewaySecret', 'enrollmentTokenHash'].sort());
+
+  await assertCode(store.register({ enrollmentToken, gatewaySecret: gatewaySecret() }), CODES.unauthorized);
+  await assertCode(store.register({ enrollmentToken: token(), gatewaySecret: gatewayGatewaySecret }), CODES.conflict);
+  await store.close();
+
+  const reopened = await openRegistrationStore({ path });
+  assert.deepEqual(reopened.list(), [first]);
+  assert.deepEqual(await reopened.register({ enrollmentToken, gatewaySecret: gatewayGatewaySecret }), first);
+  await reopened.close();
+});
+
+test('rejects malformed proof, caller-selected identity fields, and proof collisions with Gateway credentials', async t => {
+  const path = await makeStorePath(t);
+  const store = await openRegistrationStore({ path });
+  await assertCode(store.register({ enrollmentToken: 'human-readable-password-which-is-long', gatewaySecret: gatewaySecret() }), CODES.unauthorized);
+  await assertCode(store.register({ enrollmentToken: token(), gatewaySecret: gatewaySecret(), id: 'chosen' }), CODES.unauthorized);
+
+  const proof = token();
+  await assertCode(store.register({ enrollmentToken: proof, gatewaySecret: proof }), CODES.unauthorized);
+  const firstGatewaySecret = gatewaySecret();
+  const first = await store.register({ enrollmentToken: proof, gatewaySecret: firstGatewaySecret });
+  await assertCode(store.register({ enrollmentToken: firstGatewaySecret, gatewaySecret: gatewaySecret() }), CODES.unauthorized);
+  await assertCode(store.register({ enrollmentToken: token(), gatewaySecret: first.secret }), CODES.conflict);
+  await assertCode(store.register({ enrollmentToken: token(), gatewaySecret: first.id }), CODES.conflict);
+  assert.equal(store.list().length, 1);
+  await store.close();
+});
+
+test('serializes concurrent calls, gives one identity to concurrent retries, and enforces capacity', async t => {
+  const path = await makeStorePath(t);
+  const store = await openRegistrationStore({ path, maxGateways: 3 });
+  const sameRequest = { enrollmentToken: token(), gatewaySecret: gatewaySecret() };
+  const concurrentRetries = await Promise.all(Array.from({ length: 12 }, () => store.register(sameRequest)));
+  assert.ok(concurrentRetries.every(gateway => gateway.id === concurrentRetries[0].id && gateway.secret === concurrentRetries[0].secret));
+
+  const otherRequests = [
+    { enrollmentToken: token(), gatewaySecret: gatewaySecret() },
+    { enrollmentToken: token(), gatewaySecret: gatewaySecret() },
+    { enrollmentToken: token(), gatewaySecret: gatewaySecret() },
+  ];
+  const results = await Promise.allSettled(otherRequests.map(request => store.register(request)));
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 2);
+  assert.equal(results.filter(result => result.status === 'rejected' && result.reason.code === CODES.capacity).length, 1);
+  assert.equal(store.list().length, 3);
+  await store.close();
+});
+
+test('rejects a second process while this process owns the store lock', async t => {
+  const path = await makeStorePath(t);
+  const store = await openRegistrationStore({ path });
+  const childSource = [
+    `import { openRegistrationStore } from ${JSON.stringify(MODULE_URL)};`,
+    `try { const store = await openRegistrationStore({ path: ${JSON.stringify(path)} }); await store.close(); process.stdout.write('OPENED'); }`,
+    `catch (error) { process.stdout.write(error.code || 'UNKNOWN'); }`,
+  ].join('\n');
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', childSource], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(child.status, 0, child.stderr);
+  assert.equal(child.stdout, CODES.locked);
+  await store.close();
+});
+
+test('recovers a dead lock only when PID start identity proves the owner changed', {skip:process.platform!=='linux'}, async t => {
+  const path = await makeStorePath(t);
+  const lockPath = `${path}.lock`;
+  await writeFile(lockPath, `${JSON.stringify({
+    version: 1,
+    pid: process.pid,
+    hostname: hostname(),
+    processStart: 'not-the-current-process-start',
+    startedAt: Date.now() - 60_000,
+    owner: randomBytes(24).toString('hex'),
+  })}\n`);
+  const store = await openRegistrationStore({ path });
+  assert.equal(store.list().length, 0);
+  await store.close();
+});
+
+test('callback checks static conflicts before commit and cannot mutate store-owned credentials', async t => {
+  const path = await makeStorePath(t);
+  const store = await openRegistrationStore({ path });
+  const request = { enrollmentToken: token(), gatewaySecret: gatewaySecret() };
+  let observed;
+  await assertCode(store.register(request, {
+    validateGateway(candidate) {
+      observed = candidate;
+      assert.equal(Object.isFrozen(candidate), true);
+      throw Object.assign(new Error('static collision'), { code: CODES.conflict });
+    },
+  }), CODES.conflict);
+  assert.equal(store.list().length, 0);
+  assert.equal(observed.gatewaySecret, request.gatewaySecret);
+
+  const created = await store.register(request, {
+    validateGateway(candidate) {
+      assert.equal(Object.isFrozen(candidate), true);
+      return 'ignored';
+    },
+  });
+  assert.equal(store.list().length, 1);
+  assert.equal(store.list()[0].secret, created.secret);
+  await store.close();
+});
+
+test('maxGateways zero opens an empty store and rejects new registrations', async t => {
+  const path = await makeStorePath(t);
+  const store = await openRegistrationStore({ path, maxGateways: 0 });
+  assert.deepEqual(store.list(), []);
+  await assertCode(store.register({ enrollmentToken: token(), gatewaySecret: gatewaySecret() }), CODES.capacity);
+  await store.close();
+});
+
+test('does not update memory when a registration cannot fit the bounded persisted image', async t => {
+  const path = await makeStorePath(t);
+  const gateways = [];
+  for (let index = 0; index < 256; index += 1) {
+    const suffix = String(index).padStart(12, '0');
+    const candidate = {
+      id: index.toString(16).padStart(32, '0'),
+      secret: (index + 1).toString(16).padStart(64, '0'),
+      gatewaySecret: `${'\\'.repeat(500)}${suffix}`,
+      enrollmentTokenHash: createHash('sha256').update(`fixture-${index}`).digest('hex'),
+    };
+    const next = { version: 1, gateways: [...gateways, candidate] };
+    if (Buffer.byteLength(`${JSON.stringify(next)}\n`) > MAX_STORE_BYTES) break;
+    gateways.push(candidate);
+  }
+  assert.ok(gateways.length > 0 && gateways.length < 256);
+  const seed = Buffer.from(`${JSON.stringify({ version: 1, gateways })}\n`);
+  assert.ok(seed.length <= MAX_STORE_BYTES);
+  await writeFile(path, seed);
+
+  const store = await openRegistrationStore({ path, maxGateways: 256 });
+  const originalCount = store.list().length;
+  const originalFile = await readFile(path);
+  await assertCode(store.register({
+    enrollmentToken: token(),
+    gatewaySecret: `${'\\'.repeat(500)}999999999999`,
+  }), CODES.tooLarge);
+  assert.equal(store.list().length, originalCount);
+  assert.deepEqual(await readFile(path), originalFile);
+  await store.close();
+
+  const reopened = await openRegistrationStore({ path, maxGateways: 256 });
+  assert.equal(reopened.list().length, originalCount);
+  await reopened.close();
+});
+
+test('rejects symbolic links, invalid UTF-8, duplicate keys, or unknown schema fields', async t => {
+  const directory = await mkdtemp(join(tmpdir(), 'kcoder-registration-invalid-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+
+  const targetPath = join(directory, 'target.json');
+  await writeFile(targetPath, '{"version":1,"gateways":[]}\n');
+  const linkPath = join(directory, 'link.json');
+  await symlink(targetPath, linkPath);
+  await assertCode(openRegistrationStore({ path: linkPath }), CODES.unsafe);
+
+  const ancestorTarget = join(directory, 'ancestor-target');
+  await mkdir(ancestorTarget);
+  const ancestorLink = join(directory, 'ancestor-link');
+  await symlink(ancestorTarget, ancestorLink, 'dir');
+  const traversedPath = join(ancestorLink, 'nested', 'registration.json');
+  await assertCode(openRegistrationStore({ path: traversedPath }), CODES.unsafe);
+  await assert.rejects(lstat(join(ancestorTarget, 'nested')), error => error.code === 'ENOENT');
+
+  const invalidUtf8Path = join(directory, 'invalid-utf8.json');
+  await writeFile(invalidUtf8Path, Buffer.from([0xff, 0xfe]));
+  await assertCode(openRegistrationStore({ path: invalidUtf8Path }), CODES.corrupt);
+
+  const duplicateKeyPath = join(directory, 'duplicate-key.json');
+  await writeFile(duplicateKeyPath, '{"version":1,"version":1,"gateways":[]}\n');
+  await assertCode(openRegistrationStore({ path: duplicateKeyPath }), CODES.corrupt);
+
+  const unknownFieldPath = join(directory, 'unknown-field.json');
+  await writeFile(unknownFieldPath, '{"version":1,"gateways":[],"other":true}\n');
+  await assertCode(openRegistrationStore({ path: unknownFieldPath }), CODES.corrupt);
+});
+
+test('refuses a changed store target without changing the in-memory registry', async t => {
+  const path = await makeStorePath(t);
+  const store = await openRegistrationStore({ path });
+  await mkdir(path);
+  await assertCode(store.register({ enrollmentToken: token(), gatewaySecret: gatewaySecret() }), CODES.unsafe);
+  assert.deepEqual(store.list(), []);
+  await rm(path, { recursive: true, force: true });
+  const created = await store.register({ enrollmentToken: token(), gatewaySecret: gatewaySecret() });
+  assert.equal(store.list()[0].id, created.id);
+  await store.close();
+});
+
+test('returns stable operational error codes and rejects incompatible existing capacity', async t => {
+  const emptyPath = await makeStorePath(t);
+  await assertCode(openRegistrationStore({ path: emptyPath, maxGateways: -1 }), CODES.invalidOptions);
+  await assertCode(openRegistrationStore({ path: emptyPath, unknown: true }), CODES.invalidOptions);
+
+  const populatedPath = await makeStorePath(t);
+  const store = await openRegistrationStore({ path: populatedPath });
+  await store.register({ enrollmentToken: token(), gatewaySecret: gatewaySecret() });
+  await store.close();
+  await assertCode(openRegistrationStore({ path: populatedPath, maxGateways: 0 }), CODES.storeCapacity);
+});

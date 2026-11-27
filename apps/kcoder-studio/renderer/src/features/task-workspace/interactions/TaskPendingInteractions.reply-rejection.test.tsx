@@ -1,0 +1,290 @@
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, expect, test, vi } from 'vitest'
+import { TaskPendingInteractions } from './TaskPendingInteractions'
+import { captureTaskInteraction, readTaskInteractions, respondTaskInteraction } from '@/kcoder/gateway/runtime/taskInteractions'
+import { respondToTaskQuestion } from '@/kcoder/gateway/runtime/interactions'
+import { forwardAcceptedNotification } from '@/kcoder/gateway/runtime/notifications'
+import type { GatewayRuntimeCore } from '@/kcoder/gateway/runtime/core'
+
+const f = vi.hoisted(() => ({ request: vi.fn(), current: () => true }))
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: f.request }))
+vi.mock('@/kcoder/gatewayServiceBridge', () => ({ emitRuntimeEvent: vi.fn(async () => {}) }))
+const t = (key: string) => key
+vi.mock('@/hooks/useTranslation', () => ({ useTranslation: () => ({ t }) }))
+vi.mock('@/kcoder/usePluginTargetScope', () => ({
+  usePluginTargetScope: () => ({ key: 'original-owner', isCurrent: f.current }),
+}))
+
+afterEach(() => { cleanup(); f.request.mockReset() })
+
+async function fixture() {
+  const taskId = 'task', requestId = 2000001
+  const frame = { serverId: 'native', threadId: 'thread', turnId: 'turn', appServerEpoch: 'epoch' }
+  const address = { deviceId: 'target', taskId, threadId: frame.threadId, workspacePath: '/owned' }
+  const client = { supportsExperimental: () => true, respond: vi.fn(),
+    request: vi.fn(async (_method: string, selector: object) => ({ ...selector, status: 'pending' })),
+  }
+  const pending = { client, taskId, requestId, turnId: frame.turnId, appServerEpoch: frame.appServerEpoch,
+    questionId: 'question', block: { id: 'block' },
+    renderPayload: { questions: [{ id: 'choice', header: 'Sources', question: 'Which sources?',
+      isOther: true, multiSelect: true, options: [{ label: 'Original source', description: '' }] }] },
+  }
+  const task = { taskId, serverId: address.deviceId, threadId: frame.threadId, workspacePath: address.workspacePath,
+    runtimeHandle: { memoryTaskSnapshot: { ...frame, attemptId: 'attempt', serverInstanceId: frame.serverId } } }
+  const server = { id: address.deviceId, transport: 'local', command: '/owned/kcoder', workspacePath: '/owned' }
+  const core = { disposed: false, tasks: new Map([[taskId, task]]), clientByTask: new Map([[taskId, client]]),
+    threadByTask: new Map([[taskId, frame.threadId]]), appServerDisconnectedClients: new WeakSet(),
+    taskByThread: new Map([[`${address.deviceId}:${frame.threadId}`, taskId]]),
+    threadKey: (targetId: string, threadId: string) => `${targetId}:${threadId}`,
+    activeTurnByTask: new Map([[taskId, { turnId: frame.turnId }]]),
+    turnAttemptIds: new Map([[`${taskId}:${frame.turnId}`, 'attempt']]),
+    pendingQuestionByKey: new Map([[`${taskId}\0${requestId}`, pending]]),
+    resolveTaskId: (id: string | null) => id,
+    taskDescriptor: async () => ({ taskId, task, server }), serverForParams: async () => server,
+    assertCommandTarget: async () => {},
+    respondToTaskQuestion: (id: string, response: Record<string, unknown>, expected: never) =>
+      respondToTaskQuestion.call(core, id, response, expected),
+  } as unknown as GatewayRuntimeCore
+  await captureTaskInteraction(core, client as never, taskId, frame, requestId)
+  f.request.mockImplementation((method, params) => method.endsWith('.read')
+    ? readTaskInteractions(core, params) : respondTaskInteraction(core, params))
+  render(<TaskPendingInteractions address={address} />)
+  await screen.findByTestId('request-user-input-card')
+  const submit = () => {
+    fireEvent.click(screen.getByTestId('request-user-input-option-choice-0'))
+    fireEvent.click(screen.getByTestId('request-user-input-submit-button'))
+  }
+  const reject = () => act(async () => {
+    await forwardAcceptedNotification.call(core, 'gateway/interaction/replyRejected', {
+      ...frame, requestId, questionId: 'question', reason: 'invalid_response',
+    }, address.deviceId, client as never)
+  })
+  const refresh = () => fireEvent.click(screen.getByRole('button', { name: 'refresh' }))
+  return { core, client, pending, submit, reject, refresh, request: f.request }
+}
+
+test('an original Gateway rejection and a fresh native pending read reopen the task-space card without replay', async () => {
+  const f = await fixture()
+  const originalCard = screen.getByTestId('request-user-input-card')
+  fireEvent.change(screen.getByTestId('request-user-input-custom-choice'), {
+    target: { value: 'Keep the original freeform answer' },
+  })
+  f.submit()
+  await screen.findByText('states.response_pending')
+  // Native pending alone cannot reopen a response still awaiting confirmation.
+  f.refresh()
+  await waitFor(() => expect(f.client.request).toHaveBeenCalledTimes(3))
+  expect(screen.getByTestId('request-user-input-card')).not.toBeVisible()
+  await f.reject()
+  expect(f.pending).toMatchObject({ responsePending: false })
+  f.refresh()
+  await waitFor(() => expect(screen.getByTestId('request-user-input-card')).toBeVisible())
+  expect(screen.getByTestId('request-user-input-card')).toBe(originalCard)
+  expect(screen.getByTestId('request-user-input-option-choice-0')).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByTestId('request-user-input-custom-choice')).toHaveValue('Keep the original freeform answer')
+  expect(f.client.respond).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByTestId('request-user-input-submit-button'))
+  await waitFor(() => expect(f.client.respond).toHaveBeenCalledTimes(2))
+  expect(f.client.respond.mock.calls[1][1]).toMatchObject({
+    answers: { choice: { answers: ['Original source', 'Keep the original freeform answer'] } },
+  })
+})
+
+test('a native pending snapshot started before answer completion cannot reopen its card', async () => {
+  const f = await fixture()
+  let release!: () => void
+  const originalRead = readTaskInteractions(f.core, { address: {
+    deviceId: 'target', taskId: 'task', threadId: 'thread', workspacePath: '/owned',
+  } })
+  const beforeAnswer = await originalRead
+  f.request.mockImplementationOnce(() => new Promise(resolve => { release = () => resolve(beforeAnswer) }))
+  f.refresh()
+  await waitFor(() => expect(release).toBeTypeOf('function'))
+  f.submit()
+  await screen.findByText('states.response_pending')
+  await act(async () => release())
+  expect(screen.getByTestId('request-user-input-card')).not.toBeVisible()
+  expect(f.client.respond).toHaveBeenCalledOnce()
+})
+
+test('a pending snapshot read during an unsettled response cannot release its submit guard', async () => {
+  const f = await fixture()
+  const beforeAnswer = await readTaskInteractions(f.core, { address: {
+    deviceId: 'target', taskId: 'task', threadId: 'thread', workspacePath: '/owned',
+  } })
+  let finish!: () => void
+  const respond = f.core.respondToTaskQuestion
+  f.core.respondToTaskQuestion = async (...args) => {
+    const result = await respond(...args)
+    await new Promise<void>(resolve => { finish = resolve })
+    return result
+  }
+  f.submit()
+  await waitFor(() => expect(finish).toBeTypeOf('function'))
+  f.request.mockResolvedValueOnce(beforeAnswer)
+  f.refresh()
+  await waitFor(() => expect(f.request.mock.calls.filter(([method]) => method.endsWith('.read'))).toHaveLength(2))
+  expect(screen.getByTestId('request-user-input-card')).not.toBeVisible()
+  await act(async () => finish())
+  expect(screen.getByTestId('request-user-input-card')).not.toBeVisible()
+  expect(f.client.respond).toHaveBeenCalledOnce()
+})
+
+test('a lost executor request recovers its draft only after the original runtime confirms pending', async () => {
+  const f = await fixture()
+  const originalCard = screen.getByTestId('request-user-input-card')
+  fireEvent.change(screen.getByTestId('request-user-input-custom-choice'), {
+    target: { value: 'Keep this answer until the original task confirms it' },
+  })
+  // The client cannot know whether the executor received its request. The
+  // original runtime has not sent an answer and remains authoritatively pending.
+  f.request.mockRejectedValueOnce(new Error('Executor connection lost'))
+  f.submit()
+  await screen.findByText('errors.outcome_unknown')
+  expect(f.client.respond).not.toHaveBeenCalled()
+  expect(originalCard).toBeInTheDocument()
+  expect(originalCard).not.toBeVisible()
+  f.refresh()
+  await waitFor(() => expect(screen.getByTestId('request-user-input-card')).toBeVisible())
+  expect(screen.getByTestId('request-user-input-card')).toBe(originalCard)
+  expect(screen.getByTestId('request-user-input-custom-choice'))
+    .toHaveValue('Keep this answer until the original task confirms it')
+  expect(screen.getByTestId('request-user-input-option-choice-0')).toHaveAttribute('aria-pressed', 'true')
+  expect(f.client.respond).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByTestId('request-user-input-submit-button'))
+  await waitFor(() => expect(f.client.respond).toHaveBeenCalledOnce())
+  expect(f.client.respond.mock.calls[0][1]).toMatchObject({
+    answers: { choice: { answers: ['Original source', 'Keep this answer until the original task confirms it'] } },
+  })
+})
+
+test('a lost executor confirmation retains the draft and cannot replay a sent answer on refresh', async () => {
+  const f = await fixture()
+  const originalCard = screen.getByTestId('request-user-input-card')
+  fireEvent.change(screen.getByTestId('request-user-input-custom-choice'), {
+    target: { value: 'Keep this sent answer for receipt reconciliation' },
+  })
+  f.request.mockImplementationOnce(async (_method, params) => {
+    await respondTaskInteraction(f.core, params)
+    throw new Error('Executor confirmation lost')
+  })
+  f.submit()
+  await screen.findByText('errors.outcome_unknown')
+  expect(f.client.respond).toHaveBeenCalledOnce()
+  expect(originalCard).toBeInTheDocument()
+  f.refresh()
+  await waitFor(() => expect(screen.queryByText('errors.outcome_unknown')).toBeNull())
+  expect(originalCard).not.toBeVisible()
+  expect(f.client.respond).toHaveBeenCalledOnce()
+  // Only the original Gateway's rejection followed by a new pending read can
+  // confirm that the retained answer may be edited and submitted again.
+  await f.reject()
+  f.refresh()
+  await waitFor(() => expect(screen.getByTestId('request-user-input-card')).toBeVisible())
+  expect(screen.getByTestId('request-user-input-card')).toBe(originalCard)
+  expect(screen.getByTestId('request-user-input-custom-choice'))
+    .toHaveValue('Keep this sent answer for receipt reconciliation')
+  expect(f.client.respond).toHaveBeenCalledOnce()
+})
+
+test('a pending read begun before an uncertain send settles cannot reopen its card', async () => {
+  const f = await fixture()
+  const beforeAnswer = await readTaskInteractions(f.core, { address: {
+    deviceId: 'target', taskId: 'task', threadId: 'thread', workspacePath: '/owned',
+  } })
+  let releaseRead!: () => void
+  f.request.mockImplementationOnce(() => new Promise(resolve => {
+    releaseRead = () => resolve(beforeAnswer)
+  }))
+  f.refresh()
+  await waitFor(() => expect(releaseRead).toBeTypeOf('function'))
+  f.request.mockRejectedValueOnce(new Error('Executor connection lost'))
+  f.submit()
+  await screen.findByText('errors.outcome_unknown')
+  await act(async () => releaseRead())
+  expect(screen.getByTestId('request-user-input-card')).not.toBeVisible()
+  expect(f.client.respond).not.toHaveBeenCalled()
+  f.refresh()
+  await waitFor(() => expect(screen.getByTestId('request-user-input-card')).toBeVisible())
+  expect(f.client.respond).not.toHaveBeenCalled()
+})
+
+
+test('a rejected failed socket send restores the original task-space draft after native readback', async () => {
+  const f = await fixture()
+  const originalCard = screen.getByTestId('request-user-input-card')
+  fireEvent.change(screen.getByTestId('request-user-input-custom-choice'), {
+    target: { value: 'Retain this draft through the failed socket send' },
+  })
+  f.client.respond.mockImplementationOnce(() => { throw new Error('socket send failed') })
+  f.submit()
+  await screen.findByText('states.unknown')
+  f.refresh()
+  await waitFor(() => expect(f.client.request).toHaveBeenCalledTimes(3))
+  expect(originalCard).not.toBeVisible()
+  expect(f.client.respond).toHaveBeenCalledOnce()
+
+  await f.reject()
+  expect(f.pending.responsePending).toBe(false)
+  f.refresh()
+  await waitFor(() => expect(originalCard).toBeVisible())
+  expect(screen.getByTestId('request-user-input-card')).toBe(originalCard)
+  expect(screen.getByTestId('request-user-input-custom-choice'))
+    .toHaveValue('Retain this draft through the failed socket send')
+  expect(f.client.respond).toHaveBeenCalledOnce()
+  fireEvent.click(screen.getByTestId('request-user-input-submit-button'))
+  await waitFor(() => expect(f.client.respond).toHaveBeenCalledTimes(2))
+})
+
+
+test('an old request replay cannot reopen the task-space card under a retry attempt', async () => {
+  const f = await fixture()
+  const task = f.core.tasks.get('task')!
+  const original = task.runtimeHandle.memoryTaskSnapshot!
+  task.runtimeHandle.memoryTaskSnapshot = { ...original, attemptId: 'retry-attempt' }
+  f.core.turnAttemptIds.set('task:turn', 'retry-attempt')
+  await captureTaskInteraction(f.core, f.client as never, 'task', {
+    serverId: 'native', threadId: 'thread', turnId: 'turn', appServerEpoch: 'epoch',
+  }, f.pending.requestId)
+  f.refresh()
+  await waitFor(() => expect(screen.queryByTestId('request-user-input-card')).not.toBeInTheDocument())
+  expect(screen.getAllByTestId('task-original-interaction')).toHaveLength(1)
+  expect(screen.getByTestId('task-original-interaction')).toHaveAttribute('data-state', 'unknown')
+  expect(f.client.respond).not.toHaveBeenCalled()
+})
+
+
+test('a peer resolving the original request before dispatch cannot publish the unsent local answer', async () => {
+  const f = await fixture()
+  fireEvent.change(screen.getByTestId('request-user-input-custom-choice'), {
+    target: { value: 'Unsent losing device answer' },
+  })
+  // The card was read as pending; another device wins before the response's
+  // authoritative native read. The runtime returns resolved without sending.
+  f.client.request.mockImplementation(async (_method, selector) => ({ ...selector, status: 'resolved' }))
+  f.submit()
+  await screen.findByText('states.resolved')
+  expect(f.client.respond).not.toHaveBeenCalled()
+  expect(screen.getByTestId('request-user-input-summary')).not.toHaveTextContent('Unsent losing device answer')
+  expect(screen.getByTestId('request-user-input-summary')).not.toHaveTextContent('Original source')
+  expect(screen.queryByTestId('request-user-input-card')).not.toBeInTheDocument()
+})
+
+test('a resolved receipt after a failed send cannot certify the unknown local answer', async () => {
+  const f = await fixture()
+  fireEvent.change(screen.getByTestId('request-user-input-custom-choice'), {
+    target: { value: 'Unknown device answer' },
+  })
+  f.client.respond.mockImplementationOnce(() => { throw new Error('socket send failed') })
+  f.submit()
+  await screen.findByText('states.unknown')
+  expect(screen.getByTestId('request-user-input-summary')).not.toHaveTextContent('Unknown device answer')
+  // Resolved also covers cancellation and another device's winning answer.
+  // It contains no accepted answer bytes and cannot confirm this local draft.
+  f.client.request.mockImplementation(async (_method, selector) => ({ ...selector, status: 'resolved' }))
+  f.refresh()
+  await screen.findByText('states.resolved')
+  expect(screen.getByTestId('request-user-input-summary')).not.toHaveTextContent('Unknown device answer')
+  expect(f.client.respond).toHaveBeenCalledOnce()
+  expect(screen.queryByTestId('request-user-input-card')).not.toBeInTheDocument()
+})

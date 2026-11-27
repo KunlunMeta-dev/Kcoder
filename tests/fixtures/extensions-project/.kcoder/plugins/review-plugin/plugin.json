@@ -1,0 +1,6 @@
+{
+  "id": "fixture-review-plugin",
+  "name": "Fixture Review Plugin",
+  "version": "1.0.0",
+  "enabled": true
+}

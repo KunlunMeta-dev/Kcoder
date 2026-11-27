@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "确认 fixture hook matcher 已加载，不执行外部操作。",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}

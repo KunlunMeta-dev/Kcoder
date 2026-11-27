@@ -1,0 +1,37 @@
+[package]
+name = "kcoder_turn_evidence"
+description = "Turn-owned file progress, capture records, and tool review evidence."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+dunce = { workspace = true }
+futures = { workspace = true }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_transcript = { path = "../transcript" }
+kcoder_transcript_observation = { path = "../transcript_observation" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+similar = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+async-stream = { workspace = true }
+tempfile = { workspace = true }
+
+[lib]
+path = "../../src/internal/turn_evidence/lib.rs"

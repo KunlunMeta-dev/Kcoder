@@ -1,0 +1,27 @@
+{
+  "source": "logo/icon.png",
+  "sourceSha256": "9533cbd698ce58671ec534d6bbe9c929e49c166fa527da6e3450571c70b49150",
+  "files": {
+    "desktop/icons/32x32.png": "492eabe2f15d57565484224e45b1c9df91d0f0dd54065336085b7e6340be983c",
+    "desktop/icons/128x128.png": "cea6d61bba99ebe0e5bb9d78e89cb16f3444a3e9e9ae9920566d842c1e89f2aa",
+    "desktop/icons/128x128@2x.png": "2317d8986c1b99e87c7d5827cf4d2eb27c5faaf8db600afa64a2d252acc34505",
+    "desktop/icons/icon.png": "5aa13e34a697f08d35ba975f586f172a2eb22407f5ec22e283db202667768843",
+    "desktop/icons/icon.ico": "6ef53014bcbb1a0027e346556185868a2178cef84af397a03b9a6d9eb38f6b7b",
+    "desktop/icons/icon.icns": "993f5f6539114ab30b4f98885674ada4ddecc9b2618cfdb6ec1c8945cb49be4a",
+    "renderer/src/assets/studio-icon.png": "2317d8986c1b99e87c7d5827cf4d2eb27c5faaf8db600afa64a2d252acc34505",
+    "renderer/public/favicon.png": "492eabe2f15d57565484224e45b1c9df91d0f0dd54065336085b7e6340be983c"
+  },
+  "sourceDimensions": {
+    "width": 1254,
+    "height": 1254
+  },
+  "derivations": {
+    "desktop/icons/icon.png": {
+      "source": "logo/icon.png",
+      "width": 512,
+      "height": 512,
+      "method": "electron-builder-icons-set",
+      "generatorVersion": "26.15.2"
+    }
+  }
+}

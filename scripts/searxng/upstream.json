@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/searxng/searxng",
+  "commit": "b00212a8366131936856b726ed4dd9bd281e4d7e",
+  "version": "2026.10.14+b00212a8",
+  "sourceUrl": "https://codeload.github.com/searxng/searxng/tar.gz/b00212a8366131936856b726ed4dd9bd281e4d7e",
+  "sourceSha256": "61fa1376b08f7a9a5f72dceae98fd2d7b606aa6c35f2bfefeabfd5c9663100dc",
+  "pythonVersion": "3.14.6",
+  "pythonBuildTool": "uv 0.12.17",
+  "platforms": {
+    "linux-x64": {"pythonKey": "cpython-3.14.6-linux-x86_64-gnu", "wheelPlatform": "x86_64-unknown-linux-gnu", "python": "python/bin/python3.14"},
+    "win-x64": {"pythonKey": "cpython-3.14.6-windows-x86_64-none", "wheelPlatform": "x86_64-pc-windows-msvc", "python": "python/python.exe"},
+    "mac-x64": {"pythonKey": "cpython-3.14.6-macos-x86_64-none", "wheelPlatform": "x86_64-apple-darwin", "python": "python/bin/python3.14"},
+    "mac-arm64": {"pythonKey": "cpython-3.14.6-macos-aarch64-none", "wheelPlatform": "aarch64-apple-darwin", "python": "python/bin/python3.14"}
+  },
+  "patches": ["Remove Unix-only user lookup from optional Valkey error logging; preserve failure reporting", "Freeze upstream version independently of the surrounding checkout"]
+}

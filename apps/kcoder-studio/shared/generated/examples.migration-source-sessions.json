@@ -1,0 +1,645 @@
+{
+  "MigrationSourceSessionCloseResult": [
+    {
+      "decoded": {
+        "status": "unknown"
+      },
+      "name": "unknown_cleanup",
+      "value": {
+        "status": "unknown"
+      }
+    },
+    {
+      "decoded": {
+        "status": "released"
+      },
+      "name": "released",
+      "value": {
+        "status": "released"
+      }
+    }
+  ],
+  "MigrationSourceSessionOpenParams": [
+    {
+      "decoded": {
+        "purpose": "source",
+        "sessionId": "22222222-2222-4222-8222-222222222222",
+        "targetId": "local"
+      },
+      "name": "explicit_owned_session",
+      "value": {
+        "purpose": "source",
+        "sessionId": "22222222-2222-4222-8222-222222222222",
+        "targetId": "local"
+      }
+    }
+  ],
+  "MigrationSourceSessionParams": [
+    {
+      "decoded": {
+        "purpose": "target_recovery",
+        "sessionId": "22222222-2222-4222-8222-222222222222",
+        "targetId": "local"
+      },
+      "name": "explicit_owned_session",
+      "value": {
+        "purpose": "target_recovery",
+        "sessionId": "22222222-2222-4222-8222-222222222222",
+        "targetId": "local"
+      }
+    }
+  ],
+  "MigrationSourceSessionQueryParams": [
+    {
+      "decoded": {
+        "query": {
+          "kind": "configuration",
+          "params": {
+            "includeProject": false,
+            "sources": [
+              "claude-code"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "configuration",
+      "value": {
+        "query": {
+          "kind": "configuration",
+          "params": {
+            "includeProject": false,
+            "sources": [
+              "claude-code"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "history",
+          "params": {
+            "source": "codex"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "history",
+      "value": {
+        "query": {
+          "kind": "history",
+          "params": {
+            "source": "codex"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "history_page",
+          "params": {
+            "catalogId": "catalog",
+            "cursor": null
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "history_page",
+      "value": {
+        "query": {
+          "kind": "history_page",
+          "params": {
+            "catalogId": "catalog",
+            "cursor": null
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "source_bindings",
+          "params": {
+            "sourceIds": [
+              "opaque"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "source_bindings",
+      "value": {
+        "query": {
+          "kind": "source_bindings",
+          "params": {
+            "sourceIds": [
+              "opaque"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "codex_layers_select",
+          "params": {
+            "includeProject": true,
+            "sourceId": "opaque-user"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "codex_layers_select",
+      "value": {
+        "query": {
+          "kind": "codex_layers_select",
+          "params": {
+            "includeProject": true,
+            "sourceId": "opaque-user"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "codex_layers_read",
+          "params": {
+            "pageIndex": 1,
+            "sourceId": "opaque-layers"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "codex_layers_read",
+      "value": {
+        "query": {
+          "kind": "codex_layers_read",
+          "params": {
+            "pageIndex": 1,
+            "sourceId": "opaque-layers"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "directory_select",
+          "params": {
+            "directory": "/owned/product",
+            "selectionId": "11111111-1111-4111-8111-111111111111",
+            "source": "codex"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "explicit_directory_selection",
+      "value": {
+        "query": {
+          "kind": "directory_select",
+          "params": {
+            "directory": "/owned/product",
+            "selectionId": "11111111-1111-4111-8111-111111111111",
+            "source": "codex"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "uploaded_select",
+          "params": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "operationId": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "targetId": "local"
+        }
+      },
+      "name": "explicit uploaded selection",
+      "value": {
+        "query": {
+          "kind": "uploaded_select",
+          "params": {
+            "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "operationId": "11111111-1111-4111-8111-111111111111"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "configuration_layers_read",
+          "params": {
+            "pageIndex": 0,
+            "sourceId": "opaque"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "source_configuration_layers_only",
+      "value": {
+        "query": {
+          "kind": "configuration_layers_read",
+          "params": {
+            "pageIndex": 0,
+            "sourceId": "opaque"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "definitions",
+          "params": {
+            "includeProject": false,
+            "pageIndex": 0,
+            "sources": [
+              "claude-code"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "explicit_passive_definitions_catalog",
+      "value": {
+        "query": {
+          "kind": "definitions",
+          "params": {
+            "includeProject": false,
+            "pageIndex": 0,
+            "sources": [
+              "claude-code"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "plugins",
+          "params": {
+            "cursor": null,
+            "includeProject": true,
+            "sources": [
+              "claude-code"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "project_plugin_discovery_only",
+      "value": {
+        "query": {
+          "kind": "plugins",
+          "params": {
+            "includeProject": true,
+            "sources": [
+              "claude-code"
+            ]
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "instructions_capture",
+          "params": {
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+            "confirmStaticSubset": true,
+            "format": "static_v2",
+            "includeDescendants": false,
+            "source": "claude-code",
+            "sourceCwd": "/owned/source/project",
+            "sourceRoot": "/owned/source"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "targetId": "local",
+          "workspacePath": "/owned/source/project"
+        }
+      },
+      "name": "instructions_capture_source_only",
+      "value": {
+        "query": {
+          "kind": "instructions_capture",
+          "params": {
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+            "confirmStaticSubset": true,
+            "format": "static_v2",
+            "source": "claude-code",
+            "sourceCwd": "/owned/source/project",
+            "sourceRoot": "/owned/source"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "targetId": "local",
+          "workspacePath": "/owned/source/project"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "instructions_page",
+          "params": {
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+            "pageIndex": 0
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "targetId": "local",
+          "workspacePath": "/owned/source/project"
+        }
+      },
+      "name": "instructions_page_source_only",
+      "value": {
+        "query": {
+          "kind": "instructions_page",
+          "params": {
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+            "pageIndex": 0
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "targetId": "local",
+          "workspacePath": "/owned/source/project"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "instructions_body",
+          "params": {
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+            "itemId": "instruction-owned",
+            "offset": 0,
+            "representation": "compiled"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "targetId": "local",
+          "workspacePath": "/owned/source/project"
+        }
+      },
+      "name": "instructions_body_source_only",
+      "value": {
+        "query": {
+          "kind": "instructions_body",
+          "params": {
+            "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+            "itemId": "instruction-owned",
+            "offset": 0,
+            "representation": "compiled"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "targetId": "local",
+          "workspacePath": "/owned/source/project"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "projects",
+          "params": {
+            "source": "codex"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "projects_source_only",
+      "value": {
+        "query": {
+          "kind": "projects",
+          "params": {
+            "source": "codex"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "projects_page",
+          "params": {
+            "catalogId": "owned-catalog",
+            "pageIndex": 1
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "projects_page_source_only",
+      "value": {
+        "query": {
+          "kind": "projects_page",
+          "params": {
+            "catalogId": "owned-catalog",
+            "pageIndex": 1
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "query": {
+          "kind": "project_roots",
+          "params": {
+            "catalogId": "owned-catalog",
+            "pageIndex": 0,
+            "sourceHandle": "owned-handle"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      },
+      "name": "project_roots_source_only",
+      "value": {
+        "query": {
+          "kind": "project_roots",
+          "params": {
+            "catalogId": "owned-catalog",
+            "pageIndex": 0,
+            "sourceHandle": "owned-handle"
+          }
+        },
+        "session": {
+          "purpose": "source",
+          "sessionId": "22222222-2222-4222-8222-222222222222",
+          "targetId": "local"
+        }
+      }
+    }
+  ],
+  "MigrationSourceSessionStateResult": [
+    {
+      "decoded": {
+        "launching": false,
+        "ownedChildren": 1,
+        "status": "ready"
+      },
+      "name": "ready_owned_process",
+      "value": {
+        "launching": false,
+        "ownedChildren": 1,
+        "status": "ready"
+      }
+    },
+    {
+      "decoded": {
+        "launching": false,
+        "ownedChildren": 0,
+        "status": "released"
+      },
+      "name": "released",
+      "value": {
+        "launching": false,
+        "ownedChildren": 0,
+        "status": "released"
+      }
+    }
+  ]
+}

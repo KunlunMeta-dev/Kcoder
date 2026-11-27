@@ -1,0 +1,13 @@
+[package]
+name = "kcoder-question-reply-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+kcoder_app_protocol = { path = "../../../../kcoder_app_protocol" }
+serde_json = "=1.0.154"
+tokio = { version = "=1.52.3", features = ["sync"] }
+tracing = "=0.1.44"

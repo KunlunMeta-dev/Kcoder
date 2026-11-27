@@ -1,0 +1,7 @@
+{
+  "plugins": {
+    "installation": {
+      "allow_local": false
+    }
+  }
+}

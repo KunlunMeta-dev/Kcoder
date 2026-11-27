@@ -1,0 +1,91 @@
+{
+  "skill_name": "docx",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我写一个 Node.js 脚本，用 docx 库生成一份 A4 的《项目周报》Word 文档：标题、三个二级标题（本周进展、风险、下周计划），每节下面两三条项目符号，最后加一个两列的风险表（风险 / 负责人）。只给脚本和运行方式即可。",
+      "expected_output": "A CommonJS Node script that builds the report with the docx package and writes a .docx file, plus how to run and check it.",
+      "expectations": [
+        "Uses require('docx') (CommonJS), not an ESM import, and does not start with npm install",
+        "Bullets come from a numbering config with LevelFormat.BULLET instead of a literal bullet character",
+        "The table sets columnWidths on the table and a DXA width on every cell",
+        "Headings use HeadingLevel and the styles define each heading level used",
+        "Uses separate Paragraph elements instead of newline characters inside text",
+        "Explains how to render the result (for example to PDF and images) to verify it"
+      ],
+      "assertions": [
+        {
+          "contains": "docx"
+        },
+        {
+          "contains": "Paragraph"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I have contract.docx from an outside party. Replace every occurrence of \"Acme Ltd\" with \"Acme Holdings Ltd\" as tracked changes under my name \"Legal Team\", without changing anything else. Give me the exact steps and commands.",
+      "expected_output": "An unpack, edit-XML, rezip and validate plan that redlines the replacement with w:ins/w:del under the given author.",
+      "expectations": [
+        "Unpacks with Python zipfile rather than unzip, because the file comes from an external party",
+        "Runs merge_runs.py so the phrase can be found across split runs",
+        "Wraps the old text in w:del (with w:delText) and the new text in w:ins, with w:author set to Legal Team",
+        "Edits word/document.xml in place without pretty-printing",
+        "Validates with validate.py using --original and --author \"Legal Team\""
+      ],
+      "assertions": [
+        {
+          "contains": "merge_runs.py"
+        },
+        {
+          "contains": "validate.py"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "请把一份带修订痕迹的 proposal.docx 输出一个接受全部修订后的干净版本 clean.docx，并告诉我需要注意什么。",
+      "expected_output": "Uses accept_changes.py to produce the clean copy and warns about emptied paragraphs left behind by deleted paragraph marks.",
+      "expectations": [
+        "Uses scripts/accept_changes.py in.docx out.docx to accept all tracked changes",
+        "Mentions that a fully deleted paragraph can leave an empty paragraph or stray bullet in some tools",
+        "Suggests checking paragraph deletions in the XML or rendering the result"
+      ],
+      "assertions": [
+        {
+          "contains": "accept_changes.py"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Add a review comment \"Fee cap is too low\" anchored to the sentence that mentions the fee cap in agreement.docx. What do I run?",
+      "expected_output": "Uses scripts/comment.py and then places the printed comment range markers around the target text in document.xml.",
+      "expectations": [
+        "Uses scripts/comment.py rather than hand-writing the six comment parts",
+        "Explains that the printed commentRangeStart/commentRangeEnd/commentReference markers must be placed around the sentence in word/document.xml",
+        "Rezips and validates the document afterwards"
+      ],
+      "assertions": [
+        {
+          "contains": "comment.py"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "我只想快速看看 meeting-notes.docx 里有哪些标题和列表结构，不需要改它，怎么读最合适？",
+      "expected_output": "Reads with the read tool for paragraphs and tables, and uses pandoc to markdown when headings and lists matter.",
+      "expectations": [
+        "Recommends pandoc -t markdown to see headings and lists (or the read tool for plain paragraphs and tables)",
+        "Does not propose unpacking and editing XML for a read-only task",
+        "Does not modify the original file"
+      ],
+      "assertions": [
+        {
+          "contains": "pandoc"
+        }
+      ]
+    }
+  ]
+}

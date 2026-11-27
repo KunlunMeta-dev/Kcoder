@@ -1,0 +1,697 @@
+{
+  "MigrationBatchProjectSource": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "sourceHandle": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "catalogId",
+      "sourceHandle"
+    ],
+    "title": "MigrationBatchProjectSource",
+    "type": "object"
+  },
+  "MigrationProjectReceivedMetadata": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationProjectLabelOrigin": {
+        "enum": [
+          "registry_name",
+          "path_basename",
+          "original_id"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A manifest-bound label for a received project, never a target filesystem grant.",
+    "properties": {
+      "displayName": {
+        "type": "string"
+      },
+      "formatRevision": {
+        "type": "string"
+      },
+      "labelOrigin": {
+        "$ref": "#/definitions/MigrationProjectLabelOrigin"
+      },
+      "originalProjectId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "roots": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "displayName",
+      "formatRevision",
+      "labelOrigin",
+      "roots"
+    ],
+    "title": "MigrationProjectReceivedMetadata",
+    "type": "object"
+  },
+  "MigrationProjectReportParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "itemId",
+      "jobId"
+    ],
+    "title": "MigrationProjectReportParams",
+    "type": "object"
+  },
+  "MigrationProjectReportResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationProjectReportField": {
+        "enum": [
+          "source_format",
+          "original_project_id",
+          "source_name",
+          "source_root",
+          "source_order",
+          "source_created_at",
+          "source_updated_at",
+          "target_workspace",
+          "target_root",
+          "mapping_status"
+        ],
+        "type": "string"
+      },
+      "MigrationProjectReportRow": {
+        "additionalProperties": false,
+        "properties": {
+          "field": {
+            "$ref": "#/definitions/MigrationProjectReportField"
+          },
+          "ordinal": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceRootId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "value": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "field"
+        ],
+        "type": "object"
+      },
+      "MigrationProjectUnobserved": {
+        "enum": [
+          "vendor_metadata",
+          "source_trust",
+          "worktree_contents",
+          "session_recency",
+          "legacy_desktop_registry"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "fields": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectReportRow"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "itemId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalFields": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "unobserved": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectUnobserved"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "fields",
+      "itemId",
+      "jobId",
+      "pageIndex",
+      "totalFields",
+      "unobserved"
+    ],
+    "title": "MigrationProjectReportResult",
+    "type": "object"
+  },
+  "MigrationProjectSourceRootsParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceHandle": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "catalogId",
+      "sourceHandle"
+    ],
+    "title": "MigrationProjectSourceRootsParams",
+    "type": "object"
+  },
+  "MigrationProjectSourceRootsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationProjectSourceRoot": {
+        "additionalProperties": false,
+        "properties": {
+          "ordinal": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "originalPath": {
+            "description": "Preserved foreign path text. Neither source nor target directories are opened from this value.",
+            "type": "string"
+          },
+          "sourceRootId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ordinal",
+          "originalPath",
+          "sourceRootId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "roots": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectSourceRoot"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "sourceHandle": {
+        "type": "string"
+      },
+      "totalRoots": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "catalogId",
+      "pageIndex",
+      "roots",
+      "sourceHandle",
+      "totalRoots"
+    ],
+    "title": "MigrationProjectSourceRootsResult",
+    "type": "object"
+  },
+  "MigrationProjectSourcesResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationProjectDiscoveryProblem": {
+        "enum": [
+          "registry_unavailable",
+          "registry_unsupported",
+          "registry_busy",
+          "registry_budget_exceeded",
+          "registry_changed"
+        ],
+        "type": "string"
+      },
+      "MigrationProjectLabelOrigin": {
+        "enum": [
+          "registry_name",
+          "path_basename",
+          "original_id"
+        ],
+        "type": "string"
+      },
+      "MigrationProjectSourceSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "labelOrigin": {
+            "$ref": "#/definitions/MigrationProjectLabelOrigin"
+          },
+          "originalProjectId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "roots": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceCreatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceHandle": {
+            "type": "string"
+          },
+          "sourceUpdatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "displayName",
+          "labelOrigin",
+          "position",
+          "roots",
+          "sourceHandle"
+        ],
+        "type": "object"
+      },
+      "MigrationProjectUnobserved": {
+        "enum": [
+          "vendor_metadata",
+          "source_trust",
+          "worktree_contents",
+          "session_recency",
+          "legacy_desktop_registry"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "formatRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectSourceSummary"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "knownRowsComplete": {
+        "description": "Completeness concerns rows in this declared registry layout, not every vendor feature/version.",
+        "type": "boolean"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "problems": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectDiscoveryProblem"
+        },
+        "type": "array"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      },
+      "totalItems": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "unobserved": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectUnobserved"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "catalogId",
+      "items",
+      "knownRowsComplete",
+      "pageIndex",
+      "problems",
+      "source",
+      "totalItems",
+      "unobserved"
+    ],
+    "title": "MigrationProjectSourcesResult",
+    "type": "object"
+  },
+  "MigrationProjectTargetRootsParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "targetCatalogId": {
+        "type": "string"
+      },
+      "targetHandle": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "targetCatalogId",
+      "targetHandle"
+    ],
+    "title": "MigrationProjectTargetRootsParams",
+    "type": "object"
+  },
+  "MigrationProjectTargetRootsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationProjectTargetRoot": {
+        "additionalProperties": false,
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "ordinal": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "path": {
+            "type": "string"
+          },
+          "targetRootHandle": {
+            "type": "string"
+          },
+          "trusted": {
+            "description": "A display observation, never persistent trust or a replacement for the Native plan/run check.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available",
+          "ordinal",
+          "path",
+          "targetRootHandle",
+          "trusted"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "roots": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectTargetRoot"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "targetCatalogId": {
+        "type": "string"
+      },
+      "targetHandle": {
+        "type": "string"
+      },
+      "totalRoots": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "pageIndex",
+      "roots",
+      "targetCatalogId",
+      "targetHandle",
+      "totalRoots"
+    ],
+    "title": "MigrationProjectTargetRootsResult",
+    "type": "object"
+  },
+  "MigrationProjectTargetsParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "targetCatalogId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "MigrationProjectTargetsParams",
+    "type": "object"
+  },
+  "MigrationProjectTargetsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationProjectTargetSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "currentWorkspace": {
+            "type": "boolean"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "roots": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "targetHandle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "currentWorkspace",
+          "displayName",
+          "roots",
+          "targetHandle"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationProjectTargetSummary"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pageIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "registeredWorkspacesObserved": {
+        "type": "boolean"
+      },
+      "targetCatalogId": {
+        "type": "string"
+      },
+      "totalItems": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "pageIndex",
+      "registeredWorkspacesObserved",
+      "targetCatalogId",
+      "totalItems"
+    ],
+    "title": "MigrationProjectTargetsResult",
+    "type": "object"
+  },
+  "MigrationProjectsDiscoverParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      }
+    },
+    "required": [
+      "source"
+    ],
+    "title": "MigrationProjectsDiscoverParams",
+    "type": "object"
+  },
+  "MigrationProjectsSourcesParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "catalogId"
+    ],
+    "title": "MigrationProjectsSourcesParams",
+    "type": "object"
+  }
+}

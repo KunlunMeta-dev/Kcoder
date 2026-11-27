@@ -1,0 +1,788 @@
+{
+  "BrowserAccountProfile": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BrowserAccountProfileDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "accountLabel": {
+            "description": "User-provided label; it is not a verified website identity.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/definitions/BrowserProfilePurpose"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "purpose"
+        ],
+        "type": "object"
+      },
+      "BrowserProfilePurpose": {
+        "enum": [
+          "personal",
+          "business",
+          "other"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "archived": {
+        "type": "boolean"
+      },
+      "draft": {
+        "$ref": "#/definitions/BrowserAccountProfileDraft"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "archived",
+      "draft",
+      "revision"
+    ],
+    "title": "BrowserAccountProfile",
+    "type": "object"
+  },
+  "BrowserAccountProfileDraft": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BrowserProfilePurpose": {
+        "enum": [
+          "personal",
+          "business",
+          "other"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "accountLabel": {
+        "description": "User-provided label; it is not a verified website identity.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      },
+      "purpose": {
+        "$ref": "#/definitions/BrowserProfilePurpose"
+      }
+    },
+    "required": [
+      "id",
+      "label",
+      "purpose"
+    ],
+    "title": "BrowserAccountProfileDraft",
+    "type": "object"
+  },
+  "BrowserAccountProfilePage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BrowserAccountProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "archived": {
+            "type": "boolean"
+          },
+          "draft": {
+            "$ref": "#/definitions/BrowserAccountProfileDraft"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "archived",
+          "draft",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "BrowserAccountProfileDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "accountLabel": {
+            "description": "User-provided label; it is not a verified website identity.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/definitions/BrowserProfilePurpose"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "purpose"
+        ],
+        "type": "object"
+      },
+      "BrowserProfilePurpose": {
+        "enum": [
+          "personal",
+          "business",
+          "other"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/BrowserAccountProfile"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "title": "BrowserAccountProfilePage",
+    "type": "object"
+  },
+  "BrowserControlMode": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "automation",
+      "human"
+    ],
+    "title": "BrowserControlMode",
+    "type": "string"
+  },
+  "BrowserControlReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "session_id": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "session_id"
+    ],
+    "title": "BrowserControlReadParams",
+    "type": "object"
+  },
+  "BrowserHandoffParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BrowserControlMode": {
+        "enum": [
+          "automation",
+          "human"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "mode": {
+        "$ref": "#/definitions/BrowserControlMode"
+      },
+      "sessionId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "mode",
+      "sessionId"
+    ],
+    "title": "BrowserHandoffParams",
+    "type": "object"
+  },
+  "BrowserHandoffState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BrowserControlMode": {
+        "enum": [
+          "automation",
+          "human"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "mode": {
+        "$ref": "#/definitions/BrowserControlMode"
+      },
+      "observedUrl": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sessionId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "mode",
+      "observedUrl",
+      "revision",
+      "sessionId"
+    ],
+    "title": "BrowserHandoffState",
+    "type": "object"
+  },
+  "BrowserHumanActionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BrowserActionParams": {
+        "oneOf": [
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "navigate"
+                ],
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "url"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "reload"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "back"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "forward"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "action"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "resize"
+                ],
+                "type": "string"
+              },
+              "height": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "width": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "action",
+              "height",
+              "width"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "click"
+                ],
+                "type": "string"
+              },
+              "x": {
+                "format": "double",
+                "type": "number"
+              },
+              "y": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "action",
+              "x",
+              "y"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "wheel"
+                ],
+                "type": "string"
+              },
+              "delta_x": {
+                "format": "double",
+                "type": "number"
+              },
+              "delta_y": {
+                "format": "double",
+                "type": "number"
+              },
+              "x": {
+                "format": "double",
+                "type": "number"
+              },
+              "y": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "action",
+              "delta_x",
+              "delta_y",
+              "x",
+              "y"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "pointer_move"
+                ],
+                "type": "string"
+              },
+              "x": {
+                "format": "double",
+                "type": "number"
+              },
+              "y": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "action",
+              "x",
+              "y"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "pointer_down"
+                ],
+                "type": "string"
+              },
+              "x": {
+                "format": "double",
+                "type": "number"
+              },
+              "y": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "action",
+              "x",
+              "y"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "pointer_up"
+                ],
+                "type": "string"
+              },
+              "x": {
+                "format": "double",
+                "type": "number"
+              },
+              "y": {
+                "format": "double",
+                "type": "number"
+              }
+            },
+            "required": [
+              "action",
+              "x",
+              "y"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "text"
+                ],
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "text"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "key"
+                ],
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "key"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "action": {
+                "enum": [
+                  "shortcut"
+                ],
+                "type": "string"
+              },
+              "key": {
+                "type": "string"
+              },
+              "modifiers": {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "action",
+              "key",
+              "modifiers"
+            ],
+            "type": "object"
+          }
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "action": {
+        "$ref": "#/definitions/BrowserActionParams"
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "action",
+      "expectedRevision"
+    ],
+    "title": "BrowserHumanActionParams",
+    "type": "object"
+  },
+  "BrowserProfilePurpose": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "personal",
+      "business",
+      "other"
+    ],
+    "title": "BrowserProfilePurpose",
+    "type": "string"
+  },
+  "BrowserProfileSelection": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "profileId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "operationId",
+      "profileId",
+      "scope"
+    ],
+    "title": "BrowserProfileSelection",
+    "type": "object"
+  },
+  "BrowserProfilesArchiveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "archived": {
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "profileId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "archived",
+      "expectedRevision",
+      "profileId"
+    ],
+    "title": "BrowserProfilesArchiveParams",
+    "type": "object"
+  },
+  "BrowserProfilesListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "after": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "includeArchived": {
+        "default": false,
+        "type": "boolean"
+      }
+    },
+    "title": "BrowserProfilesListParams",
+    "type": "object"
+  },
+  "BrowserProfilesMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/browserProfiles/list",
+      "integrations/browserProfiles/save",
+      "integrations/browserProfiles/setArchived"
+    ],
+    "title": "BrowserProfilesMethod",
+    "type": "string"
+  },
+  "BrowserProfilesSaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "BrowserAccountProfileDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "accountLabel": {
+            "description": "User-provided label; it is not a verified website identity.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "purpose": {
+            "$ref": "#/definitions/BrowserProfilePurpose"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "purpose"
+        ],
+        "type": "object"
+      },
+      "BrowserProfilePurpose": {
+        "enum": [
+          "personal",
+          "business",
+          "other"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "draft": {
+        "$ref": "#/definitions/BrowserAccountProfileDraft"
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "draft",
+      "expectedRevision"
+    ],
+    "title": "BrowserProfilesSaveParams",
+    "type": "object"
+  }
+}

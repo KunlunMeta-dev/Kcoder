@@ -1,0 +1,32 @@
+[package]
+name = "kcoder_acp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+outbound-owned-tests = []
+
+[dependencies]
+agent-client-protocol = { version = "=3.3.0", default-features = false }
+agent-client-protocol-schema = { version = "=1.11.0", default-features = false }
+kcoder_app_protocol = { path = "../kcoder_app_protocol" }
+kcoder_types = { path = "../kcoder_types" }
+kcoder_process_supervisor = { path = "../kcoder_process_supervisor" }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[dev-dependencies]
+kcoder_test_harness = { path = "../../tests/harness" }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

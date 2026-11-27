@@ -1,0 +1,558 @@
+{
+  "ExtensionConflictsPreviewParams": [
+    {
+      "decoded": {
+        "mcpServerNames": [],
+        "pluginId": "lark@trae",
+        "skillNames": []
+      },
+      "name": "installed",
+      "value": {
+        "pluginId": "lark@trae"
+      }
+    },
+    {
+      "decoded": {
+        "mcpServerNames": [
+          "lark"
+        ],
+        "pluginId": "lark@qoder",
+        "skillNames": [
+          "lark-doc"
+        ]
+      },
+      "name": "declared-names",
+      "value": {
+        "mcpServerNames": [
+          "lark"
+        ],
+        "pluginId": "lark@qoder",
+        "skillNames": [
+          "lark-doc"
+        ]
+      }
+    }
+  ],
+  "ExtensionConflictsPreviewResult": [
+    {
+      "decoded": {
+        "conflicts": [
+          {
+            "kind": "skill",
+            "missing": [
+              "lark-im"
+            ],
+            "name": "lark",
+            "pluginId": "lark@qoder",
+            "provided": [
+              "lark-doc"
+            ],
+            "reason": "mixed_family"
+          }
+        ],
+        "entries": [
+          {
+            "existing": {
+              "layer": "bundled",
+              "path": "~/.kcoder/skills/.builtin/lark-doc/SKILL.md"
+            },
+            "kind": "skill",
+            "name": "lark-doc",
+            "outcome": "shadowed_by_existing",
+            "sameUpstream": true
+          },
+          {
+            "existing": {
+              "layer": "user"
+            },
+            "kind": "mcp_server",
+            "name": "plugin.lark@trae.lark",
+            "outcome": "coexists"
+          }
+        ]
+      },
+      "name": "shadowed-by-bundled",
+      "value": {
+        "conflicts": [
+          {
+            "kind": "skill",
+            "missing": [
+              "lark-im"
+            ],
+            "name": "lark",
+            "pluginId": "lark@qoder",
+            "provided": [
+              "lark-doc"
+            ],
+            "reason": "mixed_family"
+          }
+        ],
+        "entries": [
+          {
+            "existing": {
+              "layer": "bundled",
+              "path": "~/.kcoder/skills/.builtin/lark-doc/SKILL.md"
+            },
+            "kind": "skill",
+            "name": "lark-doc",
+            "outcome": "shadowed_by_existing",
+            "sameUpstream": true
+          },
+          {
+            "existing": {
+              "layer": "user"
+            },
+            "kind": "mcp_server",
+            "name": "plugin.lark@trae.lark",
+            "outcome": "coexists"
+          }
+        ]
+      }
+    }
+  ],
+  "ExtensionPluginSkillsResult": [
+    {
+      "decoded": {
+        "appliesToNewConversations": true,
+        "changed": true,
+        "generation": 4,
+        "pluginId": "lark@trae",
+        "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "skillsEnabled": false
+      },
+      "name": "disabled",
+      "value": {
+        "appliesToNewConversations": true,
+        "changed": true,
+        "generation": 4,
+        "pluginId": "lark@trae",
+        "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "skillsEnabled": false
+      }
+    }
+  ],
+  "ExtensionPluginSkillsSetEnabledParams": [
+    {
+      "decoded": {
+        "enabled": false,
+        "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pluginId": "lark@trae"
+      },
+      "name": "disable-checked",
+      "value": {
+        "enabled": false,
+        "expectedRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "pluginId": "lark@trae"
+      }
+    },
+    {
+      "decoded": {
+        "enabled": true,
+        "pluginId": "lark@trae"
+      },
+      "name": "enable-unconditional",
+      "value": {
+        "enabled": true,
+        "pluginId": "lark@trae"
+      }
+    }
+  ],
+  "ExtensionSkillPreferenceResult": [
+    {
+      "decoded": {
+        "appliesToNewConversations": true,
+        "preference": {
+          "preferPluginSkills": {
+            "lark-doc": "lark@trae"
+          },
+          "preferPlugins": []
+        },
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "saved",
+      "value": {
+        "appliesToNewConversations": true,
+        "preference": {
+          "preferPluginSkills": {
+            "lark-doc": "lark@trae"
+          },
+          "preferPlugins": []
+        },
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ],
+  "ExtensionSkillPreferenceUpdateParams": [
+    {
+      "decoded": {
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preference": {
+          "preferPluginSkills": {
+            "lark-doc": "lark@trae"
+          },
+          "preferPlugins": []
+        }
+      },
+      "name": "per-name",
+      "value": {
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preference": {
+          "preferPluginSkills": {
+            "lark-doc": "lark@trae"
+          },
+          "preferPlugins": []
+        }
+      }
+    },
+    {
+      "decoded": {
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preference": {
+          "preferPluginSkills": {},
+          "preferPlugins": []
+        }
+      },
+      "name": "clear",
+      "value": {
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preference": {}
+      }
+    }
+  ],
+  "ExtensionsInventoryParams": [
+    {
+      "decoded": {
+        "includeBinaries": false
+      },
+      "name": "default",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "includeBinaries": true
+      },
+      "name": "binaries",
+      "value": {
+        "includeBinaries": true
+      }
+    }
+  ],
+  "ExtensionsInventoryResult": [
+    {
+      "decoded": {
+        "appliesToNewConversations": true,
+        "binariesIncluded": true,
+        "conflicts": [
+          {
+            "effective": {
+              "layer": "bundled"
+            },
+            "kind": "skill",
+            "name": "lark-doc",
+            "reason": "same_name",
+            "sameUpstream": true,
+            "shadowed": [
+              {
+                "layer": "plugin",
+                "ownerPluginId": "lark@trae"
+              }
+            ]
+          },
+          {
+            "kind": "skill",
+            "missing": [
+              "lark-im"
+            ],
+            "name": "lark",
+            "pluginId": "lark@qoder",
+            "provided": [
+              "lark-doc"
+            ],
+            "reason": "mixed_family"
+          }
+        ],
+        "hookIssues": [
+          {
+            "event": "PreToolUse",
+            "layer": "project",
+            "location": "hooks.PreToolUse[1].hooks[0]",
+            "message": "Unsupported Hook action type",
+            "path": "~/work/.kcoder/settings.json",
+            "severity": "error"
+          }
+        ],
+        "items": [
+          {
+            "effective": true,
+            "enabled": true,
+            "family": "lark",
+            "id": "skill:bundled::lark-doc",
+            "kind": "skill",
+            "layer": "bundled",
+            "name": "lark-doc",
+            "path": "~/.kcoder/skills/.builtin/lark-doc/SKILL.md",
+            "shadows": [
+              {
+                "layer": "plugin",
+                "ownerPluginId": "lark@trae",
+                "path": "~/.kcoder/plugins/cache/lark/skills/lark-doc/SKILL.md"
+              }
+            ],
+            "upstream": {
+              "ref": "v1.0.100",
+              "repository": "https://github.com/larksuite/cli",
+              "version": "1.0.100"
+            },
+            "version": "1.0.100"
+          },
+          {
+            "effective": false,
+            "enabled": true,
+            "family": "lark",
+            "id": "skill:plugin:lark@trae:lark-doc",
+            "kind": "skill",
+            "layer": "plugin",
+            "marketplaceId": "trae",
+            "name": "lark-doc",
+            "ownerPluginId": "lark@trae",
+            "path": "~/.kcoder/plugins/cache/lark/skills/lark-doc/SKILL.md",
+            "shadowedBy": {
+              "layer": "bundled",
+              "path": "~/.kcoder/skills/.builtin/lark-doc/SKILL.md"
+            },
+            "upstream": {
+              "ref": "v1.0.8",
+              "repository": "https://github.com/larksuite/cli",
+              "version": "1.0.8"
+            },
+            "version": "1.0.8"
+          },
+          {
+            "disabledBy": "policy",
+            "effective": false,
+            "enabled": false,
+            "id": "mcp_server:plugin:lark@trae:plugin.lark@trae.lark",
+            "kind": "mcp_server",
+            "layer": "plugin",
+            "name": "plugin.lark@trae.lark",
+            "ownerPluginId": "lark@trae"
+          },
+          {
+            "count": 2,
+            "detail": "PreToolUse",
+            "effective": true,
+            "enabled": true,
+            "id": "hook:user::PreToolUse",
+            "kind": "hook",
+            "layer": "user",
+            "name": "PreToolUse",
+            "path": "~/.kcoder/settings.json"
+          },
+          {
+            "bundled": true,
+            "detail": "Feishu/Lark skills",
+            "effective": true,
+            "enabled": true,
+            "id": "binary:bundled::lark-cli",
+            "kind": "binary",
+            "layer": "bundled",
+            "name": "lark-cli",
+            "path": "/opt/KCoder Studio/resources/lark-cli/lark-cli",
+            "version": "1.0.100"
+          },
+          {
+            "count": 2,
+            "detail": "managed",
+            "effective": true,
+            "enabled": true,
+            "id": "plugin:plugin:lark@trae:lark",
+            "kind": "plugin",
+            "layer": "plugin",
+            "marketplaceId": "trae",
+            "name": "lark",
+            "ownerPluginId": "lark@trae",
+            "skillPolicyRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "skillsEnabled": false
+          }
+        ],
+        "pluginSkillPolicy": true,
+        "skillPreference": {
+          "preferPluginSkills": {
+            "lark-doc": "lark@trae"
+          },
+          "preferPlugins": []
+        },
+        "skillPreferenceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "lark-shadowed",
+      "value": {
+        "appliesToNewConversations": true,
+        "binariesIncluded": true,
+        "conflicts": [
+          {
+            "effective": {
+              "layer": "bundled"
+            },
+            "kind": "skill",
+            "name": "lark-doc",
+            "reason": "same_name",
+            "sameUpstream": true,
+            "shadowed": [
+              {
+                "layer": "plugin",
+                "ownerPluginId": "lark@trae"
+              }
+            ]
+          },
+          {
+            "kind": "skill",
+            "missing": [
+              "lark-im"
+            ],
+            "name": "lark",
+            "pluginId": "lark@qoder",
+            "provided": [
+              "lark-doc"
+            ],
+            "reason": "mixed_family"
+          }
+        ],
+        "hookIssues": [
+          {
+            "event": "PreToolUse",
+            "layer": "project",
+            "location": "hooks.PreToolUse[1].hooks[0]",
+            "message": "Unsupported Hook action type",
+            "path": "~/work/.kcoder/settings.json",
+            "severity": "error"
+          }
+        ],
+        "items": [
+          {
+            "effective": true,
+            "enabled": true,
+            "family": "lark",
+            "id": "skill:bundled::lark-doc",
+            "kind": "skill",
+            "layer": "bundled",
+            "name": "lark-doc",
+            "path": "~/.kcoder/skills/.builtin/lark-doc/SKILL.md",
+            "shadows": [
+              {
+                "layer": "plugin",
+                "ownerPluginId": "lark@trae",
+                "path": "~/.kcoder/plugins/cache/lark/skills/lark-doc/SKILL.md"
+              }
+            ],
+            "upstream": {
+              "ref": "v1.0.100",
+              "repository": "https://github.com/larksuite/cli",
+              "version": "1.0.100"
+            },
+            "version": "1.0.100"
+          },
+          {
+            "effective": false,
+            "enabled": true,
+            "family": "lark",
+            "id": "skill:plugin:lark@trae:lark-doc",
+            "kind": "skill",
+            "layer": "plugin",
+            "marketplaceId": "trae",
+            "name": "lark-doc",
+            "ownerPluginId": "lark@trae",
+            "path": "~/.kcoder/plugins/cache/lark/skills/lark-doc/SKILL.md",
+            "shadowedBy": {
+              "layer": "bundled",
+              "path": "~/.kcoder/skills/.builtin/lark-doc/SKILL.md"
+            },
+            "upstream": {
+              "ref": "v1.0.8",
+              "repository": "https://github.com/larksuite/cli",
+              "version": "1.0.8"
+            },
+            "version": "1.0.8"
+          },
+          {
+            "disabledBy": "policy",
+            "effective": false,
+            "enabled": false,
+            "id": "mcp_server:plugin:lark@trae:plugin.lark@trae.lark",
+            "kind": "mcp_server",
+            "layer": "plugin",
+            "name": "plugin.lark@trae.lark",
+            "ownerPluginId": "lark@trae"
+          },
+          {
+            "count": 2,
+            "detail": "PreToolUse",
+            "effective": true,
+            "enabled": true,
+            "id": "hook:user::PreToolUse",
+            "kind": "hook",
+            "layer": "user",
+            "name": "PreToolUse",
+            "path": "~/.kcoder/settings.json"
+          },
+          {
+            "bundled": true,
+            "detail": "Feishu/Lark skills",
+            "effective": true,
+            "enabled": true,
+            "id": "binary:bundled::lark-cli",
+            "kind": "binary",
+            "layer": "bundled",
+            "name": "lark-cli",
+            "path": "/opt/KCoder Studio/resources/lark-cli/lark-cli",
+            "version": "1.0.100"
+          },
+          {
+            "count": 2,
+            "detail": "managed",
+            "effective": true,
+            "enabled": true,
+            "id": "plugin:plugin:lark@trae:lark",
+            "kind": "plugin",
+            "layer": "plugin",
+            "marketplaceId": "trae",
+            "name": "lark",
+            "ownerPluginId": "lark@trae",
+            "skillPolicyRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "skillsEnabled": false
+          }
+        ],
+        "pluginSkillPolicy": true,
+        "skillPreference": {
+          "preferPluginSkills": {
+            "lark-doc": "lark@trae"
+          },
+          "preferPlugins": []
+        },
+        "skillPreferenceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    {
+      "decoded": {
+        "appliesToNewConversations": true,
+        "binariesIncluded": false,
+        "conflicts": [],
+        "hookIssues": [],
+        "items": [],
+        "skillPreference": {
+          "preferPluginSkills": {},
+          "preferPlugins": []
+        },
+        "skillPreferenceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "name": "legacy-without-hook-issues",
+      "value": {
+        "appliesToNewConversations": true,
+        "binariesIncluded": false,
+        "conflicts": [],
+        "items": [],
+        "skillPreference": {},
+        "skillPreferenceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  ]
+}

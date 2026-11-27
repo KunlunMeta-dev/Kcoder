@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { createGatewayToken, studioDataDirectory, studioLoginUrlPath, writeStudioLoginUrl } from '../src/studio-login-link.js';
+
+test('writes a replaceable login URL and preserves unchanged files', async t => {
+  const home = await mkdtemp(join(tmpdir(), 'kcoder-studio-login-link-'));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const urlPath = studioLoginUrlPath({ home });
+  assert.equal(urlPath, join(home, '.config', 'kcoder-studio', 'studio-login-url.txt'));
+  const first = await writeStudioLoginUrl('http://127.0.0.1:4173/login?token=first', { home });
+  const unchanged = await writeStudioLoginUrl('http://127.0.0.1:4173/login?token=first', { home });
+  assert.equal(first.updated, true);
+  assert.equal(unchanged.updated, false);
+  assert.equal(await readFile(urlPath, 'utf8'), 'http://127.0.0.1:4173/login?token=first\n');
+  await writeStudioLoginUrl('https://relay.example/g/one/login?token=second', { home });
+  assert.equal(await readFile(urlPath, 'utf8'), 'https://relay.example/g/one/login?token=second\n');
+});
+
+test('generates an auth token unless an explicit token or test-only bypass is set', () => {
+  assert.equal(createGatewayToken({ KCODER_STUDIO_AUTH_TOKEN: 'configured' }), 'configured');
+  assert.equal(createGatewayToken({ NODE_ENV: 'test', KCODER_STUDIO_TEST_DISABLE_AUTH: '1' }), '');
+  const token = createGatewayToken({});
+  assert.match(token, /^[A-Za-z0-9_-]{43}$/);
+});
+
+test('uses USERPROFILE for the Windows login-link path', () => {
+  assert.equal(studioLoginUrlPath({ platform: 'win32', home: 'C:\\Users\\Alice' }), 'C:\\Users\\Alice\\.config\\kcoder-studio\\studio-login-url.txt');
+  assert.equal(studioDataDirectory({ platform: 'win32', serversStore: 'C:\\StudioData\\servers.json' }), 'C:\\StudioData');
+  assert.equal(studioLoginUrlPath({ platform: 'linux', serversStore: '/var/lib/kcoder/servers.json' }), '/var/lib/kcoder/studio-login-url.txt');
+});
+
+test('explicit Gateway data directory is independent of the target registry and target profile', () => {
+  for (const platform of ['linux', 'darwin']) {
+    assert.equal(studioDataDirectory({ platform, dataDirectory: '/private/gateway', serversStore: '/registry/servers.json' }), '/private/gateway');
+    assert.equal(studioLoginUrlPath({ platform, dataDirectory: '/private/gateway', serversStore: '/another/servers.json' }), '/private/gateway/studio-login-url.txt');
+  }
+  assert.equal(studioDataDirectory({ platform: 'win32', dataDirectory: 'D:\\Gateway', serversStore: 'C:\\Registry\\servers.json' }), 'D:\\Gateway');
+  for (const dataDirectory of ['relative/path', ' ', 3]) {
+    assert.throws(() => studioDataDirectory({ platform: 'linux', dataDirectory }), /must be an absolute path/);
+  }
+  assert.throws(() => studioDataDirectory({ platform: 'win32', dataDirectory: 'C:relative' }), /must be an absolute path/);
+  assert.equal(studioDataDirectory({ platform: 'linux', dataDirectory: '', serversStore: '/existing/servers.json' }), '/existing');
+});

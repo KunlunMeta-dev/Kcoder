@@ -1,0 +1,2866 @@
+import { AssistantErrorCard } from './AssistantErrorCard'
+import { EvolutionTurnRating } from './EvolutionTurnRating'
+import { SKILL_MENTION_TARGET_PATTERN } from '@/lib/local-skill-reference'
+import { PeerAgentMessage } from './PeerAgentMessage'
+import { isConversationMentionUri } from '@/lib/conversation-mentions'
+import { normalizeReviewEvidence } from '../../../../shared/reviewEvidence'
+import { useWidgetMessageActivity } from './widgets/widgetContext'
+import { WidgetMessageBoundary, WidgetMessageArtifacts } from './widgets/WidgetMessageBoundary'
+import { conversationBlockGap } from '../../../../shared/conversationReading'
+import { isActiveToolCallStatus } from '@wegent/chat-core'
+import { Fragment, memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
+import type { VirtualItem } from '@tanstack/react-virtual'
+import type {
+  CSSProperties,
+  MouseEvent as ReactMouseEvent,
+  ReactNode,
+  RefObject,
+  TransitionEvent as ReactTransitionEvent,
+} from 'react'
+import {
+  Braces,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  File as FileIcon,
+  FileText,
+  Folder,
+  LibraryBig,
+  ListTodo,
+  MessageCircle,
+  MessageSquare,
+  Package,
+  PackageOpen,
+  Pencil,
+  Target,
+} from 'lucide-react'
+import type {
+  Attachment,
+  RuntimeTaskAddress,
+  DeviceInfo,
+  RequestUserInputResponse,
+  TurnFileChangesSummary,
+} from '@/types/api'
+import { useTranslation } from '@/hooks/useTranslation'
+import type { ProcessingBlock, WorkbenchMessage } from '@/types/workbench'
+import type { WorkspaceFileOpenOptions } from '@/types/workspace-files'
+import {
+  getAttachmentTextPreview,
+  getAttachmentTypeLabel,
+  isImageAttachment,
+  isTextAttachment,
+} from '@/lib/attachments'
+import { openLocalFile } from '@/lib/local-terminal'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
+import { splitRuntimeUserMessage, visibleRuntimeUserMessage } from '@/lib/runtime-user-message'
+import { isIMSource } from '@/lib/im-source'
+import { isImeEnterEvent } from '@/lib/ime'
+import { ImSourceBadge } from '@/components/common/ImSourceBadge'
+import { cn } from '@/lib/utils'
+import { AssistantMarkdown } from './AssistantMarkdown'
+import { AssistantThinkingIndicator } from './AssistantThinkingIndicator'
+import { resolveAssistantReplyTypography } from './assistantReplyTypography'
+import { ProviderRetryStatus } from './ProviderRetryStatus'
+import { useProviderRetryActivity } from './useProviderRetryActivity'
+import { useGeneratingToolBlocks } from './useGeneratingToolBlocks'
+import { AssistantThinkingDetails } from './AssistantThinkingDetails'
+import { ProcessingGroup } from './ProcessingWindow'
+import { TurnProcessSummary } from './TurnProcessSummary'
+import { ProcessActivityGroup } from './ProcessActivityGroup'
+import { useTurnProcessNow } from './useTurnProcessTime'
+import {
+  buildTurnProcessPresentations,
+  projectTerminalProcessBlocks,
+  turnProcessDisclosureKey,
+  type TurnProcessPresentation,
+} from './turnProcessPresentation'
+import { AttachmentImagePreview } from './AttachmentImagePreview'
+import { ToolBlocksDisplay } from './blocks/ToolBlocksDisplay'
+import { getDurationText } from './blocks/processingDuration'
+import {
+  usePersistentProcessingExpansion,
+  useProcessingExpansionSnapshot,
+} from './blocks/processingExpansionState'
+import { useConversationPreferences } from '@/features/appearance/useConversationPreferences'
+import { isContextCompactionToolName, isGuidanceToolName } from './blocks/toolBlockKinds'
+import {
+  CODEX_IMPLEMENT_PLAN_RESPONSE_LABEL,
+  isPendingRequestUserInputBlock,
+  isRequestUserInputBlock,
+  requestUserInputBlockKey,
+} from './requestUserInputMessages'
+import { RequestUserInputCard, type RequestUserInputPayload } from './RequestUserInputCard'
+import { buildProcessingDisplayRows, isWebSearchToolName } from './blocks/toolBlockActivity'
+import { WebSearchSourcesChip } from './blocks/WebSearchSources'
+import { getWebSearchSourceItems } from './blocks/webSearchActivity'
+import { CodexMemoryCitations, CodexReferenceList } from './CodexTurnArtifacts'
+import { getAssistantReferences } from './codexReferences'
+import { FileChangesCard } from './FileChangesCard'
+import { normalizeTurnFileCapture } from '../../../../shared/turnFileCapture'
+import { composerPathReference, composerSkillFilePath } from './composer/composerMentions'
+import { getMessagePretextIntrinsicHeight } from './messagePretextLayout'
+import { adjustVirtualMessageAboveViewport } from './messageVirtualScroll'
+import { getMessageWidgetOwnership, type MessageWidgetOwnership } from './messageWidgetOwnership'
+import type { AssistantPlanOpenRequest } from './AssistantPlanCard'
+import {
+  cacheConversationVirtualMeasurements,
+  getConversationVirtualMeasurements,
+} from '@/features/workbench/runtimeConversationCache'
+
+interface MessageListProps {
+  peerMessageAddress?: RuntimeTaskAddress
+  messages: WorkbenchMessage[]
+  scrollElementRef?: RefObject<HTMLDivElement | null>
+  initialDistanceFromBottomPx?: number
+  followBottom?: boolean
+  className?: string
+  conversationKey?: string | number | null
+  processingWindowEnabled?: boolean
+  /** Authoritative child run identity for presentation only; never an Engine attempt ID. */
+  processRunId?: string
+  isWaitingForAssistant?: boolean
+  providerRetryTarget?: string
+  providerRetryTask?: string
+  disableContentVisibility?: boolean
+  forceVirtualMessageId?: string | null
+  devices?: DeviceInfo[]
+  onRetryFailedMessage?: (message: WorkbenchMessage) => void
+  onSwitchModelForFailedMessage?: (message: WorkbenchMessage) => void
+  onLoadFileChangesDiff?: (
+    subtaskId: string,
+    fileChanges?: TurnFileChangesSummary
+  ) => Promise<{ diff: string; truncated: boolean }>
+  onRevertFileChanges?: (
+    subtaskId: string,
+    fileChanges?: TurnFileChangesSummary
+  ) => Promise<TurnFileChangesSummary>
+  onOpenFileChangesReview?: (request: {
+    subtaskId: string
+    loadDiff: () => Promise<{ diff: string; truncated: boolean }>
+    reviewTitle?: string
+    defaultFileTreeVisible?: boolean
+    focusFilePath?: string
+  }) => void
+  fileChangesDiffPreviewDisabledSubtaskId?: string | null
+  onOpenWorkspaceFile?: (path: string, options?: WorkspaceFileOpenOptions) => void
+  onOpenLocalSkillFile?: (path: string) => void
+  onRequestUserInputSubmit?: (response: RequestUserInputResponse) => void
+  onRequestUserInputIgnore?: (payload: RequestUserInputPayload) => void
+  onOpenAssistantPlan?: (request: AssistantPlanOpenRequest) => void
+  onEditLastUserMessage?: (
+    message: WorkbenchMessage,
+    content: string
+  ) => Promise<boolean | void> | boolean | void
+  canEditLastUserMessage?: boolean
+  onForkMessage?: (message: WorkbenchMessage) => Promise<void> | void
+  onLoadFullTranscript?: () => Promise<void> | void
+  loadingFullTranscript?: boolean
+  hideRequestUserInputBlocks?: boolean
+  hiddenRequestUserInputIds?: ReadonlySet<string>
+  onAddSelectionToConversation?: (text: string) => void
+  onAskSelectionInSidebar?: (text: string) => void
+  renderGapAfterMessage?: (
+    message: WorkbenchMessage,
+    nextMessage: WorkbenchMessage | undefined
+  ) => ReactNode
+}
+
+const USER_MESSAGE_COLLAPSE_LINES = 10
+const USER_MESSAGE_COLLAPSE_CHARACTERS = 600
+const MESSAGE_LAYOUT_RESIZE_SETTLE_MS = 120
+const SELECTION_ACTION_GAP = 8
+const VIRTUAL_MESSAGE_OVERSCAN = 2
+const VIRTUAL_MESSAGE_FULL_MEASUREMENT_COUNT = VIRTUAL_MESSAGE_OVERSCAN * 2 + 1
+const MESSAGE_LIST_GAP_PX = 16
+const MESSAGE_LIST_PADDING_TOP_PX = 32
+const MESSAGE_LIST_PADDING_BOTTOM_PX = 8
+
+function ForkTurnIcon() {
+  return (
+    <svg
+      data-testid="fork-message-icon"
+      aria-hidden="true"
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 12h4c4 0 4-6 8-6h6" />
+      <path d="M7 12c4 0 4 6 8 6h6" />
+      <path d="m18 3 3 3-3 3" />
+      <path d="m18 15 3 3-3 3" />
+    </svg>
+  )
+}
+
+interface MessageTextSelection {
+  text: string
+  left: number
+  top: number
+  conversationKey?: string | number | null
+}
+const CODEX_FILE_MENTIONS_HEADER_PATTERN = /^\s*# Files mentioned by the user:\s*/i
+const CODEX_FILE_MENTION_LINE_PATTERN = /^##\s+(.+?):\s+(.+)$/gm
+const CODEX_IMPLEMENT_PLAN_USER_MESSAGE_PREFIX = 'PLEASE IMPLEMENT THIS PLAN:'
+const LOCAL_IMAGE_EXTENSION_PATTERN = /\.(?:apng|avif|gif|jpe?g|png|webp|bmp|svg)$/i
+const CODEX_TRANSIENT_CLIPBOARD_IMAGE_PATTERN =
+  /\/(?:var\/folders|private\/var\/folders)\/.*\/codex-clipboard-[^/]+\.(?:apng|avif|gif|jpe?g|png|webp|bmp|svg)$/i
+const LOCAL_IMAGE_MIME_TYPES: Record<string, string> = {
+  '.apng': 'image/apng',
+  '.avif': 'image/avif',
+  '.bmp': 'image/bmp',
+  '.gif': 'image/gif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+}
+
+export const MessageList = memo(function MessageList({
+  messages: sourceMessages,
+  peerMessageAddress,
+  scrollElementRef,
+  initialDistanceFromBottomPx = 0,
+  followBottom = true,
+  className,
+  conversationKey,
+  processingWindowEnabled = false,
+  processRunId,
+  isWaitingForAssistant = false,
+  providerRetryTarget,
+  providerRetryTask,
+  disableContentVisibility = false,
+  forceVirtualMessageId = null,
+  devices = [],
+  onRetryFailedMessage,
+  onSwitchModelForFailedMessage,
+  onLoadFileChangesDiff,
+  onRevertFileChanges,
+  onOpenFileChangesReview,
+  fileChangesDiffPreviewDisabledSubtaskId,
+  onOpenWorkspaceFile,
+  onOpenLocalSkillFile,
+  onRequestUserInputSubmit,
+  onRequestUserInputIgnore,
+  onOpenAssistantPlan,
+  onEditLastUserMessage,
+  canEditLastUserMessage = false,
+  onForkMessage,
+  onLoadFullTranscript,
+  loadingFullTranscript = false,
+  hideRequestUserInputBlocks,
+  hiddenRequestUserInputIds,
+  onAddSelectionToConversation,
+  onAskSelectionInSidebar,
+  renderGapAfterMessage,
+}: MessageListProps) {
+  const { t } = useTranslation('common')
+  const readingPreferences = useConversationPreferences()
+  const threeLevelDisplay = readingPreferences.conversationProcessDisplay === 'three-level-v1'
+  const streamingMessage = sourceMessages.findLast(message => message.role === 'assistant' && message.status === 'streaming')
+  const generated = useGeneratingToolBlocks(streamingMessage?.blocks ?? [],
+    !processingWindowEnabled && Boolean(streamingMessage), streamingMessage?.id ?? '',
+    String(streamingMessage?.subtaskId ?? streamingMessage?.attemptId ?? ''), streamingMessage?.content ?? '')
+  const messages = useMemo(() => !streamingMessage || generated.blocks === streamingMessage.blocks
+    ? sourceMessages : sourceMessages.map(message => message.id === streamingMessage.id ? {
+      ...message, blocks: generated.blocks, content: generated.projectedNarrative ? '' : message.content,
+    } : message), [sourceMessages, streamingMessage, generated])
+  const providerRetry = useProviderRetryActivity(providerRetryTarget, providerRetryTask)
+  const listRef = useRef<HTMLDivElement>(null)
+  const layoutWidthUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [isTextSelectionActive, setIsTextSelectionActive] = useState(false)
+  const [textSelection, setTextSelection] = useState<MessageTextSelection | null>(null)
+  const [layoutWidth, setLayoutWidth] = useState(0)
+  const [messageEdit, setMessageEdit] = useState<{ key: string; submitting: boolean } | null>(null)
+  const isGateway = isGatewayRuntime()
+  const renderableMessages = useMemo(() => messages.filter(shouldRenderMessage), [messages])
+  const nextRenderableMessages = useMemo(
+    () => new Map(renderableMessages.map((message, index) => [message.id, renderableMessages[index + 1]])),
+    [renderableMessages]
+  )
+  const turnProcessPresentations = useMemo(
+    () =>
+      buildTurnProcessPresentations(
+        messages,
+        conversationKey,
+        isWaitingForAssistant,
+        processingWindowEnabled,
+        processRunId
+      ),
+    [conversationKey, isWaitingForAssistant, processingWindowEnabled, processRunId, messages]
+  )
+  const expansionKeys = useMemo(() => threeLevelDisplay
+    ? [...new Set([...turnProcessPresentations.values()]
+      .filter(presentation => presentation.canUseSummary).map(turnProcessDisclosureKey))] : [],
+  [threeLevelDisplay, turnProcessPresentations])
+  const processingExpansions = useProcessingExpansionSnapshot(expansionKeys)
+  // All two-level groups share one target clock sample and one ticker for the active turn.
+  const activeProcess = !threeLevelDisplay
+    ? [...turnProcessPresentations.values()].findLast(item => !item.canCollapse && item.canGroupActivity &&
+      (item.status === 'running' || item.status === 'waiting')) : undefined
+  const processNow = useTurnProcessNow(activeProcess, providerRetryTarget)
+  const latestAssistantId = renderableMessages.findLast(message => message.role === 'assistant' && message.peerAgent === undefined)?.id
+  const { visibleMessages, messageContentIds } = useMemo(() => {
+    const messageContentIds = new Set<string>()
+    const visibleMessages = renderableMessages.filter((message, index) => {
+      const presentation = turnProcessPresentations.get(message.id)
+      if (
+        !threeLevelDisplay ||
+        !presentation?.canUseSummary ||
+        message.id === presentation.ownerMessageId ||
+        (processingExpansions.get(turnProcessDisclosureKey(presentation)) ?? !presentation.canCollapse) ||
+        message.id === presentation.finalMessageId ||
+        (message.status === 'failed' && message.id === latestAssistantId &&
+          !message.continuationAccepted && !message.retriedByMessageId) ||
+        message.status === 'unknown' ||
+        (!hideRequestUserInputBlocks && message.blocks?.some(block =>
+          isPendingRequestUserInputBlock(block, hiddenRequestUserInputIds))) ||
+        (message.fileChanges && message.subtaskId && onLoadFileChangesDiff && onRevertFileChanges) ||
+        getGeneratedImages(message.blocks ?? []).length > 0 ||
+        message.blocks?.some(block =>
+          block.type === 'tool' && block.toolName === 'show_widget'
+        )
+      ) {
+        if (presentation?.canUseSummary && message.runtimeStatus === 'cancelled' &&
+          message.id !== presentation.ownerMessageId && !message.content.trim() &&
+          !message.blocks?.length && !message.error && !message.contentTruncated &&
+          !message.fileChanges && !message.fileChangesCapture && !message.reviewEvidence &&
+          !message.references?.length && !message.memoryCitations?.length && !message.attachments?.length &&
+          !renderGapAfterMessage?.(message, renderableMessages[index + 1])) return false
+        messageContentIds.add(message.id)
+        return true
+      }
+      return Boolean(renderGapAfterMessage?.(message, renderableMessages[index + 1]))
+    })
+    return { visibleMessages, messageContentIds }
+  },
+    [renderableMessages, turnProcessPresentations, threeLevelDisplay, processingExpansions, renderGapAfterMessage, latestAssistantId,
+      hideRequestUserInputBlocks, hiddenRequestUserInputIds, onLoadFileChangesDiff, onRevertFileChanges]
+  )
+  const widgetOwnership = useMemo(
+    () => getMessageWidgetOwnership(renderableMessages),
+    [renderableMessages]
+  )
+  const editableLastUserMessageId = useMemo(
+    () =>
+      editableLastUserMessage(
+        visibleMessages,
+        canEditLastUserMessage && Boolean(onEditLastUserMessage)
+      )?.id ?? null,
+    [canEditLastUserMessage, onEditLastUserMessage, visibleMessages]
+  )
+  const editableMessageKey = JSON.stringify([conversationKey ?? null, processRunId ?? null, editableLastUserMessageId])
+  const activeEditingMessageId = messageEdit?.key === editableMessageKey ? editableLastUserMessageId : null
+  const shouldShowWaitingIndicator =
+    isWaitingForAssistant &&
+    !providerRetry &&
+    !messages.some(message => message.role === 'assistant' && message.status === 'streaming')
+  const hasTransientTailStatus = shouldShowWaitingIndicator || Boolean(providerRetry)
+  const messageIntrinsicHeights = useMemo(() => {
+    return new Map(
+      visibleMessages.map(message => [
+        message.id,
+        getMessagePretextIntrinsicHeight(message, layoutWidth, processingWindowEnabled),
+      ])
+    )
+  }, [layoutWidth, processingWindowEnabled, visibleMessages])
+  const listLayoutClass = className
+    ? 'mx-auto flex min-w-0 flex-col gap-4 pb-2 pt-8'
+    : 'mx-auto flex w-full min-w-0 max-w-3xl flex-col gap-4 px-6 pb-2 pt-8'
+  const virtualMessages = isGateway && Boolean(scrollElementRef)
+  const virtualMeasurementKey = conversationKey == null ? null : String(conversationKey)
+  const forcedVirtualMessageIndex = useMemo(
+    () =>
+      forceVirtualMessageId === null
+        ? -1
+        : visibleMessages.findIndex(message => message.id === forceVirtualMessageId),
+    [forceVirtualMessageId, visibleMessages]
+  )
+  const initialMeasurementsCache = useMemo(
+    () => getVirtualMeasurementSnapshot(virtualMeasurementKey, visibleMessages),
+    [virtualMeasurementKey, visibleMessages]
+  )
+  const initialVirtualOffset = useMemo(() => {
+    const viewportHeight = scrollElementRef?.current?.clientHeight ?? 0
+    // The scroll owner restores position after mount; an unknown viewport cannot seed an end offset.
+    if (viewportHeight <= 0) return 0
+    const measuredSizes = new Map(initialMeasurementsCache.map(item => [item.key, item.size]))
+    const contentHeight =
+      MESSAGE_LIST_PADDING_TOP_PX +
+      MESSAGE_LIST_PADDING_BOTTOM_PX +
+      visibleMessages.reduce((total, message, index) => {
+        const size =
+          measuredSizes.get(message.id) ?? Math.ceil(messageIntrinsicHeights.get(message.id) ?? 220)
+        const gap = index < visibleMessages.length - 1 ? MESSAGE_LIST_GAP_PX : 0
+        return total + size + gap
+      }, 0)
+    return Math.max(0, contentHeight - viewportHeight - initialDistanceFromBottomPx)
+  }, [
+    initialDistanceFromBottomPx,
+    initialMeasurementsCache,
+    messageIntrinsicHeights,
+    scrollElementRef,
+    visibleMessages,
+  ])
+  // TanStack Virtual owns mutable measurement callbacks that React Compiler must not memoize.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const messageVirtualizer = useVirtualizer({
+    count: visibleMessages.length,
+    enabled: virtualMessages,
+    getScrollElement: () => scrollElementRef?.current ?? null,
+    initialRect: {
+      width: scrollElementRef?.current?.clientWidth ?? 0,
+      height: scrollElementRef?.current?.clientHeight ?? 0,
+    },
+    initialOffset: initialVirtualOffset,
+    getItemKey: index => visibleMessages[index]?.id ?? index,
+    estimateSize: index => {
+      const message = visibleMessages[index]
+      return Math.ceil((message && messageIntrinsicHeights.get(message.id)) ?? 220)
+    },
+    gap: MESSAGE_LIST_GAP_PX,
+    paddingStart: MESSAGE_LIST_PADDING_TOP_PX,
+    paddingEnd: MESSAGE_LIST_PADDING_BOTTOM_PX,
+    overscan: VIRTUAL_MESSAGE_OVERSCAN,
+    // The conversation owner revokes bottom following on explicit user input.
+    // A physical clamp to the bottom must not let the virtualizer reacquire it.
+    anchorTo: followBottom ? 'end' : 'start',
+    rangeExtractor: range => {
+      const indexes =
+        range.count <= VIRTUAL_MESSAGE_FULL_MEASUREMENT_COUNT
+          ? Array.from({ length: range.count }, (_, index) => index)
+          : defaultRangeExtractor(range)
+      if (forcedVirtualMessageIndex < 0 || indexes.includes(forcedVirtualMessageIndex)) {
+        return indexes
+      }
+      return [...indexes, forcedVirtualMessageIndex].sort((left, right) => left - right)
+    },
+    initialMeasurementsCache,
+  })
+
+  useLayoutEffect(() => {
+    messageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+      adjustVirtualMessageAboveViewport
+    return () => {
+      messageVirtualizer.shouldAdjustScrollPositionOnItemSizeChange = undefined
+    }
+  }, [messageVirtualizer])
+
+  useEffect(
+    () => () => {
+      if (!virtualMessages || virtualMeasurementKey === null) return
+      cacheConversationVirtualMeasurements(virtualMeasurementKey, messageVirtualizer.takeSnapshot())
+    },
+    [messageVirtualizer, virtualMeasurementKey, virtualMessages]
+  )
+
+  useLayoutEffect(() => {
+    if (!virtualMessages) return
+    const element = listRef.current
+    if (!element) return
+
+    const updateLayoutWidth = () => {
+      setLayoutWidth(currentWidth => {
+        const nextWidth = element.clientWidth
+        return nextWidth === currentWidth ? currentWidth : nextWidth
+      })
+    }
+
+    const scheduleLayoutWidthUpdate = () => {
+      if (layoutWidthUpdateTimerRef.current !== null) {
+        clearTimeout(layoutWidthUpdateTimerRef.current)
+      }
+
+      layoutWidthUpdateTimerRef.current = setTimeout(() => {
+        layoutWidthUpdateTimerRef.current = null
+        updateLayoutWidth()
+      }, MESSAGE_LAYOUT_RESIZE_SETTLE_MS)
+    }
+
+    updateLayoutWidth()
+    if (typeof ResizeObserver === 'undefined') return
+
+    const resizeObserver = new ResizeObserver(scheduleLayoutWidthUpdate)
+    resizeObserver.observe(element)
+    return () => {
+      resizeObserver.disconnect()
+      if (layoutWidthUpdateTimerRef.current !== null) {
+        clearTimeout(layoutWidthUpdateTimerRef.current)
+        layoutWidthUpdateTimerRef.current = null
+      }
+    }
+  }, [virtualMessages])
+
+  useEffect(() => {
+    if (isGateway && (!onAddSelectionToConversation || !onAskSelectionInSidebar)) return
+
+    const updateSelectionState = (preserveCapturedSelection = false) => {
+      const selection = document.getSelection?.()
+      const root = listRef.current
+      if (!selection || !root || selection.isCollapsed || selection.rangeCount === 0) {
+        setIsTextSelectionActive(false)
+        if (!preserveCapturedSelection) {
+          setTextSelection(null)
+        }
+        return
+      }
+
+      const selectionTouchesList =
+        isNodeInsideElement(selection.anchorNode, root) ||
+        isNodeInsideElement(selection.focusNode, root)
+      setIsTextSelectionActive(!isGateway && selectionTouchesList)
+      if (!onAddSelectionToConversation || !onAskSelectionInSidebar) return
+
+      const range = selection.getRangeAt(0)
+      const selectedMessageBodies = selectableMessageBodiesForRange(root, range)
+      if (selectedMessageBodies.length !== 1) {
+        setTextSelection(null)
+        return
+      }
+
+      const text = selection.toString().trim()
+      if (!text) {
+        setTextSelection(null)
+        return
+      }
+      const rect = range.getBoundingClientRect()
+      setTextSelection({
+        text,
+        left: Math.min(Math.max(rect.left + rect.width / 2, 120), window.innerWidth - 120),
+        top: Math.max(rect.top - SELECTION_ACTION_GAP, 44),
+        conversationKey,
+      })
+    }
+
+    const scheduleSelectionUpdate = () => {
+      window.requestAnimationFrame(() => updateSelectionState(true))
+    }
+
+    const finalizeSelectionUpdate = (event: Event) => {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[data-testid="message-selection-actions"]')
+      ) {
+        return
+      }
+      updateSelectionState()
+    }
+
+    const handleBlur = () => {
+      updateSelectionState()
+    }
+
+    const handleScroll = () => {
+      updateSelectionState(true)
+    }
+
+    document.addEventListener('pointerup', finalizeSelectionUpdate)
+    document.addEventListener('pointercancel', finalizeSelectionUpdate)
+    document.addEventListener('mouseup', finalizeSelectionUpdate)
+    document.addEventListener('keyup', finalizeSelectionUpdate)
+    document.addEventListener('selectionchange', scheduleSelectionUpdate)
+    window.addEventListener('scroll', handleScroll, true)
+    window.addEventListener('blur', handleBlur)
+
+    return () => {
+      document.removeEventListener('pointerup', finalizeSelectionUpdate)
+      document.removeEventListener('pointercancel', finalizeSelectionUpdate)
+      document.removeEventListener('mouseup', finalizeSelectionUpdate)
+      document.removeEventListener('keyup', finalizeSelectionUpdate)
+      document.removeEventListener('selectionchange', scheduleSelectionUpdate)
+      window.removeEventListener('scroll', handleScroll, true)
+      window.removeEventListener('blur', handleBlur)
+    }
+  }, [conversationKey, isGateway, onAddSelectionToConversation, onAskSelectionInSidebar])
+
+  const applySelectionAction = (action: (text: string) => void) => {
+    if (!textSelection) return
+    action(textSelection.text)
+    document.getSelection()?.removeAllRanges()
+    setTextSelection(null)
+  }
+
+  if (visibleMessages.length === 0 && !hasTransientTailStatus) {
+    return null
+  }
+
+  return (
+    <div
+      ref={listRef}
+      className={cn(listLayoutClass, className, virtualMessages && 'relative gap-0 pb-0 pt-0')}
+      style={{
+        '--process-summary-line-height': resolveAssistantReplyTypography(readingPreferences.conversationFontScale,
+          readingPreferences.conversationLineSpacing).body.lineHeight,
+        ...(virtualMessages
+          ? {
+              minHeight:
+                messageVirtualizer.getTotalSize() +
+                (shouldShowWaitingIndicator
+                  ? MESSAGE_LIST_GAP_PX +
+                    getAssistantPendingHeight(readingPreferences, processingWindowEnabled === true)
+                  : 0),
+            }
+          : {}),
+      } as CSSProperties}
+    >
+      {textSelection &&
+        textSelection.conversationKey === conversationKey &&
+        createPortal(
+          <div
+            data-testid="message-selection-actions"
+            className="fixed z-critical flex -translate-x-1/2 -translate-y-full items-center gap-1 rounded-lg border border-border bg-base p-1 shadow-lg"
+            style={{ left: textSelection.left, top: textSelection.top }}
+            onPointerDown={event => event.preventDefault()}
+          >
+            <button
+              type="button"
+              data-testid="add-selection-to-conversation-button"
+              className="h-8 rounded-md px-2.5 text-xs text-text-secondary hover:bg-muted hover:text-text-primary"
+              onClick={() => applySelectionAction(onAddSelectionToConversation!)}
+            >
+              {t('workbench.add_selection_to_conversation')}
+            </button>
+            <button
+              type="button"
+              data-testid="ask-selection-in-sidebar-button"
+              className="h-8 rounded-md px-2.5 text-xs text-text-secondary hover:bg-muted hover:text-text-primary"
+              onClick={() => applySelectionAction(onAskSelectionInSidebar!)}
+            >
+              {t('workbench.ask_selection_in_sidebar')}
+            </button>
+          </div>,
+          document.body
+        )}
+      {(virtualMessages
+        ? messageVirtualizer.getVirtualItems().map(virtualRow => ({
+            index: virtualRow.index,
+            key: virtualRow.key,
+            measureRef: messageVirtualizer.measureElement,
+            style: {
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: '100%',
+              transform: `translateY(${virtualRow.start}px)`,
+            } satisfies CSSProperties,
+          }))
+        : visibleMessages.map((_, index) => ({
+            index,
+            key: visibleMessages[index].id,
+            measureRef: undefined,
+            style: undefined,
+          }))
+      ).map(row => {
+        const { index } = row
+        const rowKey = JSON.stringify([conversationKey ?? null, processRunId ?? null, row.key])
+        const message = visibleMessages[index]
+        const nextMessage = nextRenderableMessages.get(message.id)
+        const containMessage = !isGateway && !disableContentVisibility && !isTextSelectionActive
+        const article = messageContentIds.has(message.id) ? (
+          <article
+            className={cn(
+              'min-w-0',
+              // Skipped rows keep their last rendered height (auto) and use the
+              // pretext estimate before first paint, so scrolling never
+              // collapses off-screen messages to zero and shifts the list.
+              containMessage &&
+                '[content-visibility:auto] [contain-intrinsic-size:auto_var(--message-intrinsic-height,220px)]',
+              message.role === 'user' && 'flex justify-end'
+            )}
+            style={
+              containMessage
+                ? ({
+                    '--message-intrinsic-height': `${Math.ceil(messageIntrinsicHeights.get(message.id) ?? 220)}px`,
+                  } as React.CSSProperties)
+                : undefined
+            }
+            data-message-id={message.id}
+            data-testid={`message-${message.role}`}
+          >
+            {message.peerAgent !== undefined ? <PeerAgentMessage message={message} address={peerMessageAddress} /> : message.role === 'user' ? (
+              <UserMessage
+                message={message}
+                onOpenWorkspaceFile={onOpenWorkspaceFile}
+                onOpenLocalSkillFile={onOpenLocalSkillFile}
+                editable={message.id === editableLastUserMessageId}
+                editing={message.id === activeEditingMessageId}
+                editSubmitting={message.id === activeEditingMessageId && messageEdit?.submitting === true}
+                onStartEdit={() => setMessageEdit({ key: rowKey, submitting: false })}
+                onCancelEdit={() => setMessageEdit(current => current?.key === rowKey ? null : current)}
+                onSubmitEdit={async content => {
+                  if (!onEditLastUserMessage) return false
+                  const submission = { key: rowKey, submitting: true }
+                  setMessageEdit(submission)
+                  try {
+                    const result = await onEditLastUserMessage(message, content)
+                    if (result !== false) {
+                      setMessageEdit(current => current === submission ? null : current)
+                    }
+                    return result
+                  } finally {
+                    setMessageEdit(current => current === submission ? { ...submission, submitting: false } : current)
+                  }
+                }}
+              />
+            ) : (
+              <AssistantMessage
+                message={message}
+                turnProcessPresentation={turnProcessPresentations.get(message.id)}
+                processServerId={providerRetryTarget}
+                processNow={turnProcessPresentations.get(message.id)?.key === activeProcess?.key ? processNow : undefined}
+                historicalFailure={message.id !== latestAssistantId}
+                recoveryBlocked={isWaitingForAssistant}
+                widgetOwnership={widgetOwnership.get(message.id)}
+                conversationKey={conversationKey}
+                processingWindowEnabled={processingWindowEnabled}
+                hideThinkingIndicator={Boolean(providerRetry)}
+                devices={devices}
+                onRetryFailedMessage={onRetryFailedMessage}
+                onSwitchModelForFailedMessage={onSwitchModelForFailedMessage}
+                onLoadFileChangesDiff={onLoadFileChangesDiff}
+                onRevertFileChanges={onRevertFileChanges}
+                onOpenFileChangesReview={onOpenFileChangesReview}
+                fileChangesDiffPreviewDisabledSubtaskId={fileChangesDiffPreviewDisabledSubtaskId}
+                onOpenWorkspaceFile={onOpenWorkspaceFile}
+                onRequestUserInputSubmit={onRequestUserInputSubmit}
+                onRequestUserInputIgnore={onRequestUserInputIgnore}
+                onOpenAssistantPlan={onOpenAssistantPlan}
+                onLoadFullTranscript={onLoadFullTranscript}
+                loadingFullTranscript={loadingFullTranscript}
+                hideRequestUserInputBlocks={hideRequestUserInputBlocks}
+                hiddenRequestUserInputIds={hiddenRequestUserInputIds}
+                onFork={onForkMessage && message.turnId ? () => onForkMessage(message) : undefined}
+              />
+            )}
+          </article>
+        ) : null
+        const gap = renderGapAfterMessage?.(message, nextMessage)
+        return virtualMessages ? (
+          <div key={rowKey} ref={row.measureRef} data-index={index} style={row.style}>
+            {article}
+            {gap}
+          </div>
+        ) : (
+          <Fragment key={rowKey}>
+            {article}
+            {gap}
+          </Fragment>
+        )
+      })}
+      {shouldShowWaitingIndicator && (
+        <article
+          className="min-w-0"
+          data-testid="message-assistant-waiting"
+          style={
+            virtualMessages
+              ? {
+                  position: 'absolute',
+                  left: 0,
+                  // The virtualizer total includes bottom padding, whereas a
+                  // following message starts immediately after the last row.
+                  top:
+                    messageVirtualizer.getTotalSize() -
+                    MESSAGE_LIST_PADDING_BOTTOM_PX +
+                    MESSAGE_LIST_GAP_PX,
+                  width: '100%',
+                }
+              : undefined
+          }
+        >
+          <AssistantWaitingPlaceholder windowed={processingWindowEnabled === true} />
+        </article>
+      )}
+      {providerRetry && (
+        <article
+          className="min-w-0"
+          style={
+            virtualMessages
+              ? {
+                  // Keep retry feedback in flow so expanded diagnostics reserve
+                  // their full height before the sticky composer.
+                  marginTop:
+                    messageVirtualizer.getTotalSize() -
+                    MESSAGE_LIST_PADDING_BOTTOM_PX +
+                    MESSAGE_LIST_GAP_PX,
+                  marginBottom: MESSAGE_LIST_PADDING_BOTTOM_PX,
+                  width: '100%',
+                }
+              : undefined
+          }
+        >
+          <ProviderRetryStatus key={`${providerRetryTarget ?? ''}\0${providerRetryTask ?? ''}`} activity={providerRetry} />
+        </article>
+      )}
+    </div>
+  )
+}, areMessageListPropsEqual)
+
+function getVirtualMeasurementSnapshot(
+  key: string | null,
+  messages: WorkbenchMessage[]
+): VirtualItem[] {
+  if (key === null) return []
+  const snapshot = getConversationVirtualMeasurements(key)
+  if (!snapshot) return []
+
+  const messageIds = new Set(messages.map(message => message.id))
+  if (snapshot.some(item => typeof item.key === 'string' && !messageIds.has(item.key))) return []
+
+  return snapshot
+}
+
+function getAssistantPendingHeight(
+  preferences: ReturnType<typeof useConversationPreferences>,
+  windowed: boolean
+) {
+  if (windowed) return 64
+  const lineHeight = resolveAssistantReplyTypography(
+    preferences.conversationFontScale,
+    preferences.conversationLineSpacing
+  ).body.lineHeight
+  return (
+    32 +
+    conversationBlockGap[preferences.conversationBlockSpacing ?? 'normal'] +
+    parseFloat(String(lineHeight))
+  )
+}
+
+function AssistantWaitingPlaceholder({ windowed, thinking = false }: { windowed: boolean, thinking?: boolean }) {
+  const preferences = useConversationPreferences()
+  const typography = resolveAssistantReplyTypography(
+    preferences.conversationFontScale,
+    preferences.conversationLineSpacing
+  )
+  const indicator = (
+    <div className="flex min-h-8 items-center text-sm">
+      <AssistantThinkingIndicator thinking={thinking} />
+    </div>
+  )
+
+  if (windowed) {
+    return (
+      <div className="min-w-0 text-chat">
+        <div className="min-h-8" aria-hidden="true" />
+        <div className="min-w-0 border-l-2 border-border/60 pl-3 pr-7 text-text-muted">
+          {indicator}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="flex min-w-0 flex-col text-chat"
+      style={{ gap: conversationBlockGap[preferences.conversationBlockSpacing ?? 'normal'] }}
+    >
+      {indicator}
+      {/* Reserve the reply below the status so the status itself never moves. */}
+      <div style={{ minHeight: typography.body.lineHeight }} aria-hidden="true" />
+    </div>
+  )
+}
+
+function selectableMessageBodiesForRange(root: HTMLElement, range: Range): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>('[data-message-selectable-text]')).filter(
+    element => selectedTextWithinElement(range, element).trim().length > 0
+  )
+}
+
+function selectedTextWithinElement(range: Range, element: HTMLElement): string {
+  if (!range.intersectsNode(element)) return ''
+
+  const intersection = document.createRange()
+  intersection.selectNodeContents(element)
+  if (intersection.compareBoundaryPoints(Range.START_TO_START, range) < 0) {
+    intersection.setStart(range.startContainer, range.startOffset)
+  }
+  if (intersection.compareBoundaryPoints(Range.END_TO_END, range) > 0) {
+    intersection.setEnd(range.endContainer, range.endOffset)
+  }
+  return intersection.toString()
+}
+
+function isNodeInsideElement(node: Node | null, root: HTMLElement): boolean {
+  if (!node) return false
+
+  if (node.nodeType === Node.ELEMENT_NODE) {
+    return root.contains(node)
+  }
+
+  return Boolean(node.parentElement && root.contains(node.parentElement))
+}
+
+function areMessageListPropsEqual(previous: MessageListProps, next: MessageListProps): boolean {
+  const changed = [
+    previous.messages !== next.messages ? 'messages' : null,
+    previous.scrollElementRef !== next.scrollElementRef ? 'scrollElementRef' : null,
+    previous.initialDistanceFromBottomPx !== next.initialDistanceFromBottomPx
+      ? 'initialDistanceFromBottomPx'
+      : null,
+    previous.followBottom !== next.followBottom ? 'followBottom' : null,
+    previous.className !== next.className ? 'className' : null,
+    previous.conversationKey !== next.conversationKey ? 'conversationKey' : null,
+    previous.processingWindowEnabled !== next.processingWindowEnabled
+      ? 'processingWindowEnabled'
+      : null,
+    previous.isWaitingForAssistant !== next.isWaitingForAssistant ? 'isWaitingForAssistant' : null,
+    previous.providerRetryTarget !== next.providerRetryTarget ? 'providerRetryTarget' : null,
+    previous.providerRetryTask !== next.providerRetryTask ? 'providerRetryTask' : null,
+    previous.disableContentVisibility !== next.disableContentVisibility
+      ? 'disableContentVisibility'
+      : null,
+    previous.forceVirtualMessageId !== next.forceVirtualMessageId ? 'forceVirtualMessageId' : null,
+    previous.devices !== next.devices ? 'devices' : null,
+    previous.onRetryFailedMessage !== next.onRetryFailedMessage ? 'onRetryFailedMessage' : null,
+    previous.onSwitchModelForFailedMessage !== next.onSwitchModelForFailedMessage
+      ? 'onSwitchModelForFailedMessage'
+      : null,
+    previous.onLoadFileChangesDiff !== next.onLoadFileChangesDiff ? 'onLoadFileChangesDiff' : null,
+    previous.onRevertFileChanges !== next.onRevertFileChanges ? 'onRevertFileChanges' : null,
+    previous.onOpenFileChangesReview !== next.onOpenFileChangesReview
+      ? 'onOpenFileChangesReview'
+      : null,
+    previous.fileChangesDiffPreviewDisabledSubtaskId !==
+    next.fileChangesDiffPreviewDisabledSubtaskId
+      ? 'fileChangesDiffPreviewDisabledSubtaskId'
+      : null,
+    previous.onOpenWorkspaceFile !== next.onOpenWorkspaceFile ? 'onOpenWorkspaceFile' : null,
+    previous.onOpenLocalSkillFile !== next.onOpenLocalSkillFile ? 'onOpenLocalSkillFile' : null,
+    previous.onRequestUserInputSubmit !== next.onRequestUserInputSubmit
+      ? 'onRequestUserInputSubmit'
+      : null,
+    previous.onRequestUserInputIgnore !== next.onRequestUserInputIgnore
+      ? 'onRequestUserInputIgnore'
+      : null,
+    previous.onOpenAssistantPlan !== next.onOpenAssistantPlan ? 'onOpenAssistantPlan' : null,
+    previous.peerMessageAddress !== next.peerMessageAddress ? 'peerMessageAddress' : null,
+    previous.onEditLastUserMessage !== next.onEditLastUserMessage ? 'onEditLastUserMessage' : null,
+    previous.canEditLastUserMessage !== next.canEditLastUserMessage
+      ? 'canEditLastUserMessage'
+      : null,
+    previous.onForkMessage !== next.onForkMessage ? 'onForkMessage' : null,
+    previous.onLoadFullTranscript !== next.onLoadFullTranscript ? 'onLoadFullTranscript' : null,
+    previous.loadingFullTranscript !== next.loadingFullTranscript ? 'loadingFullTranscript' : null,
+    previous.hideRequestUserInputBlocks !== next.hideRequestUserInputBlocks
+      ? 'hideRequestUserInputBlocks'
+      : null,
+    previous.hiddenRequestUserInputIds !== next.hiddenRequestUserInputIds
+      ? 'hiddenRequestUserInputIds'
+      : null,
+    previous.onAddSelectionToConversation !== next.onAddSelectionToConversation
+      ? 'onAddSelectionToConversation'
+      : null,
+    previous.onAskSelectionInSidebar !== next.onAskSelectionInSidebar
+      ? 'onAskSelectionInSidebar'
+      : null,
+    previous.renderGapAfterMessage !== next.renderGapAfterMessage ? 'renderGapAfterMessage' : null,
+  ].filter((key): key is string => key !== null)
+
+  return changed.length === 0
+}
+
+function shouldRenderMessage(message: WorkbenchMessage): boolean {
+  if (message.role !== 'assistant') return true
+  if (message.status === 'streaming' || message.status === 'failed' || message.status === 'unknown')
+    return true
+  if (isCancelledAssistantMessage(message)) return true
+  if (message.fileChanges) return true
+  if (normalizeReviewEvidence(message.reviewEvidence)) return true
+  if (normalizeTurnFileCapture(message.fileChangesCapture)) return true
+  if (message.references?.length || message.memoryCitations?.length) {
+    return true
+  }
+
+  const visibleContent = shouldHideFailedAssistantContent(message) ? '' : message.content
+  if (visibleContent.trim()) return true
+
+  return getDisplayProcessingBlocks(message.blocks).length > 0
+}
+
+function editableLastUserMessage(
+  messages: WorkbenchMessage[],
+  canEdit: boolean
+): WorkbenchMessage | null {
+  if (!canEdit) return null
+
+  const lastUserIndex = findLastIndex(messages, message => message.role === 'user')
+  if (lastUserIndex === -1) return null
+
+  const followingMessages = messages.slice(lastUserIndex + 1)
+  if (followingMessages.length === 0) return null
+  if (followingMessages.some(message => message.status === 'streaming')) return null
+  if (!followingMessages.some(message => message.role === 'assistant')) return null
+
+  return messages[lastUserIndex] ?? null
+}
+
+function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item !== undefined && predicate(item)) return index
+  }
+  return -1
+}
+
+function getTurnStartMs(createdAt: string): number | undefined {
+  return getMessageTimestampMs(createdAt)
+}
+
+function getMessageTimestampMs(value: string | number | null | undefined): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value > 1_000_000_000_000) return value
+    if (value > 1_000_000_000) return value * 1000
+    return undefined
+  }
+
+  if (typeof value !== 'string' || !value.trim()) return undefined
+  const numericValue = Number(value)
+  if (Number.isFinite(numericValue)) {
+    return getMessageTimestampMs(numericValue)
+  }
+
+  const ms = new Date(value).getTime()
+  return Number.isFinite(ms) ? ms : undefined
+}
+
+function formatCompactDuration(durationMs: number): string {
+  const seconds = Math.max(0, Math.floor(durationMs / 1000))
+  if (seconds < 60) return `${seconds}s`
+
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  if (minutes < 60) return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`
+
+  const hours = Math.floor(minutes / 60)
+  const remainingMinutes = minutes % 60
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`
+}
+
+function getStoppedElapsedDuration(message: WorkbenchMessage): string | null {
+  const startedAt = getTurnStartMs(message.createdAt)
+  if (startedAt === undefined) return null
+
+  const completedAt = getMessageTimestampMs(message.completedAt)
+  if (completedAt !== undefined && completedAt >= startedAt) {
+    const durationMs = completedAt - startedAt
+    return durationMs >= 1000 ? formatCompactDuration(durationMs) : null
+  }
+
+  const blockEndTimes =
+    message.blocks
+      ?.map(block => block.createdAt)
+      .filter((createdAt): createdAt is number => Number.isFinite(createdAt)) ?? []
+  const endedAt = blockEndTimes.length > 0 ? Math.max(...blockEndTimes) : startedAt
+
+  const durationMs = endedAt - startedAt
+  return durationMs >= 1000 ? formatCompactDuration(durationMs) : null
+}
+
+function getProcessingSummaryStartMs(
+  message: WorkbenchMessage,
+  blocks: ProcessingBlock[],
+  isStreaming: boolean
+): number | undefined {
+  if (!isStreaming) return getTurnStartMs(message.createdAt)
+
+  const blockStartTimes = blocks
+    .map(block => block.createdAt)
+    .filter((createdAt): createdAt is number => Number.isFinite(createdAt))
+
+  if (blockStartTimes.length > 0) return Math.min(...blockStartTimes)
+
+  return undefined
+}
+
+function isCancelledAssistantMessage(message: WorkbenchMessage): boolean {
+  return message.runtimeStatus === 'cancelled'
+}
+
+function isCancelledPlaceholderContent(content: string): boolean {
+  return ['interrupted', 'cancelled', 'canceled', 'aborted'].includes(content.trim().toLowerCase())
+}
+
+const RECENT_MESSAGE_TIME_RANGE_MS = 7 * 24 * 60 * 60 * 1000
+const CHINESE_WEEKDAY_LABELS = [
+  '星期日',
+  '星期一',
+  '星期二',
+  '星期三',
+  '星期四',
+  '星期五',
+  '星期六',
+]
+
+function formatMessageTime(createdAt: string) {
+  const date = new Date(createdAt)
+  if (Number.isNaN(date.getTime())) return ''
+  const now = new Date()
+  const isToday =
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  if (isToday) return time
+
+  const ageMs = now.getTime() - date.getTime()
+  if (ageMs >= 0 && ageMs < RECENT_MESSAGE_TIME_RANGE_MS) {
+    return `${CHINESE_WEEKDAY_LABELS[date.getDay()]}${time}`
+  }
+
+  const dateLabel = `${date.getMonth() + 1}月${date.getDate()}日`
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${dateLabel} ${time}`
+  }
+
+  return `${date.getFullYear()}年${dateLabel} ${time}`
+}
+
+async function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text)
+    return
+  }
+
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+}
+
+function UserMessage({
+  message,
+  onOpenWorkspaceFile,
+  onOpenLocalSkillFile,
+  editable = false,
+  editing = false,
+  editSubmitting = false,
+  onStartEdit,
+  onCancelEdit,
+  onSubmitEdit,
+}: {
+  message: WorkbenchMessage
+  onOpenWorkspaceFile?: (path: string, options?: WorkspaceFileOpenOptions) => void
+  onOpenLocalSkillFile?: (path: string) => void
+  editable?: boolean
+  editing?: boolean
+  editSubmitting?: boolean
+  onStartEdit?: () => void
+  onCancelEdit?: () => void
+  onSubmitEdit?: (content: string) => Promise<boolean | void> | boolean | void
+}) {
+  const { t } = useTranslation('common')
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [areHoverActionsVisible, setAreHoverActionsVisible] = useState(false)
+  const codexLocalFileMentions = useMemo(
+    () => parseCodexLocalFileMentions(message.content),
+    [message.content]
+  )
+  const displayContent = normalizeCodexUserMessageContent(
+    codexLocalFileMentions?.requestText ?? visibleRuntimeUserMessage(message.content)
+  )
+  const imageAttachments = useMemo(
+    () => (message.attachments ?? []).filter(isImageAttachment),
+    [message.attachments]
+  )
+  const documentAttachments = useMemo(
+    () => (message.attachments ?? []).filter(attachment => !isImageAttachment(attachment)),
+    [message.attachments]
+  )
+  const localImageMentions = useMemo(
+    () => (imageAttachments.length > 0 ? [] : (codexLocalFileMentions?.images ?? [])),
+    [codexLocalFileMentions?.images, imageAttachments.length]
+  )
+  const localFileMentions = codexLocalFileMentions?.files ?? []
+  const localImageAttachments = useMemo(
+    () =>
+      localImageMentions.map((image, index) =>
+        createLocalImageMentionAttachment(image, index, message.createdAt)
+      ),
+    [localImageMentions, message.createdAt]
+  )
+  const imagePreviewAttachments = useMemo(
+    () => (imageAttachments.length > 0 ? imageAttachments : localImageAttachments),
+    [imageAttachments, localImageAttachments]
+  )
+  const hasImagePreviews = imagePreviewAttachments.length > 0
+  const hasMultipleImagePreviews = imagePreviewAttachments.length > 1
+  const shouldCollapse =
+    message.runtimeGuidance !== true &&
+    (displayContent.length > USER_MESSAGE_COLLAPSE_CHARACTERS ||
+      displayContent.split('\n').length > USER_MESSAGE_COLLAPSE_LINES)
+  const showSourceBadge = isIMSource(message.source)
+  const showGoalRequestBadge = message.runtimeGoalRequest === true
+  const codeCommentCount = message.codeComments?.length ?? 0
+
+  return (
+    <div
+      className={[
+        'flex flex-col items-end gap-1.5',
+        hasImagePreviews ? 'w-full max-w-full' : 'max-w-[80%]',
+      ].join(' ')}
+      data-testid="message-hover-region"
+      onPointerEnter={() => setAreHoverActionsVisible(true)}
+      onPointerLeave={() => setAreHoverActionsVisible(false)}
+    >
+      <div
+        className={[
+          'flex max-w-full flex-col items-end gap-1.5',
+          hasImagePreviews ? 'w-full' : 'w-fit',
+        ].join(' ')}
+      >
+        {(imagePreviewAttachments.length > 0 ||
+          localFileMentions.length > 0 ||
+          documentAttachments.length > 0) && (
+          <div
+            className={[
+              'flex max-w-full flex-col items-end gap-2',
+              hasImagePreviews ? 'w-full' : '',
+            ].join(' ')}
+          >
+            {hasImagePreviews && (
+              <div
+                data-testid="message-image-attachments"
+                className={[
+                  'flex w-full max-w-full flex-row flex-nowrap gap-2',
+                  hasMultipleImagePreviews
+                    ? 'scrollbar-none overflow-x-auto overscroll-x-contain'
+                    : 'justify-end overflow-visible',
+                ].join(' ')}
+              >
+                <div
+                  data-testid="message-image-attachment-strip"
+                  className="ml-auto flex w-max max-w-none flex-row flex-nowrap justify-end gap-2"
+                >
+                  {imagePreviewAttachments.map((attachment, index) => (
+                    <MessageImageAttachmentPreview
+                      key={`${attachment.id}:${attachment.local_preview_url ?? attachment.filename}`}
+                      attachment={attachment}
+                      galleryAttachments={imagePreviewAttachments}
+                      galleryIndex={index}
+                      imageTestId={
+                        imageAttachments.length > 0
+                          ? 'message-image-preview'
+                          : 'message-local-image-preview'
+                      }
+                      buttonTestId={
+                        imageAttachments.length > 0
+                          ? 'message-image-preview-button'
+                          : 'message-local-image-preview-button'
+                      }
+                      loadingTestId={
+                        imageAttachments.length > 0
+                          ? 'message-image-preview-loading'
+                          : 'message-local-image-preview-loading'
+                      }
+                      errorTestId={
+                        imageAttachments.length > 0
+                          ? 'message-image-preview-error'
+                          : 'message-local-image-preview-error'
+                      }
+                      hideOnError={imageAttachments.length === 0}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+            {localFileMentions.map(file => (
+              <MessageCodexFileMention
+                key={`${file.filename}:${file.path}`}
+                file={file}
+                onOpenFile={onOpenWorkspaceFile}
+              />
+            ))}
+            {documentAttachments.map(attachment => (
+              <MessageDocumentAttachment
+                key={attachment.id}
+                attachment={attachment}
+                onOpenFile={onOpenWorkspaceFile}
+              />
+            ))}
+          </div>
+        )}
+        {displayContent && editing ? (
+          <UserMessageEditForm
+            initialContent={displayContent}
+            submitting={editSubmitting}
+            onCancel={onCancelEdit}
+            onSubmit={onSubmitEdit}
+          />
+        ) : displayContent ? (
+          <div
+            className={[
+              'overflow-hidden rounded-2xl bg-muted text-base leading-5 text-text-primary',
+              hasImagePreviews ? 'max-w-[80%]' : 'max-w-full',
+            ].join(' ')}
+          >
+            <div
+              data-testid="user-message-content"
+              data-message-selectable-text
+              className={[
+                'relative overflow-hidden break-words whitespace-pre-wrap bg-muted px-4 py-1.5',
+                shouldCollapse && !isExpanded ? 'max-h-44' : '',
+              ].join(' ')}
+            >
+              {renderUserContent(displayContent, onOpenLocalSkillFile, onOpenWorkspaceFile)}
+              {showGoalRequestBadge && (
+                <div className="mt-1.5 flex">
+                  <span
+                    data-testid="user-message-goal-badge"
+                    className="inline-flex h-6 w-fit items-center gap-1 rounded-md border border-border/70 bg-background/70 px-2 text-xs font-medium leading-none text-text-secondary"
+                  >
+                    <Target className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>{t('workbench.goal_chip', '目标')}</span>
+                  </span>
+                </div>
+              )}
+              {codeCommentCount > 0 && (
+                <div className="mt-1.5 flex">
+                  <span
+                    data-testid="message-code-comment-context-badge"
+                    className="inline-flex h-6 w-fit items-center gap-1.5 rounded-md border border-border/70 bg-background/70 px-2 text-xs font-medium leading-none text-text-secondary"
+                  >
+                    <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>{t('workbench.code_comment_count', { count: codeCommentCount })}</span>
+                  </span>
+                </div>
+              )}
+              {shouldCollapse && !isExpanded && (
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-muted to-transparent" />
+              )}
+            </div>
+            {shouldCollapse && (
+              <button
+                type="button"
+                data-testid="toggle-user-message-button"
+                aria-expanded={isExpanded}
+                onClick={() => setIsExpanded(value => !value)}
+                className="flex h-9 w-full items-center justify-center gap-1 border-t border-border/60 text-xs font-medium text-text-secondary transition-colors hover:bg-surface"
+              >
+                {isExpanded ? (
+                  <ChevronUp className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronDown className="h-3.5 w-3.5" />
+                )}
+                {t(isExpanded ? 'messageActions.collapse' : 'messageActions.expand', {
+                  ns: 'chat',
+                })}
+              </button>
+            )}
+          </div>
+        ) : null}
+        {showSourceBadge && (
+          <div
+            data-testid="message-source-row"
+            className="flex min-h-5 items-center justify-end gap-1"
+          >
+            <ImSourceBadge source={message.source} testId="message-source-badge" />
+          </div>
+        )}
+      </div>
+      {!editing && (
+        <MessageHoverActions
+          message={message}
+          align="right"
+          visible={areHoverActionsVisible}
+          onEdit={editable ? onStartEdit : undefined}
+        />
+      )}
+    </div>
+  )
+}
+
+function UserMessageEditForm({
+  initialContent,
+  submitting,
+  onCancel,
+  onSubmit,
+}: {
+  initialContent: string
+  submitting: boolean
+  onCancel?: () => void
+  onSubmit?: (content: string) => Promise<boolean | void> | boolean | void
+}) {
+  const [draft, setDraft] = useState(initialContent)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const trimmedDraft = draft.trim()
+  const submitDisabled = submitting || trimmedDraft.length === 0
+
+  const resizeTextarea = () => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.style.height = 'auto'
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 280)}px`
+  }
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+    textarea.focus()
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+    resizeTextarea()
+  }, [])
+
+  useLayoutEffect(() => {
+    resizeTextarea()
+  }, [draft])
+
+  const submit = () => {
+    if (submitDisabled) return
+    void onSubmit?.(trimmedDraft)
+  }
+
+  return (
+    <div
+      data-testid="edit-user-message-form"
+      className="w-[min(560px,80vw)] max-w-full rounded-2xl bg-muted px-3 py-2 text-base leading-5 text-text-primary"
+    >
+      <textarea
+        ref={textareaRef}
+        data-testid="edit-user-message-textarea"
+        value={draft}
+        disabled={submitting}
+        onChange={event => setDraft(event.target.value)}
+        onKeyDown={event => {
+          if (isImeEnterEvent(event)) return
+          if (event.key === 'Enter' && event.shiftKey) return
+          if (event.key === 'Enter') {
+            event.preventDefault()
+            submit()
+            return
+          }
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            onCancel?.()
+          }
+        }}
+        className="block max-h-[280px] min-h-24 w-full resize-none overflow-y-auto rounded-xl border border-border bg-base px-3 py-2 text-base leading-5 text-text-primary outline-none focus:border-primary focus:ring-1 focus:ring-primary disabled:cursor-wait disabled:opacity-70"
+      />
+      <div className="mt-2 flex items-center justify-end gap-2">
+        <button
+          type="button"
+          data-testid="cancel-edit-user-message-button"
+          disabled={submitting}
+          onClick={onCancel}
+          className="flex h-8 items-center justify-center rounded-md px-3 text-base font-medium text-text-secondary hover:bg-surface disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          取消
+        </button>
+        <button
+          type="button"
+          data-testid="submit-edit-user-message-button"
+          disabled={submitDisabled}
+          onClick={submit}
+          className="flex h-8 items-center justify-center rounded-md bg-primary px-3 text-base font-medium text-primary-contrast hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          发送
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function normalizeCodexUserMessageContent(content: string): string {
+  return content.trimStart().startsWith(CODEX_IMPLEMENT_PLAN_USER_MESSAGE_PREFIX)
+    ? CODEX_IMPLEMENT_PLAN_RESPONSE_LABEL
+    : content
+}
+
+function parseCodexLocalFileMentions(content: string): {
+  requestText: string
+  images: Array<{ filename: string; path: string }>
+  files: Array<{ filename: string; path: string }>
+} | null {
+  if (!CODEX_FILE_MENTIONS_HEADER_PATTERN.test(content)) return null
+
+  const messageParts = splitRuntimeUserMessage(content)
+  const requestText = messageParts?.request ?? ''
+  const filesText = messageParts?.prefix ?? content
+  const images: Array<{ filename: string; path: string }> = []
+  const files: Array<{ filename: string; path: string }> = []
+  for (const match of filesText.matchAll(CODEX_FILE_MENTION_LINE_PATTERN)) {
+    const filename = match[1]?.trim()
+    const path = match[2]?.trim()
+    if (!filename || !path) continue
+    if (isTransientCodexClipboardImage(path)) continue
+    const target = { filename, path }
+    if (isLocalImageMention(filename, path)) {
+      if (!images.some(image => image.path === path || image.filename === filename)) {
+        images.push(target)
+      }
+      continue
+    }
+    if (!files.some(file => file.path === path || file.filename === filename)) {
+      files.push(target)
+    }
+  }
+
+  if (!requestText && images.length === 0 && files.length === 0) return null
+
+  return { requestText, images, files }
+}
+
+function isLocalImageMention(filename: string, path: string): boolean {
+  return LOCAL_IMAGE_EXTENSION_PATTERN.test(filename) || LOCAL_IMAGE_EXTENSION_PATTERN.test(path)
+}
+
+function isTransientCodexClipboardImage(path: string): boolean {
+  return CODEX_TRANSIENT_CLIPBOARD_IMAGE_PATTERN.test(path)
+}
+
+function getLocalImageExtension(filename: string, path: string): string {
+  const source = LOCAL_IMAGE_EXTENSION_PATTERN.test(filename) ? filename : path
+  const match = source.match(/(\.[a-z0-9]+)(?:[?#].*)?$/i)
+  return match?.[1]?.toLowerCase() ?? ''
+}
+
+function createLocalImageMentionAttachment(
+  image: { filename: string; path: string },
+  index: number,
+  createdAt: string
+): Attachment {
+  const fileExtension = getLocalImageExtension(image.filename, image.path)
+
+  return {
+    id: -100000 - index,
+    filename: image.filename,
+    file_size: 0,
+    mime_type: LOCAL_IMAGE_MIME_TYPES[fileExtension] ?? 'image/png',
+    status: 'ready',
+    file_extension: fileExtension,
+    created_at: createdAt,
+    local_preview_url: image.path,
+  }
+}
+
+function MessageCodexFileMention({
+  file,
+  onOpenFile,
+}: {
+  file: { filename: string; path: string }
+  onOpenFile?: (path: string) => void
+}) {
+  const useBracesIcon = shouldUseBracesFileIcon(file.filename)
+  const Icon = useBracesIcon ? Braces : FileIcon
+  const iconTestId = useBracesIcon
+    ? 'message-codex-file-braces-icon'
+    : 'message-codex-file-document-icon'
+
+  return (
+    <button
+      type="button"
+      data-testid="message-codex-file-mention"
+      className="inline-flex h-10 max-w-[260px] items-center gap-2 rounded-2xl border border-border bg-base px-3 text-left text-sm font-semibold leading-none text-text-primary shadow-sm hover:bg-muted"
+      title={file.path}
+      aria-label={file.filename}
+      onClick={() => onOpenFile?.(file.path)}
+    >
+      <Icon
+        data-testid={iconTestId}
+        className="h-3.5 w-3.5 shrink-0 text-text-muted"
+        strokeWidth={1.8}
+      />
+      <span className="min-w-0 truncate">{file.filename}</span>
+    </button>
+  )
+}
+
+function shouldUseBracesFileIcon(filename: string): boolean {
+  return /\.(?:json|jsonc)$/i.test(filename)
+}
+
+function openableAttachmentPath(attachment: Attachment): string | null {
+  return attachment.local_path?.trim() || attachment.local_preview_url?.trim() || null
+}
+
+async function openLocalAttachmentPath(
+  path: string,
+  onOpenFile?: (path: string) => void
+): Promise<void> {
+  try {
+    await openLocalFile(path)
+  } catch (error) {
+    if (onOpenFile) {
+      onOpenFile(path)
+      return
+    }
+    console.error('Failed to open local attachment:', error)
+  }
+}
+
+function MessageDocumentAttachment({
+  attachment,
+  onOpenFile,
+}: {
+  attachment: Attachment
+  onOpenFile?: (path: string) => void
+}) {
+  if (isTextAttachment(attachment)) {
+    return <MessageTextAttachment attachment={attachment} onOpenFile={onOpenFile} />
+  }
+
+  const typeLabel = getAttachmentTypeLabel(attachment)
+
+  return (
+    <div
+      data-testid="message-document-attachment"
+      className="flex h-14 w-[220px] max-w-full items-center gap-3 rounded-2xl border border-border bg-base px-3 text-left text-xs text-text-secondary shadow-sm"
+      aria-label={attachment.filename}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-50 text-xs font-semibold leading-none text-red-600">
+        {typeLabel}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium text-text-primary">{attachment.filename}</span>
+        <span className="truncate text-text-muted">{typeLabel}</span>
+      </span>
+    </div>
+  )
+}
+
+function MessageTextAttachment({
+  attachment,
+  onOpenFile,
+}: {
+  attachment: Attachment
+  onOpenFile?: (path: string) => void
+}) {
+  const preview = getAttachmentTextPreview(attachment) ?? attachment.filename
+  const attachmentPath = openableAttachmentPath(attachment)
+  const clickable = Boolean(attachmentPath)
+  const className =
+    'inline-flex h-9 max-w-[360px] items-center gap-2 rounded-full border border-border bg-muted px-3 text-left text-sm font-semibold leading-none text-text-primary shadow-sm'
+  const content = (
+    <>
+      <FileText
+        data-testid="message-text-attachment-icon"
+        className="h-3.5 w-3.5 shrink-0 text-text-muted"
+        strokeWidth={1.8}
+      />
+      <span data-testid="message-text-attachment-preview" className="min-w-0 truncate">
+        {preview}
+      </span>
+    </>
+  )
+
+  if (clickable && attachmentPath) {
+    return (
+      <button
+        type="button"
+        data-testid="message-text-attachment"
+        className={`${className} cursor-pointer hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2`}
+        aria-label={preview}
+        title={preview}
+        onClick={() => {
+          void openLocalAttachmentPath(attachmentPath, onOpenFile)
+        }}
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <div
+      data-testid="message-text-attachment"
+      className={className}
+      aria-label={preview}
+      title={preview}
+    >
+      {content}
+    </div>
+  )
+}
+
+function MessageImageAttachmentPreview({
+  attachment,
+  galleryAttachments,
+  galleryIndex,
+  buttonTestId = 'message-image-preview-button',
+  imageTestId = 'message-image-preview',
+  loadingTestId = 'message-image-preview-loading',
+  errorTestId = 'message-image-preview-error',
+  hideOnError = false,
+}: {
+  attachment: Attachment
+  galleryAttachments: Attachment[]
+  galleryIndex: number
+  buttonTestId?: string
+  imageTestId?: string
+  loadingTestId?: string
+  errorTestId?: string
+  hideOnError?: boolean
+}) {
+  return (
+    <AttachmentImagePreview
+      attachment={attachment}
+      buttonTestId={buttonTestId}
+      imageTestId={imageTestId}
+      loadingTestId={loadingTestId}
+      errorTestId={errorTestId}
+      imageClassName="block h-20 w-20 shrink-0 rounded-xl border border-border bg-base object-cover"
+      placeholderClassName="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border border-border bg-surface text-text-muted"
+      buttonClassName="block h-20 w-20 shrink-0 cursor-zoom-in p-0 text-left"
+      galleryAttachments={galleryAttachments}
+      galleryIndex={galleryIndex}
+      hideOnError={hideOnError}
+    />
+  )
+}
+
+function MessageHoverActions({
+  message,
+  align,
+  visible,
+  onEdit,
+  onFork,
+}: {
+  message: WorkbenchMessage
+  align: 'left' | 'right'
+  visible: boolean
+  onEdit?: () => void
+  onFork?: () => Promise<void> | void
+}) {
+  const { t } = useTranslation('chat')
+  const [copied, setCopied] = useState(false)
+  const [forking, setForking] = useState(false)
+  const resetCopiedAfterHideRef = useRef(false)
+  const time = formatMessageTime(message.createdAt)
+
+  useEffect(() => {
+    if (!visible && copied) {
+      resetCopiedAfterHideRef.current = true
+    }
+  }, [copied, visible])
+
+  const handleCopy = (event: ReactMouseEvent<HTMLButtonElement>) => {
+    if (event.detail > 0) {
+      event.currentTarget.blur()
+    }
+    void copyText(message.content).then(() => {
+      setCopied(true)
+      resetCopiedAfterHideRef.current = false
+    })
+  }
+
+  const handleLeaveActions = () => {
+    if (copied) {
+      resetCopiedAfterHideRef.current = true
+    }
+  }
+
+  const handleActionsTransitionEnd = (event: ReactTransitionEvent<HTMLDivElement>) => {
+    if (
+      event.target !== event.currentTarget ||
+      event.propertyName !== 'opacity' ||
+      !resetCopiedAfterHideRef.current
+    ) {
+      return
+    }
+
+    resetCopiedAfterHideRef.current = false
+    setCopied(false)
+  }
+
+  const copyAction = (
+    <span
+      data-testid="copy-message-action"
+      className="group/copy relative flex h-6 w-6 items-center justify-center"
+    >
+      <button
+        type="button"
+        data-testid="copy-message-button"
+        onClick={handleCopy}
+        title={t('messageActions.copy')}
+        className={[
+          'flex h-6 w-6 items-center justify-center rounded-md transition-colors',
+          copied
+            ? 'bg-text-primary text-background/70 shadow-sm hover:bg-text-primary/90 hover:text-background/80'
+            : 'text-text-muted hover:bg-muted hover:text-text-secondary',
+        ].join(' ')}
+        aria-label={t(copied ? 'messageActions.copied' : 'messageActions.copyMessage')}
+      >
+        {copied ? (
+          <Check data-testid="copy-message-success-icon" className="h-4 w-4" strokeWidth={2.2} />
+        ) : (
+          <Copy data-testid="copy-message-icon" className="h-3.5 w-3.5" />
+        )}
+      </button>
+      <span
+        data-testid="copy-message-label"
+        className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-base px-1.5 py-0.5 text-xs text-text-secondary opacity-0 shadow-sm transition-opacity group-hover/copy:opacity-100"
+      >
+        {t('messageActions.copy')}
+      </span>
+    </span>
+  )
+
+  const editAction = onEdit ? (
+    <span
+      data-testid="edit-message-action"
+      className="group/edit relative flex h-6 w-6 items-center justify-center"
+    >
+      <button
+        type="button"
+        data-testid="edit-message-button"
+        onClick={event => {
+          if (event.detail > 0) {
+            event.currentTarget.blur()
+          }
+          onEdit()
+        }}
+        title="编辑"
+        className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-muted hover:text-text-secondary"
+        aria-label="编辑消息"
+      >
+        <Pencil data-testid="edit-message-icon" className="h-3.5 w-3.5" />
+      </button>
+      <span
+        data-testid="edit-message-label"
+        className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-base px-1.5 py-0.5 text-xs text-text-secondary opacity-0 shadow-sm transition-opacity group-hover/edit:opacity-100"
+      >
+        编辑
+      </span>
+    </span>
+  ) : null
+
+  const forkAction = onFork ? (
+    <span className="group/fork relative flex h-6 w-6 items-center justify-center">
+      <button
+        type="button"
+        data-testid="fork-message-button"
+        onClick={() => {
+          if (forking) return
+          setForking(true)
+          void (async () => {
+            try {
+              await onFork()
+            } catch {
+              // The workbench callback owns user-visible error reporting.
+            } finally {
+              setForking(false)
+            }
+          })()
+        }}
+        disabled={forking}
+        title={t('continue_in_new_task')}
+        aria-label={t('continue_in_new_task')}
+        className="flex h-6 w-6 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-muted hover:text-text-secondary disabled:pointer-events-none disabled:opacity-50"
+      >
+        <ForkTurnIcon />
+      </button>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-base px-1.5 py-0.5 text-xs text-text-secondary opacity-0 shadow-sm transition-opacity group-hover/fork:opacity-100">
+        {t('continue_in_new_task')}
+      </span>
+    </span>
+  ) : null
+
+  const timeLabel = time ? (
+    <span
+      data-testid="message-hover-time"
+      className="select-none whitespace-nowrap px-1 text-xs text-text-muted"
+    >
+      {time}
+    </span>
+  ) : null
+
+  return (
+    <div
+      data-testid="message-hover-actions"
+      onMouseLeave={handleLeaveActions}
+      onTransitionEnd={handleActionsTransitionEnd}
+      className={[
+        'flex min-h-5 select-none items-center gap-1 text-xs text-text-muted transition-opacity duration-150',
+        visible ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0',
+        align === 'right' ? 'justify-end' : 'mt-1 justify-start',
+      ].join(' ')}
+    >
+      {align === 'right' ? (
+        <>
+          {timeLabel}
+          {copyAction}
+          {editAction}
+        </>
+      ) : (
+        <>
+          {editAction}
+          {copyAction}
+          {forkAction}
+          {timeLabel}
+        </>
+      )}
+    </div>
+  )
+}
+
+const CODEX_MENTION_LINK_PATTERN = new RegExp(
+  String.raw`\[([@$])([^\]]+)]\((${SKILL_MENTION_TARGET_PATTERN}|(?:app|plugin|file|folder|cloud):\/\/[^)]+|(?:kcoder|wework)-conversation:\/\/[^)]+)\)`,
+  'g'
+)
+
+function codexMentionTokenTestId(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]/g, '-')
+}
+
+function displayCodexMentionName(name: string): string {
+  return name
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function codexMentionKind(
+  href: string
+): 'skill' | 'app' | 'plugin' | 'file' | 'folder' | 'cloud' | 'conversation' {
+  if (href.startsWith('app://')) return 'app'
+  if (href.startsWith('plugin://')) return 'plugin'
+  if (href.startsWith('file://')) return 'file'
+  if (href.startsWith('folder://')) return 'folder'
+  if (href.startsWith('cloud://')) return 'cloud'
+  if (isConversationMentionUri(href)) return 'conversation'
+  return 'skill'
+}
+
+function cloudReferenceKind(href: string): 'project' | 'todo' | 'file' | 'delivery' {
+  if (/\/todos\/[^/]+$/.test(href)) return 'todo'
+  if (/\/files\/[^/]+$/.test(href)) return 'file'
+  if (/\/deliveries\/[^/]+$/.test(href)) return 'delivery'
+  return 'project'
+}
+
+function renderUserContent(
+  content: string,
+  onOpenLocalSkillFile?: (path: string) => void,
+  onOpenWorkspaceFile?: (path: string, options?: WorkspaceFileOpenOptions) => void
+) {
+  const parts: ReactNode[] = []
+  let offset = 0
+
+  for (const match of content.matchAll(CODEX_MENTION_LINK_PATTERN)) {
+    const start = match.index ?? 0
+    const text = content.slice(offset, start)
+    if (text) {
+      parts.push(<span key={`text-${offset}`}>{text}</span>)
+    }
+
+    const mentionName = match[2]
+    const href = match[3]
+    const skillFilePath = composerSkillFilePath(match[0])
+    const pathReference = composerPathReference(match[0])
+    const mentionKind = codexMentionKind(href)
+    const cloudKind = mentionKind === 'cloud' ? cloudReferenceKind(href) : undefined
+    const tokenTestId = codexMentionTokenTestId(mentionName)
+    const testId =
+      mentionKind === 'skill'
+        ? `sent-local-skill-token-${tokenTestId}`
+        : `sent-${mentionKind}-token-${tokenTestId}`
+    const iconTestId =
+      mentionKind === 'skill'
+        ? `sent-local-skill-icon-${tokenTestId}`
+        : `sent-${mentionKind}-icon-${tokenTestId}`
+    parts.push(
+      <a
+        key={`${mentionKind}-${start}`}
+        href={href}
+        data-testid={testId}
+        data-cloud-resource-kind={cloudKind}
+        className="inline-flex h-7 max-w-full items-center gap-1 rounded-xl bg-muted px-2 align-baseline text-sm font-medium leading-none text-blue-600 no-underline"
+        onClick={event => {
+          event.preventDefault()
+          if (skillFilePath) onOpenLocalSkillFile?.(skillFilePath)
+          if (pathReference) {
+            onOpenWorkspaceFile?.(
+              pathReference.path,
+              pathReference.directory ? { isDirectory: true } : undefined
+            )
+          }
+        }}
+      >
+        {mentionKind === 'folder' ? (
+          <Folder data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+        ) : mentionKind === 'file' ? (
+          <FileIcon data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+        ) : mentionKind === 'cloud' ? (
+          cloudKind === 'todo' ? (
+            <ListTodo data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+          ) : cloudKind === 'file' ? (
+            <FileIcon data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+          ) : cloudKind === 'delivery' ? (
+            <PackageOpen data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+          ) : (
+            <LibraryBig data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+          )
+        ) : mentionKind === 'conversation' ? (
+          <MessageCircle data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+        ) : (
+          <Package data-testid={iconTestId} className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+        )}
+        <span className="min-w-0 truncate">
+          {mentionKind === 'file' ||
+          mentionKind === 'folder' ||
+          mentionKind === 'cloud' ||
+          mentionKind === 'conversation'
+            ? mentionName
+            : displayCodexMentionName(mentionName)}
+        </span>
+      </a>
+    )
+    offset = start + match[0].length
+  }
+
+  const remainingText = content.slice(offset)
+  if (remainingText) {
+    parts.push(<span key={`text-${offset}`}>{remainingText}</span>)
+  }
+
+  return parts
+}
+
+const RAW_FAILED_MESSAGE_PREFIX = /^(?:api error:|task failed\b|error:)/i
+const RAW_FAILED_MESSAGE_PATTERNS = [
+  RAW_FAILED_MESSAGE_PREFIX,
+  /"error"\s*:/i,
+  /"error_(type|code)"\s*:/i,
+  /\b(status|type)\s*:\s*failed\b/i,
+]
+
+function shouldHideFailedAssistantContent(message: WorkbenchMessage) {
+  if (message.status !== 'failed') return false
+
+  const content = message.content.trim()
+  const error = message.error?.trim()
+  if (!content) return false
+  if (error && content === error) return true
+  if (!error) return RAW_FAILED_MESSAGE_PREFIX.test(content)
+
+  return RAW_FAILED_MESSAGE_PATTERNS.some(pattern => pattern.test(content))
+}
+
+function getDisplayProcessingBlocks(
+  blocks: ProcessingBlock[] | undefined
+): ProcessingBlock[] {
+  if (!blocks?.length) return []
+
+  return blocks.filter(block => {
+    if (block.type !== 'text' && block.type !== 'thinking') return true
+    return Boolean(block.content.trim())
+  })
+}
+
+function getWebSearchToolBlocks(blocks: ProcessingBlock[]) {
+  return blocks.filter(
+    (block): block is Extract<ProcessingBlock, { type: 'tool' }> =>
+      block.type === 'tool' && isWebSearchToolName(block.toolName)
+  )
+}
+
+function AssistantMessage({
+  message,
+  turnProcessPresentation,
+  processServerId,
+  processNow,
+  historicalFailure = false,
+  recoveryBlocked = false,
+  widgetOwnership,
+  conversationKey,
+  processingWindowEnabled,
+  hideThinkingIndicator = false,
+  devices,
+  onRetryFailedMessage,
+  onSwitchModelForFailedMessage,
+  onLoadFileChangesDiff,
+  onRevertFileChanges,
+  onOpenFileChangesReview,
+  fileChangesDiffPreviewDisabledSubtaskId,
+  onOpenWorkspaceFile,
+  onRequestUserInputSubmit,
+  onRequestUserInputIgnore,
+  onOpenAssistantPlan,
+  onLoadFullTranscript,
+  loadingFullTranscript,
+  hideRequestUserInputBlocks,
+  hiddenRequestUserInputIds,
+  onFork,
+}: {
+  message: WorkbenchMessage
+  turnProcessPresentation?: TurnProcessPresentation
+  processServerId?: string
+  processNow?: number
+  historicalFailure?: boolean
+  recoveryBlocked?: boolean
+  widgetOwnership?: MessageWidgetOwnership
+  conversationKey?: string | number | null
+  processingWindowEnabled?: boolean
+  hideThinkingIndicator?: boolean
+  devices: DeviceInfo[]
+  onRetryFailedMessage?: (message: WorkbenchMessage) => void
+  onSwitchModelForFailedMessage?: (message: WorkbenchMessage) => void
+  onLoadFileChangesDiff?: (
+    subtaskId: string,
+    fileChanges?: TurnFileChangesSummary
+  ) => Promise<{ diff: string; truncated: boolean }>
+  onRevertFileChanges?: (
+    subtaskId: string,
+    fileChanges?: TurnFileChangesSummary
+  ) => Promise<TurnFileChangesSummary>
+  onOpenFileChangesReview?: (request: {
+    subtaskId: string
+    loadDiff: () => Promise<{ diff: string; truncated: boolean }>
+    reviewTitle?: string
+    defaultFileTreeVisible?: boolean
+    focusFilePath?: string
+  }) => void
+  fileChangesDiffPreviewDisabledSubtaskId?: string | null
+  onOpenWorkspaceFile?: (path: string, options?: WorkspaceFileOpenOptions) => void
+  onRequestUserInputSubmit?: (response: RequestUserInputResponse) => void
+  onRequestUserInputIgnore?: (payload: RequestUserInputPayload) => void
+  onOpenAssistantPlan?: (request: AssistantPlanOpenRequest) => void
+  onLoadFullTranscript?: () => Promise<void> | void
+  loadingFullTranscript?: boolean
+  hideRequestUserInputBlocks?: boolean
+  hiddenRequestUserInputIds?: ReadonlySet<string>
+  onFork?: () => Promise<void> | void
+}) {
+  const { t } = useTranslation('chat')
+  const fileCapture = normalizeTurnFileCapture(message.fileChangesCapture, {
+    turnId: message.turnId ?? undefined,
+    attemptId: message.attemptId,
+  })
+  const conversationPreferences = useConversationPreferences()
+  const isCancelled = isCancelledAssistantMessage(message)
+  const hasTerminalProcess = Boolean(turnProcessPresentation?.terminalOutcome)
+  const stoppedElapsedDuration =
+    isCancelled && message.stoppedNotice !== false ? getStoppedElapsedDuration(message) : null
+  const shouldShowStoppedNotice = isCancelled && message.stoppedNotice !== false &&
+    !turnProcessPresentation?.canUseSummary
+  const shouldHideContent =
+    shouldHideFailedAssistantContent(message) ||
+    (isCancelled && isCancelledPlaceholderContent(message.content))
+  const pendingVisibleContent = shouldHideContent ? '' : message.content
+  const hiddenErrorContent =
+    message.status === 'failed' && shouldHideContent ? message.content.trim() : undefined
+  const storedDisplayBlocks = useMemo(
+    () => getDisplayProcessingBlocks(projectTerminalProcessBlocks(message.blocks, turnProcessPresentation)),
+    [message.blocks, turnProcessPresentation]
+  )
+  const { blocks: displayBlocks, projectedNarrative } = useGeneratingToolBlocks(
+    storedDisplayBlocks,
+    processingWindowEnabled === true && !isCancelled && !hasTerminalProcess && message.status === 'streaming',
+    String(message.id),
+    String(message.subtaskId ?? message.id),
+    pendingVisibleContent
+  )
+  const visibleContent = projectedNarrative ? '' : pendingVisibleContent
+  const processingSegments = splitProcessingBlocks(displayBlocks)
+  const hasBlocks = displayBlocks.length > 0
+  const hasVisibleContent = Boolean(visibleContent.trim())
+  const modelThinking = message.latestModelActivity === 'thinking' ||
+    (message.latestModelActivity === undefined && !hasVisibleContent)
+  const isStreaming = !isCancelled && !hasTerminalProcess && message.status === 'streaming'
+  const hasRunningBlocks = hasRunningProcessingBlocks(displayBlocks)
+  const isAssistantRunning =
+    message.status !== 'failed' && message.status !== 'unknown' && (isStreaming || hasRunningBlocks)
+  // Until completion, text may still be followed by another tool or reasoning block.
+  const windowPendingContent = Boolean(
+    processingWindowEnabled &&
+    (isAssistantRunning ||
+      isCancelled ||
+      message.status === 'failed' ||
+      message.status === 'unknown')
+  )
+  const canShowFinalArtifacts = !isAssistantRunning && message.status !== 'unknown'
+  const hasStreamedResponse = hasBlocks || hasVisibleContent
+  const shouldShowProcessingSummary =
+    hasBlocks || (!processingWindowEnabled && isAssistantRunning && hasStreamedResponse)
+  const processingStateKey = getMessageDisplayStateKey(conversationKey, message)
+  const usesProcessPresentation = turnProcessPresentation?.canUseSummary === true
+  const threeLevelDisplay = conversationPreferences.conversationProcessDisplay === 'three-level-v1'
+  const useTurnProcessShell = usesProcessPresentation && threeLevelDisplay
+  const usesProcessGroups = usesProcessPresentation || !threeLevelDisplay && turnProcessPresentation?.canGroupActivity === true
+  const isHistoricalError = historicalFailure || Boolean(message.continuationAccepted || message.retriedByMessageId)
+  const errorInsideProcess = useTurnProcessShell && isHistoricalError
+  const disclosureKey = turnProcessPresentation && usesProcessGroups
+    ? useTurnProcessShell ? turnProcessDisclosureKey(turnProcessPresentation)
+      : `${turnProcessPresentation.key}:two-level-v1`
+    : `${processingStateKey}:final-processing`
+  const hasThinkingBlocks = processingSegments.some(
+    segment => segment.kind === 'thinking' && segment.blocks.length > 0
+  )
+  const hasToolBlocks = processingSegments.some(
+    segment => segment.kind === 'tool' && segment.blocks.length > 0
+  )
+  const hasThinkingProcess = turnProcessPresentation?.hasThinking ?? hasThinkingBlocks
+  const hasToolProcess = turnProcessPresentation?.hasTools ?? hasToolBlocks
+  const [initialDisclosure, setInitialDisclosure] = useState<{
+    key: string
+    expanded: boolean
+  } | null>(null)
+  const initialProcessingExpanded =
+    initialDisclosure?.key === disclosureKey ? initialDisclosure.expanded : null
+  if (
+    !usesProcessGroups &&
+    initialProcessingExpanded === null &&
+    (hasThinkingProcess || hasToolProcess) &&
+    conversationPreferences.hydration === 'ready'
+  ) {
+    setInitialDisclosure({
+      key: disclosureKey,
+      expanded:
+        (hasThinkingProcess && !conversationPreferences.thinkingCollapsedByDefault) ||
+        (hasToolProcess && !conversationPreferences.toolsCollapsedByDefault),
+    })
+  }
+  const usesFinalProcessingShell =
+    threeLevelDisplay &&
+    !usesProcessGroups &&
+    !processingWindowEnabled &&
+    hasBlocks &&
+    hasVisibleContent &&
+    !hasRunningBlocks &&
+    !isCancelled &&
+    message.status !== 'failed' &&
+    message.status !== 'unknown' &&
+    !displayBlocks.some(
+      block =>
+        block.type === 'plan' ||
+        block.status === 'error' ||
+        block.status === 'unknown' ||
+        isPendingRequestUserInputBlock(block) ||
+        (block.type === 'tool' &&
+          (isGuidanceToolName(block.toolName) || isContextCompactionToolName(block.toolName)))
+    ) &&
+    !message.runtimeGuidanceSplitBefore &&
+    !message.runtimeGuidanceContinuation
+  const processDisclosureDefaultExpanded = useTurnProcessShell
+    ? !turnProcessPresentation.canCollapse : initialProcessingExpanded ?? false
+  const [processingDisclosureExpanded, setProcessingDisclosureExpanded] =
+    usePersistentProcessingExpansion(disclosureKey, processDisclosureDefaultExpanded)
+  const processVisible = processingDisclosureExpanded
+  const isFinalResponse = message.id === turnProcessPresentation?.finalMessageId
+  const responseInsideProcess = useTurnProcessShell && !isFinalResponse
+  const narrativeVisible = !responseInsideProcess || processVisible
+  const [finalProcessingCompletedAt] = useState(() => Date.now())
+  const turnProcessSummaryButtonRef = useRef<HTMLButtonElement>(null)
+  // Capture focus before the settled render removes the process children.
+  const focusedProcessKey = typeof document === 'undefined' ? undefined :
+    document.activeElement?.closest<HTMLElement>('[data-turn-process-content-key]')?.dataset.turnProcessContentKey
+  const previousTurnProcess = useRef(turnProcessPresentation)
+  useLayoutEffect(() => {
+    const presentation = turnProcessPresentation
+    const previousPresentation = previousTurnProcess.current
+    previousTurnProcess.current = presentation
+    if (!presentation) {
+      return
+    }
+
+    if (
+      message.id === presentation.ownerMessageId &&
+      previousPresentation?.key === presentation.key &&
+      !previousPresentation.canCollapse &&
+      presentation.canCollapse
+    ) {
+      if (focusedProcessKey === presentation.key) turnProcessSummaryButtonRef.current?.focus()
+    }
+  }, [
+    message.id,
+    turnProcessPresentation,
+    focusedProcessKey,
+  ])
+  const shouldShowThinking = shouldShowAssistantThinkingIndicator({
+    isStreaming,
+    hasProcessingDisplayBlock: hasProcessingDisplayBlock(displayBlocks),
+    hasVisibleContent,
+  })
+  const webSearchSources = isStreaming
+    ? []
+    : getWebSearchSourceItems(getWebSearchToolBlocks(displayBlocks))
+  const memoryCitations = message.memoryCitations ?? []
+  const generatedImages = useMemo(() => getGeneratedImages(displayBlocks), [displayBlocks])
+  const [areHoverActionsVisible, setAreHoverActionsVisible] = useState(false)
+
+  const openFileFromLink = (path: string, options?: WorkspaceFileOpenOptions) => {
+    if (options) {
+      onOpenWorkspaceFile?.(path, options)
+      return
+    }
+    onOpenWorkspaceFile?.(path)
+  }
+  const references = getAssistantReferences(message.references, visibleContent, message.fileChanges)
+  const runningProcessingSegments = processingSegments.map((segment, index) =>
+    segment.kind === 'thinking'
+      ? isStreaming &&
+        modelThinking &&
+        index === processingSegments.length - 1 &&
+        segment.blocks.at(-1)?.status === 'streaming'
+      : segment.kind === 'tool' && hasRunningProcessingBlocks(segment.blocks)
+  )
+  const pendingQuestions = usesProcessGroups && !hideRequestUserInputBlocks
+    ? displayBlocks.filter(block => isPendingRequestUserInputBlock(block, hiddenRequestUserInputIds))
+    : []
+  const renderedProcessingSegments = shouldShowProcessingSummary
+    ? processingSegments.map((segment, index) =>
+        segment.kind === 'thinking' ? (
+          <AssistantThinkingDetails
+            key={`thinking:${segment.blocks[0].id}`}
+            windowed={processingWindowEnabled}
+            collapsedByDefault={usesProcessGroups || usesFinalProcessingShell ? true : undefined}
+            content={segment.blocks
+              .map(block => (block.type === 'thinking' ? block.content : ''))
+              .join('\n\n')}
+            running={runningProcessingSegments[index]}
+            startedAt={segment.blocks[0]?.createdAt}
+            completedAt={segment.blocks.at(-1)?.completedAt}
+          />
+        ) : (
+          <ToolBlocksDisplay
+            key={`${segment.kind}:${requestUserInputBlockKey(
+              segment.blocks.find(isRequestUserInputBlock) ?? segment.blocks[0]
+            )}`}
+            blocks={segment.blocks}
+            fileEditDurationBlocks={displayBlocks}
+            isStreaming={isStreaming}
+            startedAt={segment.blocks[0]?.createdAt}
+            forceExpanded={segment.kind === 'narrative'}
+            nestedDisclosure={usesProcessGroups || usesFinalProcessingShell}
+            processingPhase={
+              segment.blocks.length === 0
+                ? 'live'
+                : usesProcessGroups || usesFinalProcessingShell
+                  ? 'intermediate'
+                  : getProcessingPhase(processingSegments, index, hasVisibleContent)
+            }
+            showSummary={segment.kind === 'tool' && !processingWindowEnabled && !usesProcessGroups && !usesFinalProcessingShell}
+            stateKey={`${usesProcessGroups ? disclosureKey : processingStateKey}:${segment.blocks[0]?.id ?? 'empty'}`}
+            onOpenWorkspaceFile={onOpenWorkspaceFile}
+            onRequestUserInputSubmit={onRequestUserInputSubmit}
+            onRequestUserInputIgnore={onRequestUserInputIgnore}
+            onOpenAssistantPlan={onOpenAssistantPlan}
+            onLoadFullTranscript={onLoadFullTranscript}
+            loadingFullTranscript={loadingFullTranscript}
+            hideRequestUserInputBlocks={usesProcessGroups || hideRequestUserInputBlocks}
+            hiddenRequestUserInputIds={hiddenRequestUserInputIds}
+          />
+        )
+      )
+    : null
+  const activitySegments: ReactNode[] = []
+  if (usesProcessGroups && renderedProcessingSegments) {
+    for (let index = 0; index < processingSegments.length;) {
+      const start = index
+      if (processingSegments[index].kind === 'narrative') {
+        activitySegments.push(renderedProcessingSegments[index++])
+        continue
+      }
+      while (index < processingSegments.length && processingSegments[index].kind !== 'narrative') index++
+      const blocks = processingSegments.slice(start, index).flatMap(segment => segment.blocks)
+        .filter(block => !isPendingRequestUserInputBlock(block, hiddenRequestUserInputIds))
+      const thinkingActive = runningProcessingSegments.slice(start, index).some((running, offset) =>
+        running && processingSegments[start + offset].kind === 'thinking')
+      if (blocks.length > 0) activitySegments.push(
+        <ProcessActivityGroup key={blocks[0].id} blocks={blocks} thinkingActive={thinkingActive}
+          showTiming={!useTurnProcessShell}
+          now={processNow}
+          stateKey={`${disclosureKey}:activity:${blocks[0].id}`}>
+          {renderedProcessingSegments.slice(start, index)}
+        </ProcessActivityGroup>
+      )
+    }
+  }
+  const responseContent = hasVisibleContent ? (
+    <div
+      data-message-selectable-text
+      data-testid={windowPendingContent ? 'assistant-pending-content' : 'assistant-message-content'}
+    >
+      <AssistantMarkdown
+        conversationReading
+        content={visibleContent}
+        isStreaming={isStreaming}
+        onOpenFile={openFileFromLink}
+        fileChanges={message.fileChanges}
+      />
+    </div>
+  ) : null
+  const thinkingIndicator =
+    shouldShowThinking && !hasVisibleContent && !hideThinkingIndicator ? (
+      <div className="flex min-h-8 items-center text-sm">
+        <AssistantThinkingIndicator thinking={message.latestModelActivity === 'thinking'} />
+      </div>
+    ) : null
+  const hasWidgetActivity = useWidgetMessageActivity(
+    {
+      terminal: false,
+      turnId: message.turnId,
+      attemptId: message.attemptId,
+      subtaskId: message.subtaskId,
+    },
+    isAssistantRunning || isCancelled || message.status === 'failed' || message.status === 'unknown'
+  )
+  const hasWindowedActivity =
+    hasWidgetActivity ||
+    hasBlocks ||
+    (windowPendingContent && hasVisibleContent) ||
+    Boolean(thinkingIndicator)
+  const processingTimeline = processingWindowEnabled ? (
+    hasWindowedActivity ? (
+      <ProcessingGroup
+        stateKey={`${processingStateKey}:activity`}
+        running={isAssistantRunning}
+        turnRunning={isAssistantRunning}
+      >
+        {renderedProcessingSegments}
+        {windowPendingContent && responseContent}
+        {thinkingIndicator}
+        <WidgetMessageArtifacts
+          content={visibleContent}
+          preview
+          excludedToolIds={displayBlocks.flatMap(block =>
+            block.type === 'tool' ? [block.id] : []
+          )}
+        />
+      </ProcessingGroup>
+    ) : null
+  ) : (
+    <>
+      {usesProcessGroups ? activitySegments : renderedProcessingSegments}
+      {isAssistantRunning && (
+        <WidgetMessageArtifacts
+          content={visibleContent}
+          preview
+          excludedToolIds={displayBlocks.flatMap(block =>
+            block.type === 'tool' ? [block.id] : []
+          )}
+        />
+      )}
+    </>
+  )
+  const hoverActions = message.status !== 'streaming' && message.status !== 'unknown' &&
+    !isCancelled && (hasVisibleContent && narrativeVisible || message.status === 'failed') ? (
+      <MessageHoverActions message={message} align="left" visible={areHoverActionsVisible} onFork={onFork} />
+    ) : null
+  const foldFailureActions = message.status === 'failed' && isHistoricalError &&
+    !(hasVisibleContent && narrativeVisible)
+  const errorContent = message.status === 'failed' && !isCancelled ? (
+    <AssistantErrorCard
+      error={message.error}
+      errorType={message.errorType}
+      rawError={hiddenErrorContent}
+      message={message}
+      historical={historicalFailure}
+      recoveryBlocked={recoveryBlocked}
+      onRetry={onRetryFailedMessage}
+      onSwitchModel={onSwitchModelForFailedMessage}
+      detailsActions={foldFailureActions ? hoverActions : undefined}
+    />
+  ) : null
+  const groupedProcessingTimeline = useTurnProcessShell && turnProcessPresentation ? (
+    processVisible && (hasBlocks || responseInsideProcess && hasVisibleContent || hasWidgetActivity ||
+      errorInsideProcess && errorContent) ? (
+      <div
+        data-testid="turn-process-content"
+        data-turn-process-content-key={turnProcessPresentation.key}
+        data-conversation-segments
+        className="flex min-w-0 flex-col"
+        style={{ gap: conversationBlockGap[conversationPreferences.conversationBlockSpacing ?? 'normal'] }}
+      >
+        {processingTimeline}
+        {responseInsideProcess && responseContent}
+        {errorInsideProcess && errorContent}
+      </div>
+    ) : null
+  ) : (
+    processingTimeline
+  )
+  const finalProcessingDuration = getDurationText(
+    displayBlocks,
+    getProcessingSummaryStartMs(message, displayBlocks, false) ?? finalProcessingCompletedAt,
+    finalProcessingCompletedAt,
+    isStreaming ? finalProcessingCompletedAt : null,
+    false
+  )
+
+  return (
+    <WidgetMessageBoundary
+      identity={{
+        terminal:
+          canShowFinalArtifacts &&
+          !isCancelled &&
+          message.status !== 'failed' &&
+          widgetOwnership?.attemptActive !== true &&
+          widgetOwnership?.ownsWidgets !== false,
+        active:
+          !isCancelled &&
+          widgetOwnership?.ownsWidgets !== false &&
+          (isAssistantRunning || widgetOwnership?.attemptActive === true),
+        ownsWidgets: widgetOwnership?.ownsWidgets,
+        turnId: message.turnId,
+        attemptId: message.attemptId,
+        subtaskId: message.subtaskId,
+      }}
+    >
+      <div
+        className="min-w-0 max-w-full text-chat text-text-primary"
+        style={
+          isAssistantRunning && !useTurnProcessShell
+            ? {
+                minHeight: getAssistantPendingHeight(
+                  conversationPreferences,
+                  processingWindowEnabled === true
+                ),
+              }
+            : undefined
+        }
+      >
+        <div
+          className="w-full max-w-full"
+          data-testid="message-hover-region"
+          onPointerEnter={() => setAreHoverActionsVisible(true)}
+          onPointerLeave={() => setAreHoverActionsVisible(false)}
+        >
+          <div className="w-full max-w-full">
+            <div
+              data-conversation-segments
+              style={{
+                gap: conversationBlockGap[
+                  conversationPreferences.conversationBlockSpacing ?? 'normal'
+                ],
+              }}
+              className="flex min-w-0 flex-col"
+            >
+              {shouldShowStoppedNotice ? (
+                <div
+                  data-testid="assistant-stopped-notice"
+                  className="mb-3 w-full pb-1 text-xs text-text-muted"
+                >
+                  {stoppedElapsedDuration
+                    ? t('assistant_status.stopped_after', {
+                        duration: stoppedElapsedDuration,
+                      })
+                    : t('assistant_status.stopped')}
+                </div>
+              ) : null}
+              {useTurnProcessShell && turnProcessPresentation ? (
+                <>
+                  {message.id === turnProcessPresentation.ownerMessageId ? (
+                    <TurnProcessSummary
+                      presentation={turnProcessPresentation}
+                      serverId={processServerId}
+                      expanded={processVisible}
+                      onToggle={() => setProcessingDisclosureExpanded(value => !value)}
+                      buttonRef={turnProcessSummaryButtonRef}
+                    />
+                  ) : null}
+                  {groupedProcessingTimeline}
+                </>
+              ) : usesFinalProcessingShell ? (
+                <div className="mb-3 min-w-0 w-full border-b border-border pb-2">
+                  <button
+                    type="button"
+                    data-testid="final-processing-toggle"
+                    aria-expanded={processingDisclosureExpanded}
+                    className="flex min-h-8 items-center gap-1 text-sm text-text-muted hover:text-text-secondary"
+                    onClick={() => setProcessingDisclosureExpanded(value => !value)}
+                  >
+                    <span>{finalProcessingDuration || t('toolStatus.processed')}</span>
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${processingDisclosureExpanded ? '' : '-rotate-90'}`}
+                      strokeWidth={2}
+                      aria-hidden="true"
+                    />
+                  </button>
+                  {processingDisclosureExpanded ? (
+                    <div
+                      data-conversation-segments
+                      style={{
+                        gap: conversationBlockGap[
+                          conversationPreferences.conversationBlockSpacing ?? 'normal'
+                        ],
+                      }}
+                      className="mt-1 flex flex-col"
+                    >
+                      {processingTimeline}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                processingTimeline
+              )}
+              {!processingWindowEnabled && !useTurnProcessShell && thinkingIndicator && (
+                <AssistantWaitingPlaceholder
+                  windowed={false}
+                  thinking={message.latestModelActivity === 'thinking'}
+                />
+              )}
+              {generatedImages.length > 0 && (!processingWindowEnabled || canShowFinalArtifacts) ? (
+                <GeneratedImageGallery images={generatedImages} />
+              ) : null}
+              {message.contentTruncated && narrativeVisible ? (
+                <ContentTruncatedNotice
+                  originalChars={message.contentOriginalChars}
+                  onLoadFullTranscript={onLoadFullTranscript}
+                  loadingFullTranscript={loadingFullTranscript}
+                />
+              ) : null}
+              {!windowPendingContent && !responseInsideProcess && responseContent}
+              <WidgetMessageArtifacts
+                content={visibleContent}
+                expected={displayBlocks.some(
+                  block =>
+                    block.type === 'tool' &&
+                    block.toolName === 'show_widget' &&
+                    block.status === 'done' &&
+                    block.toolInput?.action !== 'read'
+                )}
+              />
+            </div>
+            {canShowFinalArtifacts && narrativeVisible && hasVisibleContent && webSearchSources.length > 0 && (
+              <WebSearchSourcesChip sources={webSearchSources} />
+            )}
+            {canShowFinalArtifacts && narrativeVisible && memoryCitations.length > 0 && (
+              <CodexMemoryCitations citations={memoryCitations} onOpenFile={onOpenWorkspaceFile} />
+            )}
+            {canShowFinalArtifacts && narrativeVisible && references.length > 0 && (
+              <CodexReferenceList references={references} onOpenFile={openFileFromLink} />
+            )}
+            {pendingQuestions.map(block => isRequestUserInputBlock(block) ? (
+              <RequestUserInputCard
+                key={requestUserInputBlockKey(block)}
+                payload={block.renderPayload}
+                onSubmit={onRequestUserInputSubmit}
+                onIgnore={() => onRequestUserInputIgnore?.(block.renderPayload)}
+              />
+            ) : null)}
+            {message.status === 'unknown' && (
+              <div
+                role="status"
+                data-testid="assistant-attempt-unknown"
+                className="text-sm text-text-muted"
+              >
+                {t('toolStatus.unknown')}
+              </div>
+            )}
+            {!errorInsideProcess && errorContent}
+            {canShowFinalArtifacts &&
+            message.fileChanges &&
+            message.subtaskId &&
+            onLoadFileChangesDiff &&
+            onRevertFileChanges ? (
+              <FileChangesCard
+                subtaskId={message.subtaskId}
+                summary={
+                  fileCapture &&
+                  (fileCapture.state !== 'changed' ||
+                    fileCapture.artifactId !== message.fileChanges.artifact_id)
+                    ? { ...message.fileChanges, revertible: false }
+                    : message.fileChanges
+                }
+                deviceOnline={devices.some(
+                  device =>
+                    device.device_id === message.fileChanges?.device_id &&
+                    device.status === 'online'
+                )}
+                onLoadDiff={onLoadFileChangesDiff}
+                onRevert={onRevertFileChanges}
+                onOpenReview={onOpenFileChangesReview}
+                diffPreviewDisabled={
+                  fileChangesDiffPreviewDisabledSubtaskId === String(message.subtaskId)
+                }
+              />
+            ) : null}
+          </div>
+          {!foldFailureActions && hoverActions}
+          {message.status !== 'failed' && !isCancelled && <EvolutionTurnRating message={message} />}
+        </div>
+      </div>
+    </WidgetMessageBoundary>
+  )
+}
+
+interface GeneratedImageArtifact {
+  id: string
+  src: string
+  alt: string
+}
+
+function generatedImageAttachment(image: GeneratedImageArtifact, index: number): Attachment {
+  return {
+    id: index + 1,
+    filename: image.alt,
+    file_size: 0,
+    mime_type: 'image/png',
+    status: 'ready',
+    file_extension: '.png',
+    created_at: '',
+    local_preview_url: image.src,
+  }
+}
+
+function getGeneratedImages(blocks: ProcessingBlock[]): GeneratedImageArtifact[] {
+  return blocks.flatMap(block => {
+    if (block.type !== 'tool' || block.toolName !== 'image_generation') return []
+    const payload = block.renderPayload
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) return []
+    const imageBase64 = Reflect.get(payload, 'imageBase64')
+    if (typeof imageBase64 !== 'string' || !imageBase64.trim()) return []
+    const revisedPrompt = Reflect.get(payload, 'revisedPrompt')
+    return [
+      {
+        id: block.id,
+        src: imageBase64.startsWith('data:') ? imageBase64 : `data:image/png;base64,${imageBase64}`,
+        alt:
+          typeof revisedPrompt === 'string' && revisedPrompt.trim()
+            ? revisedPrompt
+            : 'Generated image',
+      },
+    ]
+  })
+}
+
+function GeneratedImageGallery({ images }: { images: GeneratedImageArtifact[] }) {
+  const attachments = useMemo(() => images.map(generatedImageAttachment), [images])
+
+  return (
+    <div
+      className="mb-3 grid max-w-3xl grid-cols-1 gap-3 sm:grid-cols-2"
+      data-testid="generated-image-gallery"
+    >
+      {images.map((image, index) => (
+        <GeneratedImagePreview key={image.id} index={index} galleryAttachments={attachments} />
+      ))}
+    </div>
+  )
+}
+
+function GeneratedImagePreview({
+  index,
+  galleryAttachments,
+}: {
+  index: number
+  galleryAttachments: Attachment[]
+}) {
+  const attachment = galleryAttachments[index]
+
+  return (
+    <AttachmentImagePreview
+      attachment={attachment}
+      galleryAttachments={galleryAttachments}
+      galleryIndex={index}
+      buttonTestId="generated-image-preview-button"
+      imageTestId="generated-image"
+      loadingTestId="generated-image-loading"
+      errorTestId="generated-image-error"
+      imageClassName="h-auto w-full rounded-lg border border-border bg-surface object-contain"
+      placeholderClassName="flex min-h-40 w-full items-center justify-center rounded-lg border border-border bg-surface text-text-muted"
+      buttonClassName="block w-full cursor-zoom-in p-0 text-left"
+    />
+  )
+}
+
+function ContentTruncatedNotice({
+  originalChars,
+  onLoadFullTranscript,
+  loadingFullTranscript = false,
+}: {
+  originalChars?: number
+  onLoadFullTranscript?: () => Promise<void> | void
+  loadingFullTranscript?: boolean
+}) {
+  return (
+    <div className="mb-2 flex flex-wrap items-center gap-2 rounded-md border border-border bg-surface px-2.5 py-1.5 text-xs text-text-muted">
+      <span>
+        早期内容已从当前视图卸载
+        {typeof originalChars === 'number' ? `，原始约 ${originalChars.toLocaleString()} 字` : ''}。
+      </span>
+      {onLoadFullTranscript ? (
+        <button
+          type="button"
+          data-testid="load-full-runtime-transcript-button"
+          onClick={() => void onLoadFullTranscript()}
+          disabled={loadingFullTranscript}
+          className="h-8 rounded border border-border bg-base px-2 text-xs font-medium text-text-secondary hover:bg-muted disabled:cursor-wait disabled:opacity-60"
+        >
+          {loadingFullTranscript ? '正在加载完整输出' : '加载完整输出'}
+        </button>
+      ) : null}
+    </div>
+  )
+}
+
+function getMessageDisplayStateKey(
+  conversationKey: string | number | null | undefined,
+  message: WorkbenchMessage
+): string {
+  const conversationPart = conversationKey == null ? 'default' : String(conversationKey)
+  return `${conversationPart}:${message.id}`
+}
+
+function hasRunningProcessingBlocks(blocks: ProcessingBlock[]): boolean {
+  return blocks.some(block => isActiveToolCallStatus(block.status))
+}
+
+type ProcessingSegment = {
+  kind: 'tool' | 'narrative' | 'thinking'
+  blocks: ProcessingBlock[]
+}
+
+function getProcessingPhase(
+  segments: ProcessingSegment[],
+  index: number,
+  hasFinalContent: boolean
+): 'live' | 'intermediate' | 'final' {
+  if (index < segments.length - 1) return 'intermediate'
+  if (hasFinalContent) return 'final'
+  return 'live'
+}
+
+function splitProcessingBlocks(blocks: ProcessingBlock[]): ProcessingSegment[] {
+  if (blocks.length === 0) return [{ kind: 'tool', blocks: [] }]
+
+  const segments: ProcessingSegment[] = []
+
+  blocks.forEach(block => {
+    const kind =
+      block.type === 'thinking' ? 'thinking' : isCollapsibleToolBlock(block) ? 'tool' : 'narrative'
+    const previous = segments.at(-1)
+    if (previous?.kind === kind && kind !== 'thinking') {
+      previous.blocks.push(block)
+      return
+    }
+    segments.push({ kind, blocks: [block] })
+  })
+
+  return segments
+}
+
+function isCollapsibleToolBlock(block: ProcessingBlock): boolean {
+  if (block.type === 'file_changes') return true
+  if (block.type !== 'tool') return false
+  return !isGuidanceToolName(block.toolName) && !isContextCompactionToolName(block.toolName)
+}
+
+function hasProcessingDisplayBlock(blocks: ProcessingBlock[]): boolean {
+  return buildProcessingDisplayRows(blocks).length > 0
+}
+
+function shouldShowAssistantThinkingIndicator({
+  isStreaming,
+  hasProcessingDisplayBlock,
+  hasVisibleContent,
+}: {
+  isStreaming: boolean
+  hasProcessingDisplayBlock: boolean
+  hasVisibleContent: boolean
+}): boolean {
+  return isStreaming && !hasProcessingDisplayBlock && !hasVisibleContent
+}

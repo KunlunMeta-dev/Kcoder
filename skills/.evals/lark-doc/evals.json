@@ -1,0 +1,78 @@
+{
+  "skill_name": "lark-doc",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我总结这篇飞书文档的要点：https://example.feishu.cn/docx/AbCdEfGhIjKl。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Fetch the document with docs +fetch as the user, then summarize from the fetched content.",
+      "expectations": [
+        "Uses lark-cli docs +fetch with the document URL or token",
+        "Uses --as user for the document operation",
+        "Summarizes only after fetching instead of guessing the content"
+      ],
+      "assertions": [
+        {
+          "contains": "+fetch"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Make a copy of the doc https://example.feishu.cn/docx/QwErTyUiOp called \"Q3 plan (copy)\". List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Copy with lark-cli drive files copy, not by fetching the body and creating a new document.",
+      "expectations": [
+        "Routes the copy to lark-drive and uses lark-cli drive files copy",
+        "Does not rebuild the document with docs +fetch followed by docs +create"
+      ],
+      "assertions": [
+        {
+          "contains": "drive files copy"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "把文档 https://example.feishu.cn/wiki/ZxCvBnMlKj 里『风险』一节改写得更简洁，其他部分不要动。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Fetch the relevant section, then edit it with docs +update following the update reference, leaving other sections unchanged.",
+      "expectations": [
+        "Uses docs +update for the rewrite",
+        "Locates the target section (for example with +fetch and a section or keyword scope) before editing",
+        "Keeps the rest of the document unchanged"
+      ],
+      "assertions": [
+        {
+          "contains": "+update"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Insert the local image ./diagrams/arch.png at the end of the doc https://example.feishu.cn/docx/PlMoKnIjUh. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Use docs +media-insert with the image referenced as @./diagrams/arch.png.",
+      "expectations": [
+        "Uses docs +media-insert to insert the local image",
+        "References the local file inside the working directory with the @./relative path form"
+      ],
+      "assertions": [
+        {
+          "contains": "+media-insert"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "这篇文档昨天被误改了，帮我回滚到昨天上午的版本：https://example.feishu.cn/docx/HgFdSaQwEr。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "List document history, choose the version from yesterday morning, revert it and check the revert status.",
+      "expectations": [
+        "Lists versions with docs +history-list before reverting",
+        "Reverts with docs +history-revert and checks progress with +history-revert-status",
+        "Confirms which version to restore instead of picking one blindly"
+      ],
+      "assertions": [
+        {
+          "contains": "+history-revert"
+        }
+      ]
+    }
+  ]
+}

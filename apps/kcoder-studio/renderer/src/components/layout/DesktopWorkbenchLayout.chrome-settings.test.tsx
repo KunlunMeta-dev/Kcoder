@@ -1,0 +1,749 @@
+import { installTestDesktopHost, installTestTransport } from '@/test/runtime-transport'
+import './DesktopWorkbenchLayout.test-mocks'
+// Layout ownership tests preload the deferred page independently of network timing.
+import '@/components/settings/ConnectionsSettingsPage'
+
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { describe, expect, test, vi } from 'vitest'
+import { getKeyboardPlatform } from '@/lib/keyboard-platform'
+import * as runtimeConfig from '@/config/runtime'
+import { DesktopMenuBar } from '@/kcoder/DesktopMenuBar'
+import { requestDesktopSidebarToggle } from './useDesktopSidebarCollapsed'
+import {
+  DesktopWorkbenchLayout,
+  baseProps,
+  getDesktopWorkbenchMainElement,
+} from './DesktopWorkbenchLayout.test-harness'
+import {
+  expectAndClearConsoleError,
+  getLocalCodexUsageDisplayMock,
+  isLocalTerminalAvailableMock,
+  openExternalUrlMock,
+  openLocalWorkspaceMock,
+  startCodeServerSessionMock,
+} from './DesktopWorkbenchLayout.test-mocks'
+
+describe('DesktopWorkbenchLayout', () => {
+  test('keeps the mounted preview clock quiet until its sidebar is actually shown', async () => {
+    const timers = vi.spyOn(globalThis, 'setTimeout')
+    const clockStarts = () => timers.mock.calls.filter(([, delay]) => delay === 60_000).length
+    const hook = render(<DesktopWorkbenchLayout {...baseProps} />)
+    try {
+      expect(clockStarts()).toBe(1)
+      await userEvent.click(screen.getByTestId('collapse-sidebar-button'))
+      expect(clockStarts()).toBe(1)
+      fireEvent.pointerEnter(screen.getByTestId('desktop-sidebar-hover-edge'))
+      expect(clockStarts()).toBe(2)
+      fireEvent.pointerLeave(screen.getByTestId('desktop-sidebar-preview'))
+      expect(clockStarts()).toBe(2)
+    } finally { hook.unmount(); timers.mockRestore() }
+  })
+  test.each([false, true])('keeps the browser sidebar toggle on the right (Gateway shim: %s)', async shim => {
+    if (shim) {
+      installTestTransport(() => null)
+      Object.defineProperty(window, '__KCODER_GATEWAY_WEB_SHIM__', { configurable: true, value: true })
+    }
+    try {
+      render(<DesktopWorkbenchLayout {...baseProps} />)
+      const actions = await screen.findByTestId(shim ? 'titlebar-actions' : 'workspace-panel-floating-actions')
+      await waitFor(() => expect(actions).toContainElement(screen.getByTestId('collapse-sidebar-button')))
+      if (shim) expect(actions).toHaveClass('min-w-[7.5rem]')
+      await userEvent.click(screen.getByTestId('collapse-sidebar-button'))
+      await waitFor(() => {
+        expect(screen.queryAllByTestId('collapse-sidebar-button')).toHaveLength(0)
+        expect(screen.getAllByTestId('expand-sidebar-button')).toHaveLength(1)
+      })
+      fireEvent.pointerEnter(screen.getByTestId('desktop-sidebar-hover-edge'))
+      await waitFor(() => {
+        expect(screen.getByTestId('desktop-sidebar-preview-panel')).toBeInTheDocument()
+        expect(screen.queryAllByTestId('collapse-sidebar-button')).toHaveLength(0)
+        expect(screen.getAllByTestId('expand-sidebar-button')).toHaveLength(1)
+      })
+      expect(actions).toContainElement(screen.getByTestId('expand-sidebar-button'))
+      await userEvent.click(screen.getByTestId('expand-sidebar-button'))
+      await waitFor(() => {
+        expect(screen.getAllByTestId('collapse-sidebar-button')).toHaveLength(1)
+        expect(screen.queryAllByTestId('expand-sidebar-button')).toHaveLength(0)
+        expect(screen.getByTestId('desktop-sidebar')).toHaveStyle({ width: '240px' })
+      })
+    } finally {
+      Reflect.deleteProperty(window, '__KCODER_GATEWAY_WEB_SHIM__')
+    }
+  })
+  test('titlebar toggle collapses the active settings sidebar once and restores it', async () => {
+    Object.defineProperty(window, 'kcoderDesktopMenu', {
+      configurable: true,
+      value: {
+        list: vi.fn().mockResolvedValue([]),
+        setVisible: vi.fn().mockResolvedValue(undefined),
+      },
+    })
+    window.history.pushState({}, '', '/settings')
+    try {
+      render(
+        <>
+          <DesktopMenuBar />
+          <DesktopWorkbenchLayout {...baseProps} />
+        </>
+      )
+      const sidebar = await screen.findByTestId('settings-sidebar')
+      const originalWidth = sidebar.style.width
+      const chrome = screen.getByTestId('desktop-brand-chrome')
+      const toggle = within(chrome).getByTestId('desktop-titlebar-sidebar-toggle')
+      await userEvent.click(toggle)
+      await waitFor(() => expect(sidebar).toHaveStyle({ width: '0px' }))
+      expect(sidebar).toHaveAttribute('inert')
+      await userEvent.click(toggle)
+      await waitFor(() => expect(sidebar).toHaveStyle({ width: originalWidth }))
+      expect(screen.getByTestId('general-settings-page')).toBeVisible()
+    } finally {
+      Reflect.deleteProperty(window, 'kcoderDesktopMenu')
+    }
+  })
+  test.each(['gateway', 'electron'])('keeps the titlebar shortcut and shared workbench toggle in sync in %s', async host => {
+    installTestDesktopHost()
+    if (host === 'electron') {
+      Object.defineProperty(window, '__KCODER_GATEWAY_WEB_SHIM__', { configurable: true, value: true })
+      Object.defineProperty(window, 'kcoderDesktopHost', {
+        configurable: true,
+        value: { setTaskActivity: vi.fn().mockResolvedValue(undefined) },
+      })
+    }
+    Object.defineProperty(window, 'kcoderDesktopMenu', {
+      configurable: true,
+      value: {
+        list: vi.fn().mockResolvedValue([{ index: 0, label: '文件' }]),
+        setVisible: vi.fn().mockResolvedValue(undefined),
+      },
+    })
+    try {
+      render(
+        <>
+          <DesktopMenuBar />
+          <DesktopWorkbenchLayout {...baseProps} />
+        </>
+      )
+      const shortcut = screen.getByTestId('desktop-titlebar-sidebar-toggle')
+      const actions = within(await screen.findByTestId('titlebar-actions'))
+      const collapse = actions.getByTestId('collapse-sidebar-button')
+      const fileMenu = await screen.findByTestId('desktop-menu-0')
+      expect(
+        shortcut.compareDocumentPosition(fileMenu) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+      expect(
+        collapse.compareDocumentPosition(actions.getByTestId('toggle-bottom-workspace-panel-button')) &
+          Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy()
+      expect(screen.queryByTestId('desktop-app-switcher')).not.toBeInTheDocument()
+      await userEvent.click(shortcut)
+      expect(screen.getByTestId('desktop-sidebar')).toHaveStyle({ width: '0px' })
+      fireEvent.pointerEnter(screen.getByTestId('desktop-sidebar-hover-edge'))
+      expect(screen.getAllByTestId('desktop-window-controls')).toHaveLength(2)
+      await userEvent.click(actions.getByTestId('expand-sidebar-button'))
+      expect(screen.getByTestId('desktop-sidebar')).toHaveStyle({ width: '240px' })
+      await userEvent.click(actions.getByTestId('collapse-sidebar-button'))
+      await userEvent.click(shortcut)
+      expect(screen.getByTestId('desktop-sidebar')).toHaveStyle({ width: '240px' })
+    } finally {
+      Reflect.deleteProperty(window, 'kcoderDesktopMenu')
+      if (host === 'electron') {
+        Reflect.deleteProperty(window, '__KCODER_GATEWAY_WEB_SHIM__')
+        Reflect.deleteProperty(window, 'kcoderDesktopHost')
+      }
+    }
+  })
+  test('restores and stores sidebar width in localStorage', () => {
+    localStorage.setItem('wework.desktop.sidebar.width', '340')
+
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(document.querySelector('aside')).toHaveStyle({ width: '340px' })
+
+    fireEvent.pointerDown(screen.getByTestId('sidebar-resize-handle'))
+    fireEvent.pointerMove(document, { clientX: 360 })
+    fireEvent.pointerUp(document)
+
+    expect(document.querySelector('aside')).toHaveStyle({ width: '360px' })
+    expect(localStorage.getItem('kcoder.desktop.sidebar.width')).toBe('360')
+  })
+
+  test('clamps sidebar resizing to the maximum width', () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    fireEvent.pointerDown(screen.getByTestId('sidebar-resize-handle'))
+    fireEvent.pointerMove(document, { clientX: 900 })
+    fireEvent.pointerUp(document)
+
+    expect(document.querySelector('aside')).toHaveStyle({ width: '480px' })
+    expect(localStorage.getItem('kcoder.desktop.sidebar.width')).toBe('480')
+  })
+
+  test('collapses the sidebar when dragging below the close threshold', () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    const sidebar = screen.getByTestId('desktop-sidebar')
+    expect(sidebar).toHaveStyle({ width: '240px' })
+
+    fireEvent.pointerDown(screen.getByTestId('sidebar-resize-handle'))
+    fireEvent.pointerMove(document, { clientX: 150 })
+
+    expect(sidebar).toHaveStyle({ width: '0px' })
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByTestId('desktop-sidebar-hover-edge')).toBeInTheDocument()
+    expect(getDesktopWorkbenchMainElement()).not.toHaveClass('ml-1.5')
+    expect(document.body.style.cursor).toBe('')
+    expect(document.body.style.userSelect).toBe('')
+  })
+
+  test('uses the selected sidebar width as the default', () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(document.querySelector('aside')).toHaveStyle({ width: '240px' })
+  })
+
+  test('clamps older narrow stored sidebar widths to the new minimum', () => {
+    localStorage.setItem('wework.desktop.sidebar.width', '240')
+
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(document.querySelector('aside')).toHaveStyle({ width: '240px' })
+  })
+
+  test('auto-collapses the sidebar in compact desktop windows and restores it when wide', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 920,
+    })
+
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    const sidebar = screen.getByTestId('desktop-sidebar')
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: '0px' }))
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true')
+    expect(screen.getByTestId('desktop-sidebar-hover-edge')).toBeInTheDocument()
+
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 1200,
+    })
+    fireEvent.resize(window)
+
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: '240px' }))
+    expect(sidebar).toHaveAttribute('aria-hidden', 'false')
+  })
+
+  test('expands an auto-collapsed sidebar from the titlebar toggle request', async () => {
+    Object.defineProperty(window, 'innerWidth', {
+      configurable: true,
+      value: 920,
+    })
+
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    const sidebar = screen.getByTestId('desktop-sidebar')
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: '0px' }))
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true')
+
+    let handled = false
+    act(() => {
+      handled = requestDesktopSidebarToggle()
+    })
+
+    expect(handled).toBe(true)
+    await waitFor(() => expect(sidebar).toHaveStyle({ width: '240px' }))
+    expect(sidebar).toHaveAttribute('aria-hidden', 'false')
+  })
+
+  test('collapses and expands the sidebar', async () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(screen.queryByTestId('desktop-sidebar-topbar')).not.toBeInTheDocument()
+    expect(getDesktopWorkbenchMainElement()).toHaveClass('mt-1.5')
+    expect(getDesktopWorkbenchMainElement()).not.toHaveClass('mb-1.5', 'mr-1.5', 'ml-1.5')
+    expect(screen.getByTestId('collapse-sidebar-button')).toHaveClass('h-8', 'w-8', 'rounded-lg')
+    expect(screen.getByTestId('sidebar-resize-handle')).toHaveClass('right-[-14px]', 'w-[18px]')
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toContainElement(
+      screen.getByTestId('desktop-window-controls')
+    )
+    expect(screen.queryByTestId('workbench-topbar-right-actions')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('environment-info-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toContainElement(
+      screen.getByTestId('toggle-bottom-workspace-panel-button')
+    )
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toContainElement(
+      screen.getByTestId('toggle-right-workspace-panel-button')
+    )
+
+    const sidebar = screen.getByTestId('desktop-sidebar')
+    expect(sidebar).toHaveStyle({ width: '240px' })
+    await userEvent.click(screen.getByTestId('collapse-sidebar-button'))
+
+    expect(sidebar).toHaveStyle({ width: '0px' })
+    expect(sidebar).toHaveAttribute('aria-hidden', 'true')
+    expect(sidebar).toHaveClass(
+      'transition-[width,background-color]',
+      'duration-[300ms]',
+      'will-change-[width]'
+    )
+    expect(screen.getByTestId('expand-sidebar-button')).toBeInTheDocument()
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toContainElement(
+      screen.getByTestId('desktop-window-controls')
+    )
+    expect(getDesktopWorkbenchMainElement()).toHaveClass('mt-1.5')
+    expect(getDesktopWorkbenchMainElement()).not.toHaveClass('mb-1.5', 'mr-1.5', 'ml-1.5')
+    expect(getDesktopWorkbenchMainElement()).toHaveClass('transition-[margin]', 'duration-[300ms]')
+    expect(getDesktopWorkbenchMainElement()).not.toHaveClass('will-change-[margin]')
+    expect(screen.getByTestId('desktop-empty-composer-dock')).toHaveClass(
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]'
+    )
+    expect(document.querySelector('aside')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByTestId('expand-sidebar-button'))
+
+    expect(screen.getByText('新建任务')).toBeInTheDocument()
+    expect(sidebar).toHaveStyle({ width: '240px' })
+    expect(sidebar).toHaveAttribute('aria-hidden', 'false')
+    expect(screen.getByTestId('desktop-empty-composer-dock')).toHaveClass(
+      'w-[min(var(--kcoder-chat-column-width,59.8rem),calc(100%_-_2rem))]'
+    )
+  })
+
+  test('slides out a sidebar preview from the left edge without resizing the workspace', async () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    await userEvent.click(screen.getByTestId('collapse-sidebar-button'))
+
+    const main = getDesktopWorkbenchMainElement()
+    const preview = screen.getByTestId('desktop-sidebar-preview')
+    expect(main).not.toHaveClass('ml-1.5')
+    expect(screen.getByTestId('desktop-sidebar-hover-edge')).toHaveClass('w-4')
+    expect(preview).toHaveClass('pointer-events-none', '-translate-x-full', 'opacity-100')
+
+    fireEvent.pointerEnter(screen.getByTestId('desktop-sidebar-hover-edge'))
+
+    expect(preview).toHaveClass('pointer-events-auto', 'translate-x-0', 'opacity-100')
+    expect(preview).toHaveClass('h-full')
+    expect(screen.getByTestId('desktop-sidebar-preview-panel')).toHaveClass('h-full')
+    expect(screen.getByTestId('desktop-sidebar-preview-panel')).toHaveStyle({ width: '240px' })
+    expect(main).not.toHaveClass('ml-1.5')
+
+    fireEvent.pointerEnter(preview)
+
+    expect(preview).toHaveClass('translate-x-0', 'opacity-100')
+
+    fireEvent.pointerLeave(preview)
+
+    expect(preview).toHaveClass('pointer-events-none', '-translate-x-full', 'opacity-100')
+    expect(main).not.toHaveClass('ml-1.5')
+  })
+
+  test('puts all three panel controls in the shared Gateway header', () => {
+    installTestDesktopHost()
+
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(screen.queryByTestId('desktop-sidebar-topbar')).not.toBeInTheDocument()
+    expect(screen.getByTestId('titlebar-actions')).toContainElement(
+      screen.getByTestId('collapse-sidebar-button')
+    )
+    expect(screen.queryByTestId('chrome-tab-studio')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('chrome-tab-todo')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('chrome-tab-apps')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('desktop-app-switcher')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('workbench-topbar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('environment-info-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('titlebar-actions')).toContainElement(
+      screen.getByTestId('toggle-bottom-workspace-panel-button')
+    )
+    expect(screen.getByTestId('titlebar-actions')).toContainElement(
+      screen.getByTestId('toggle-right-workspace-panel-button')
+    )
+    expect(screen.getByTestId('desktop-workbench-content')).not.toHaveClass('pt-11')
+    expect(getDesktopWorkbenchMainElement()).not.toHaveClass('mt-1.5', 'mb-1.5', 'mr-1.5')
+  })
+
+  test('keeps a collapsed Gateway task title clear of titlebar controls', () => {
+    installTestDesktopHost()
+    localStorage.setItem('wework.desktop.sidebar.collapsed', 'true')
+
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{
+          ...baseProps.state,
+          runtimeWork: {
+            projects: [],
+            chats: [
+              {
+                deviceId: 'device-1',
+                deviceName: 'Runtime Device',
+                workspacePath: '/workspace/project-alpha',
+                workspaceKind: 'workspace',
+                tasks: [
+                  {
+                    taskId: 'runtime-empty',
+                    workspacePath: '/workspace/project-alpha',
+                    title:
+                      'wework的聊天链路现在代码逻辑比较混乱，尤其是状态方面，经常出现消息结束了但是发送按钮还显示运行中',
+                    runtime: 'codex',
+                    createdAt: '2026-06-20T00:00:00.000Z',
+                    updatedAt: '2026-06-20T00:00:00.000Z',
+                    running: true,
+                  },
+                ],
+              },
+            ],
+            totalTasks: 1,
+          },
+          currentRuntimeTask: {
+            deviceId: 'device-1',
+            workspacePath: '/workspace/project-alpha',
+            taskId: 'runtime-empty',
+          },
+        }}
+        messages={[]}
+      />
+    )
+
+    expect(screen.queryByTestId('workbench-topbar')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('workbench-topbar-left-actions')).not.toBeInTheDocument()
+    expect(screen.getByTestId('workbench-main-header')).toContainElement(
+      screen.getByTestId('workbench-pane-task-title')
+    )
+    expect(screen.getByTestId('workbench-main-header')).toHaveClass('h-[38px]', 'border-b')
+    expect(screen.getByTestId('titlebar-actions')).toContainElement(
+      screen.getByTestId('expand-sidebar-button')
+    )
+    expect(screen.getByTestId('workbench-pane-task-title')).toHaveClass(
+      'relative',
+      'h-full',
+      'flex-1',
+      'pl-4',
+      'truncate'
+    )
+    expect(screen.getByTestId('titlebar-main-actions')).toBeInTheDocument()
+    expect(screen.getByTestId('workbench-pane-task-title')).toHaveTextContent(
+      'wework的聊天链路现在代码逻辑比较混乱'
+    )
+    expect(screen.getByTestId('workbench-pane-task-title')).not.toHaveAttribute('title')
+    expect(screen.getByTestId('desktop-workbench-content')).not.toHaveClass('pt-11')
+    expect(getDesktopWorkbenchMainElement()).toHaveClass('top-0')
+    expect(getDesktopWorkbenchMainElement()).not.toHaveClass('rounded-xl')
+  })
+
+  test('lets the workbench background show through the Gateway right workspace titlebar', () => {
+    installTestDesktopHost()
+    localStorage.setItem(
+      'wework.appearance',
+      JSON.stringify({
+        backgroundImagePath: '/app-data/background.png',
+        backgroundInTopBar: true,
+      })
+    )
+
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(screen.getByTestId('workbench-main-header')).toHaveClass('bg-background/20')
+    expect(screen.getByTestId('titlebar-right-workspace-zone')).toHaveClass('bg-transparent')
+    expect(screen.getByTestId('titlebar-right-workspace-zone')).not.toHaveClass('bg-background/95')
+  })
+
+  test('opens project code-server from the Gateway titlebar', async () => {
+    installTestDesktopHost()
+
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{
+          ...baseProps.state,
+          currentProject: {
+            id: 1,
+            name: 'github_wegent',
+            config: {
+              mode: 'workspace',
+              execution: {
+                targetType: 'local',
+                deviceId: '24a59054-4638-4744-983d-372706c30fcd',
+              },
+            },
+            tasks: [],
+          },
+          devices: [
+            {
+              id: 1,
+              device_id: '24a59054-4638-4744-983d-372706c30fcd',
+              name: 'cloud executor',
+              status: 'online',
+              is_default: false,
+              device_type: 'cloud',
+              bind_shell: 'claudecode',
+              executor_version: '1.8.5',
+            },
+          ],
+        }}
+      />
+    )
+
+    await userEvent.click(screen.getByTestId('open-code-server-titlebar-button'))
+
+    await waitFor(() => expect(startCodeServerSessionMock).toHaveBeenCalledWith(1))
+    expect(openExternalUrlMock).toHaveBeenCalledWith('http://localhost/ide', {
+      target: 'system',
+    })
+    expect(screen.getByTestId('titlebar-main-actions')).toContainElement(
+      screen.getByTestId('open-code-server-titlebar-button')
+    )
+    expect(screen.getByTestId('open-code-server-titlebar-button')).toHaveAttribute(
+      'title',
+      '打开项目 IDE'
+    )
+    expect(screen.getByTestId('toggle-bottom-workspace-panel-button')).not.toHaveAttribute('title')
+    expect(screen.getByTestId('toggle-right-workspace-panel-button')).not.toHaveAttribute('title')
+    const bottomPanelTooltip = screen.getByText('切换底部面板显示').closest('[role="tooltip"]')
+    expect(bottomPanelTooltip).toHaveTextContent(getKeyboardPlatform() === 'mac' ? '⌘' : 'Ctrl')
+    expect(bottomPanelTooltip).toHaveTextContent('J')
+  })
+
+  test('shows project code-server in the Gateway titlebar before devices hydrate', () => {
+    installTestDesktopHost()
+
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{
+          ...baseProps.state,
+          currentProject: {
+            id: 1,
+            name: 'github_wegent',
+            config: {
+              mode: 'workspace',
+              execution: {
+                targetType: 'local',
+                deviceId: '24a59054-4638-4744-983d-372706c30fcd',
+              },
+            },
+            tasks: [],
+          },
+          devices: [],
+        }}
+      />
+    )
+
+    expect(screen.getByTestId('titlebar-main-actions')).toContainElement(
+      screen.getByTestId('open-code-server-titlebar-button')
+    )
+  })
+
+  test('opens the local project from the Gateway titlebar with VS Code for local devices', async () => {
+    installTestDesktopHost()
+    isLocalTerminalAvailableMock.mockReturnValue(true)
+
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{
+          ...baseProps.state,
+          currentProject: {
+            id: 1,
+            name: 'github_wegent',
+            config: {
+              mode: 'workspace',
+              execution: {
+                targetType: 'local',
+                deviceId: 'local-claude',
+              },
+              workspace: {
+                source: 'local_path',
+                localPath: '/Users/me/github_wegent',
+              },
+            },
+            tasks: [],
+          },
+          devices: [
+            {
+              id: 1,
+              device_id: 'local-claude',
+              name: 'local claude',
+              status: 'online',
+              is_default: false,
+              device_type: 'local',
+              bind_shell: 'claudecode',
+              executor_version: '1.8.5',
+            },
+          ],
+        }}
+      />
+    )
+
+    const button = screen.getByTestId('open-code-server-titlebar-button')
+    expect(button).not.toBeDisabled()
+    expect(button).toHaveAttribute('title', '使用 VS Code 打开')
+
+    await userEvent.click(button)
+
+    expect(openLocalWorkspaceMock).toHaveBeenCalledWith({
+      opener: 'vscode',
+      path: '/Users/me/github_wegent',
+    })
+    expect(startCodeServerSessionMock).not.toHaveBeenCalled()
+  })
+
+  test('shows a dialog when project code-server fails to start', async () => {
+    installTestDesktopHost()
+    startCodeServerSessionMock.mockRejectedValueOnce(
+      new Error('Local devices do not support code-server sessions')
+    )
+
+    render(
+      <DesktopWorkbenchLayout
+        {...baseProps}
+        state={{
+          ...baseProps.state,
+          currentProject: {
+            id: 1,
+            name: 'github_wegent',
+            config: {
+              mode: 'workspace',
+              execution: {
+                targetType: 'local',
+                deviceId: '24a59054-4638-4744-983d-372706c30fcd',
+              },
+            },
+            tasks: [],
+          },
+          devices: [
+            {
+              id: 1,
+              device_id: '24a59054-4638-4744-983d-372706c30fcd',
+              name: 'cloud executor',
+              status: 'online',
+              is_default: false,
+              device_type: 'cloud',
+              bind_shell: 'claudecode',
+              executor_version: '1.8.5',
+            },
+          ],
+        }}
+      />
+    )
+
+    await userEvent.click(screen.getByTestId('open-code-server-titlebar-button'))
+
+    expect(await screen.findByTestId('code-server-error-dialog')).toHaveTextContent(
+      'Local devices do not support code-server sessions'
+    )
+    expectAndClearConsoleError(
+      'Failed to start project IDE:',
+      expect.objectContaining({ message: 'Local devices do not support code-server sessions' })
+    )
+  })
+
+  test('keeps panel toggles in stable workbench actions on web', () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(screen.queryByTestId('workbench-topbar-right-actions')).not.toBeInTheDocument()
+    expect(screen.getByTestId('workbench-topbar')).toHaveClass('z-chrome')
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toHaveClass(
+      'pointer-events-auto',
+      'z-popover'
+    )
+    expect(screen.queryByTestId('environment-info-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toContainElement(
+      screen.getByTestId('toggle-bottom-workspace-panel-button')
+    )
+    expect(screen.getByTestId('workspace-panel-floating-actions')).toContainElement(
+      screen.getByTestId('toggle-right-workspace-panel-button')
+    )
+    expect(screen.queryByTestId('titlebar-actions')).not.toBeInTheDocument()
+  })
+
+  test('opens the settings menu from the sidebar', async () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    await userEvent.click(screen.getByTestId('settings-button'))
+
+    expect(screen.getByTestId('settings-menu')).toBeInTheDocument()
+    expect(screen.queryByTestId('usage-menu-button')).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings-menu-button')).toHaveTextContent('设置')
+    expect(screen.getByTestId('settings-menu-button')).toHaveTextContent(
+      getKeyboardPlatform() === 'mac' ? '⌘,' : 'Ctrl,'
+    )
+    expect(screen.getByText('退出登录')).toBeInTheDocument()
+  })
+
+  test('opens settings page from the browser path on reload', async () => {
+    window.history.pushState({}, '', '/settings')
+
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(await screen.findByTestId('studio-settings-page')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '我们该做什么？', hidden: true })).not.toBeVisible()
+  })
+
+  test.each(['', '/g/test-gateway'])('returns from settings to the source task (base: %s)', async base => {
+    const actual = await vi.importActual<typeof import('@/config/runtime')>('@/config/runtime')
+    const configSpy = vi.spyOn(runtimeConfig, 'getRuntimeConfig').mockImplementation(actual.getRuntimeConfig)
+    const stripSpy = vi.spyOn(runtimeConfig, 'stripAppBasePath').mockImplementation(actual.stripAppBasePath)
+    const previous = window.__KCODER_STUDIO_RUNTIME_CONFIG__
+    window.__KCODER_STUDIO_RUNTIME_CONFIG__ = { ...previous, appBasePath: base }
+    try {
+      const source = `${base}/runtime-tasks?deviceId=host&taskId=source-task`
+      window.history.pushState({}, '', source)
+      render(<DesktopWorkbenchLayout {...baseProps} />)
+      await userEvent.click(screen.getByTestId('settings-button'))
+      await userEvent.click(screen.getByTestId('settings-menu-button'))
+      act(() => {
+        window.history.pushState({}, '', `${base}/settings/connections`)
+        window.dispatchEvent(new PopStateEvent('popstate'))
+      })
+      await userEvent.click(await screen.findByTestId('settings-back-button'))
+      expect(`${window.location.pathname}${window.location.search}`).toBe(source)
+    } finally {
+      window.__KCODER_STUDIO_RUNTIME_CONFIG__ = previous
+      configSpy.mockRestore()
+      stripSpy.mockRestore()
+    }
+  })
+
+  test('preserves the composer while visiting settings', async () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+    const composerHeading = screen.getByRole('heading', { name: '我们该做什么？' })
+
+    await userEvent.click(screen.getByTestId('settings-button'))
+    await userEvent.click(screen.getByTestId('settings-menu-button'))
+    expect(composerHeading).not.toBeVisible()
+    await userEvent.click(await screen.findByTestId('settings-back-button'))
+
+    expect(screen.getByRole('heading', { name: '我们该做什么？' })).toBe(composerHeading)
+    expect(composerHeading).toBeVisible()
+  })
+
+  test('does not show a page scrollbar for the empty task launcher', () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    expect(screen.getByTestId('desktop-workbench-content')).toHaveClass('overflow-hidden')
+    expect(screen.getByTestId('desktop-workbench-content')).not.toHaveClass('overflow-y-auto')
+  })
+
+  test('closes the settings menu when clicking outside it', async () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    await userEvent.click(screen.getByTestId('settings-button'))
+    expect(screen.getByTestId('settings-menu')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('heading', { name: '我们该做什么？' }))
+
+    expect(screen.queryByTestId('settings-menu')).not.toBeInTheDocument()
+  })
+
+  test('opens settings without exposing or fetching unsupported quota', async () => {
+    render(<DesktopWorkbenchLayout {...baseProps} />)
+
+    await userEvent.click(screen.getByTestId('settings-button'))
+    expect(screen.getByTestId('settings-menu-button')).toBeInTheDocument()
+    expect(screen.queryByTestId('usage-menu-button')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('usage-detail-panel')).not.toBeInTheDocument()
+    expect(getLocalCodexUsageDisplayMock).not.toHaveBeenCalled()
+  })
+})

@@ -1,0 +1,410 @@
+import type {
+  Attachment,
+  AttachmentUploadError,
+  InstalledPlugin,
+  LocalDeviceApp,
+  LocalDeviceSkill,
+  ModelOptions,
+  RuntimeContextUsage,
+  RuntimeGoal,
+  UnifiedModel,
+} from '@/types/api'
+import type { CodeCommentContext, WorkspaceFileApi, WorkspaceTarget } from '@/types/workspace-files'
+import { useState, type DragEventHandler, type ReactNode } from 'react'
+import { cn } from '@/lib/utils'
+import type { ProjectWorkControls } from '../ChatInput'
+import { AttachmentBadges } from './AttachmentBadges'
+import { ComposerToolbar } from './ComposerToolbar'
+import { ComposerTextarea, type ComposerSubmitOptions } from './ComposerTextarea'
+import type { SlashCommand } from './composerAutocomplete'
+import { useComposerSubmit } from './useComposerSubmit'
+import { ProjectWorkBar } from './ProjectWorkBar'
+import { useAutoResizeTextarea } from './useAutoResizeTextarea'
+import { debugComposerEvent, textMetrics } from './composerDebug'
+import type { QuickPhrase } from '@/host/appPreferences'
+import type { CloudProject } from '@/api/deliveries'
+import {
+  resolveDataTransferWorkspacePaths,
+  resolveStoredWorkspacePaths,
+} from '@/lib/workspace-path-transfer'
+import type {
+  ComposerCloudMentionCandidate,
+  ComposerConversationMentionCandidate,
+} from './composerMentionCandidates'
+import { applyWorkspacePathTransfer } from './composerPathTransfer'
+
+interface ProjectChatComposerProps {
+  slashActions?: readonly SlashCommand[]
+  /** Reuse the conversation editor without exposing unsupported worker controls. */
+  textOnly?: boolean
+  inputTestId?: string
+  sendTestId?: string
+  pauseTestId?: string
+  value: string
+  inputHistory?: readonly string[]
+  inputHistoryScope?: string
+  onChange: (value: string) => void
+  onSubmit: (submittedValue?: string, options?: ComposerSubmitOptions) => void
+  disabled: boolean
+  submitDisabled?: boolean
+  disabledReason?: string
+  placeholder: string
+  models?: UnifiedModel[]
+  selectedModel?: UnifiedModel | null
+  activeModel?: UnifiedModel | null
+  selectedModelOptions?: ModelOptions
+  modelSelectorOpenSignal?: number
+  onModelSelectorOpenChange?: (open: boolean) => void
+  isModelSelectionReady?: boolean
+  attachments?: Attachment[]
+  codeComments?: CodeCommentContext[]
+  uploadingFiles?: Map<string, { file: File; progress: number; cancel?: () => void }>
+  attachmentErrors?: Map<string, AttachmentUploadError>
+  contextUsage?: RuntimeContextUsage
+  contextUsageScopeKey?: string
+  onSelectModel?: (model: UnifiedModel | null) => void
+  onSelectModelAndOptions?: (model: UnifiedModel, options: ModelOptions) => void
+  onSelectModelOption?: (optionId: string, value: string) => void
+  onBlockedModelSelect?: (model: UnifiedModel, message?: string) => void
+  onFileSelect?: (files: File | File[]) => void
+  onCancelUpload?: (fileId: string) => void
+  onOpenSkillFile?: (path: string) => void
+  workspaceTarget?: WorkspaceTarget | null
+  workspaceFileApi?: WorkspaceFileApi
+  cloudMentionCandidates?: ComposerCloudMentionCandidate[]
+  conversationMentionCandidates?: ComposerConversationMentionCandidate[]
+  cloudProjectCandidates?: ComposerCloudMentionCandidate[]
+  cloudSpaceEnabled?: boolean
+  onSelectCloudProject?: (project: CloudProject) => void
+  planModeActive?: boolean
+  onSetPlanMode?: () => void
+  onClearPlanMode?: () => void
+  onSetGoal?: (mode?: RuntimeGoal['mode']) => void
+  executionModes?: import('./composerExecutionModes').ComposerExecutionModeControls
+  onCompactContext?: () => void
+  goalDraftActive?: boolean
+  goalDraftMode?: RuntimeGoal['mode']
+  onCancelGoalDraft?: () => void
+  onRemoveAttachment?: (attachmentId: number) => void
+  onClearCodeComments?: () => void
+  onListLocalSkills?: () => Promise<LocalDeviceSkill[]>
+  onListLocalApps?: () => Promise<LocalDeviceApp[]>
+  onListLocalPlugins?: () => Promise<InstalledPlugin[]>
+  projectWork?: ProjectWorkControls
+  showProjectWorkBar?: boolean
+  isStreaming?: boolean
+  onPause?: () => void
+  stopping?: boolean
+  onShortenWait?: () => void
+  shortenWaitAvailable?: boolean
+  toolbarLeadingContext?: ReactNode
+  projectContext?: ReactNode
+  modeStatus?: ReactNode
+}
+
+function hasDraggedFiles(dataTransfer: DataTransfer): boolean {
+  return Array.from(dataTransfer.types).includes('Files')
+}
+
+export function ProjectChatComposer({
+  textOnly = false,
+  inputTestId,
+  sendTestId,
+  pauseTestId,
+  value,
+  inputHistory,
+  inputHistoryScope,
+  onChange,
+  onSubmit: submitMessage,
+  slashActions,
+  disabled,
+  submitDisabled = false,
+  disabledReason,
+  placeholder,
+  models = [],
+  selectedModel = null,
+  activeModel,
+  selectedModelOptions = {},
+  modelSelectorOpenSignal,
+  onModelSelectorOpenChange,
+  isModelSelectionReady = true,
+  attachments = [],
+  codeComments = [],
+  uploadingFiles = new Map(),
+  attachmentErrors = new Map(),
+  contextUsage,
+  contextUsageScopeKey,
+  onSelectModel = () => {},
+  onSelectModelAndOptions,
+  onSelectModelOption = () => {},
+  onBlockedModelSelect,
+  onFileSelect = () => {},
+  onCancelUpload,
+  onOpenSkillFile,
+  workspaceTarget,
+  workspaceFileApi,
+  cloudMentionCandidates,
+  conversationMentionCandidates,
+  cloudProjectCandidates,
+  cloudSpaceEnabled,
+  onSelectCloudProject,
+  planModeActive = false,
+  onSetPlanMode,
+  onClearPlanMode,
+  onSetGoal,
+  executionModes,
+  onCompactContext,
+  goalDraftActive = false,
+  goalDraftMode = 'standard',
+  onCancelGoalDraft,
+  onRemoveAttachment = () => {},
+  onClearCodeComments,
+  onListLocalSkills,
+  onListLocalApps,
+  onListLocalPlugins,
+  projectWork,
+  showProjectWorkBar = true,
+  isStreaming = false,
+  onPause,
+  stopping = false,
+  onShortenWait,
+  shortenWaitAvailable,
+  toolbarLeadingContext,
+  projectContext,
+  modeStatus,
+}: ProjectChatComposerProps) {
+  const { slashSubmitRef, submit: onSubmit } = useComposerSubmit(value, submitMessage)
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false)
+  const textareaRef = useAutoResizeTextarea(value, 168)
+  const attachmentSubmissionBlocked = uploadingFiles.size > 0 || attachmentErrors.size > 0
+  const canSend =
+    (value.trim().length > 0 || attachments.length > 0 || codeComments.length > 0) &&
+    !disabled &&
+    !submitDisabled &&
+    isModelSelectionReady &&
+    !attachmentSubmissionBlocked
+  const handleDragOver: DragEventHandler<HTMLFormElement> = event => {
+    if (textOnly) return
+    if (!hasDraggedFiles(event.dataTransfer)) return
+
+    event.preventDefault()
+    event.dataTransfer.dropEffect = disabled ? 'none' : 'copy'
+    setIsDraggingFiles(!disabled)
+  }
+  const handleDrop: DragEventHandler<HTMLFormElement> = event => {
+    if (textOnly) return
+    if (!hasDraggedFiles(event.dataTransfer)) return
+
+    event.preventDefault()
+    setIsDraggingFiles(false)
+    if (disabled) return
+
+    void resolveDataTransferWorkspacePaths(
+      event.dataTransfer,
+      'drop',
+      workspaceTarget?.workspaceSource
+    ).then(transfer => applyWorkspacePathTransfer(value, transfer, onChange, onFileSelect))
+  }
+  const handleShowTextAttachment = (attachment: Attachment) => {
+    const text = attachment.text_content
+    if (!text) return
+
+    onChange(value ? `${value}\n${text}` : text)
+    onRemoveAttachment(attachment.id)
+    window.requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+  const handleQuickPhraseSelect = (phrase: QuickPhrase) => {
+    onClearPlanMode?.()
+    onCancelGoalDraft?.()
+    if (phrase.mode === 'plan') onSetPlanMode?.()
+    if (phrase.mode === 'goal') onSetGoal?.()
+    const phraseValue = value ? `${value}\n${phrase.content}` : phrase.content
+    onChange(phraseValue)
+    if (phrase.attachmentPaths?.length) {
+      void resolveStoredWorkspacePaths(
+        phrase.attachmentPaths,
+        workspaceTarget?.workspaceSource === 'remote'
+      ).then(transfer => applyWorkspacePathTransfer(phraseValue, transfer, onChange, onFileSelect))
+    }
+    window.requestAnimationFrame(() => textareaRef.current?.focus())
+  }
+
+  return (
+    <div
+      data-testid="project-chat-composer"
+      data-floating-menu-boundary="true"
+      className="relative w-full min-w-0 rounded-[26px] bg-surface shadow-[0_0_0_0.5px_rgba(13,13,13,0.12),0_3px_7.5px_rgba(0,0,0,0.04),0_0_20px_rgba(0,0,0,0.05)]"
+    >
+      {!textOnly && ((showProjectWorkBar && projectWork) || projectContext) && (
+        <div
+          data-testid="composer-project-context"
+          className="flex min-h-10 w-full min-w-0 flex-wrap items-center gap-x-2 rounded-t-[26px] bg-surface px-4"
+        >
+          {showProjectWorkBar && projectWork && (
+            <ProjectWorkBar
+              workspaceTarget={workspaceTarget}
+              projects={projectWork.projects}
+              devices={projectWork.devices}
+              runtimeWork={projectWork.runtimeWork}
+              currentProject={projectWork.currentProject}
+              currentProjectId={projectWork.currentProjectId}
+              currentStandaloneDeviceId={projectWork.currentStandaloneDeviceId}
+              selectedDeviceWorkspaceId={projectWork.selectedDeviceWorkspaceId}
+              pendingProjectWorkspaceProjectId={projectWork.pendingProjectWorkspaceProjectId}
+              executionMode={projectWork.executionMode}
+              executionModeLocked={projectWork.executionModeLocked}
+              isGitProject={projectWork.isGitProject}
+              onSelectProject={projectWork.onSelectProject}
+              onSelectStandaloneDevice={projectWork.onSelectStandaloneDevice}
+              onSelectProjectWorkspace={projectWork.onSelectProjectWorkspace}
+              onBindProjectWorkspace={projectWork.onBindProjectWorkspace}
+              onExecutionModeChange={projectWork.onExecutionModeChange}
+              onCreateProjectMode={projectWork.onCreateProjectMode}
+              branchName={projectWork.branchName}
+              branchLoading={projectWork.branchLoading}
+              onRefreshBranch={projectWork.onRefreshBranch}
+              onListBranches={projectWork.onListBranches}
+              onCheckoutBranch={projectWork.onCheckoutBranch}
+              onCreateBranch={projectWork.onCreateBranch}
+              worktreeBranch={projectWork.worktreeBranch}
+              onWorktreeBranchChange={projectWork.onWorktreeBranchChange}
+              projectMenuOpenSignal={projectWork.projectMenuOpenSignal}
+              projectMenuAnchorElement={projectWork.projectMenuAnchorElement}
+              className="min-h-10 min-w-0 flex-1 px-0"
+              buttonClassName="text-sm leading-[18px] text-text-secondary hover:bg-background/70 hover:text-text-primary"
+            />
+          )}
+          {projectContext}
+        </div>
+      )}
+      <form
+        data-testid="project-chat-composer-form"
+        className={cn(
+          'relative z-10 flex min-h-[91px] w-full min-w-0 flex-col rounded-[26px] border bg-background px-4 pb-1.5 pt-2 transition-colors',
+          isDraggingFiles ? 'border-focus ring-2 ring-focus/20' : 'border-border/45'
+        )}
+        onDragEnter={handleDragOver}
+        onDragLeave={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            setIsDraggingFiles(false)
+          }
+        }}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        onSubmit={event => {
+          event.preventDefault()
+          debugComposerEvent('project-form-submit', {
+            canSend,
+            propValue: textMetrics(value),
+            submittedValue: textMetrics(value),
+            attachmentsCount: attachments.length,
+            codeCommentsCount: codeComments.length,
+            disabled,
+            isStreaming,
+          })
+          if (canSend) onSubmit(value)
+        }}
+      >
+        <AttachmentBadges
+          attachments={attachments}
+          uploadingFiles={uploadingFiles}
+          onCancelUpload={onCancelUpload}
+          errors={attachmentErrors}
+          codeComments={codeComments}
+          onRemoveAttachment={onRemoveAttachment}
+          onShowTextAttachment={handleShowTextAttachment}
+          onClearCodeComments={onClearCodeComments}
+        />
+        {disabledReason && (
+          <div
+            data-testid="composer-disabled-reason"
+            className="mb-2 rounded-xl bg-muted px-3 py-2 text-xs text-text-secondary"
+          >
+            {disabledReason}
+          </div>
+        )}
+        <ComposerTextarea
+          slashSubmitRef={slashSubmitRef}
+          slashActions={slashActions}
+          contextUsage={contextUsage}
+          inputHistory={inputHistory}
+          inputHistoryScope={inputHistoryScope}
+          textOnly={textOnly}
+          testId={inputTestId}
+          textareaRef={textareaRef}
+          value={value}
+          onChange={onChange}
+          onSubmit={onSubmit}
+          canSend={canSend}
+          disabled={disabled}
+          placeholder={placeholder}
+          rows={2}
+          onPasteFiles={textOnly ? undefined : onFileSelect}
+          onOpenSkillFile={onOpenSkillFile}
+          workspaceTarget={workspaceTarget}
+          workspaceFileApi={workspaceFileApi}
+          cloudMentionCandidates={cloudMentionCandidates}
+          conversationMentionCandidates={conversationMentionCandidates}
+          cloudProjectCandidates={cloudProjectCandidates}
+          cloudSpaceEnabled={cloudSpaceEnabled}
+          onSelectCloudProject={onSelectCloudProject}
+          className="max-h-[134px] min-h-[58px] w-full resize-none overflow-y-auto bg-transparent px-0 pb-0 pt-1 text-chat text-text-primary outline-none placeholder:text-text-muted/55"
+          skillMenuClassName="left-[-1rem] right-[-0.5rem]"
+          onListLocalSkills={onListLocalSkills}
+          onListLocalApps={onListLocalApps}
+            onListLocalPlugins={onListLocalPlugins}
+          models={models}
+          selectedModel={selectedModel}
+          selectedModelOptions={selectedModelOptions}
+          planModeActive={planModeActive}
+          onSetPlanMode={onSetPlanMode}
+          onClearPlanMode={onClearPlanMode}
+          onSetGoal={onSetGoal}
+          executionModes={executionModes}
+          onCompactContext={onCompactContext}
+          onSelectModel={textOnly ? undefined : onSelectModel}
+          onBlockedModelSelect={onBlockedModelSelect}
+          isModelSelectionReady={isModelSelectionReady}
+        />
+        <ComposerToolbar
+          textOnly={textOnly}
+          sendTestId={sendTestId}
+          pauseTestId={pauseTestId}
+          canSend={canSend}
+          disabled={disabled}
+          models={models}
+          selectedModel={selectedModel}
+          activeModel={activeModel}
+          selectedModelOptions={selectedModelOptions}
+          modelSelectorOpenSignal={modelSelectorOpenSignal}
+          onModelSelectorOpenChange={onModelSelectorOpenChange}
+          isModelSelectionReady={isModelSelectionReady}
+          onSelectModel={onSelectModel}
+          onSelectModelAndOptions={onSelectModelAndOptions}
+          onSelectModelOption={onSelectModelOption}
+          onBlockedModelSelect={onBlockedModelSelect}
+          contextUsage={contextUsage}
+          contextUsageScopeKey={contextUsageScopeKey}
+          onFileSelect={onFileSelect}
+          planModeActive={planModeActive}
+          onSetPlanMode={onSetPlanMode}
+          onClearPlanMode={onClearPlanMode}
+          onSetGoal={onSetGoal}
+          onCompactContext={onCompactContext}
+          goalDraftActive={goalDraftActive}
+          goalDraftMode={goalDraftMode}
+          onCancelGoalDraft={onCancelGoalDraft}
+          isStreaming={isStreaming}
+          onPause={onPause}
+          stopping={stopping}
+          onShortenWait={onShortenWait}
+          shortenWaitAvailable={shortenWaitAvailable}
+          onQuickPhraseSelect={handleQuickPhraseSelect}
+          onSubmit={options => onSubmit(value, options)}
+          leadingContext={toolbarLeadingContext}
+          modeStatus={modeStatus}
+        />
+      </form>
+    </div>
+  )
+}

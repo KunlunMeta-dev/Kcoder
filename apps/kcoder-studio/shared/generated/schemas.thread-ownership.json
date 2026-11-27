@@ -1,0 +1,38 @@
+{
+  "ThreadOwnershipErrorDataV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadOwnershipErrorReasonV1": {
+        "enum": [
+          "ownedElsewhere"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "reason": {
+        "$ref": "#/definitions/ThreadOwnershipErrorReasonV1"
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "reason",
+      "threadId",
+      "version"
+    ],
+    "title": "ThreadOwnershipErrorDataV1",
+    "type": "object"
+  }
+}

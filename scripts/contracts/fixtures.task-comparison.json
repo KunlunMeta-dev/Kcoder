@@ -1,0 +1,824 @@
+{
+  "TaskComparisonBindParams": {
+    "valid": [
+      {
+        "name": "explicit_owned_record",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "path": "/managed/a",
+          "expectedRevision": 2,
+          "taskId": "task-1",
+          "threadId": "thread-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_owner",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "path": "/managed/a",
+          "expectedRevision": 2,
+          "taskId": "task-1",
+          "threadId": "thread-1"
+        }
+      },
+      {
+        "name": "wrong_owner_scalar",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": 17,
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "path": "/managed/a",
+          "expectedRevision": 2,
+          "taskId": "task-1",
+          "threadId": "thread-1"
+        }
+      },
+      {
+        "name": "unknown_mutation_field",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "path": "/managed/a",
+          "expectedRevision": 2,
+          "taskId": "task-1",
+          "threadId": "thread-1",
+          "autoMerge": true
+        }
+      },
+      {
+        "name": "negative_revision",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "path": "/managed/a",
+          "expectedRevision": -1,
+          "taskId": "task-1",
+          "threadId": "thread-1"
+        }
+      }
+    ]
+  },
+  "TaskComparisonReadParams": {
+    "valid": [
+      {
+        "name": "explicit_owned_record",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_owner",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1"
+        }
+      },
+      {
+        "name": "wrong_owner_scalar",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": 17
+        }
+      },
+      {
+        "name": "unknown_mutation_field",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "autoMerge": true
+        }
+      }
+    ]
+  },
+  "TaskComparisonSelectParams": {
+    "valid": [
+      {
+        "name": "explicit_owned_record",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "threadId": "thread-1",
+          "expectedRevision": 3,
+          "expectedHeadCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "expectedContentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_owner",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "threadId": "thread-1",
+          "expectedRevision": 3,
+          "expectedHeadCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "expectedContentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      {
+        "name": "wrong_owner_scalar",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": 17,
+          "threadId": "thread-1",
+          "expectedRevision": 3,
+          "expectedHeadCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "expectedContentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      {
+        "name": "unknown_mutation_field",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "threadId": "thread-1",
+          "expectedRevision": 3,
+          "expectedHeadCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "expectedContentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "autoMerge": true
+        }
+      },
+      {
+        "name": "negative_revision",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "threadId": "thread-1",
+          "expectedRevision": -1,
+          "expectedHeadCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "expectedContentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ]
+  },
+  "TaskComparisonReadResult": {
+    "valid": [
+      {
+        "name": "explicit_owned_record",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null
+              },
+              "git": {
+                "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "branch": "comparison/a",
+                "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dirty": true,
+                "diffPreview": "+implementation",
+                "statusPreview": " M answer.txt",
+                "truncated": false
+              },
+              "resultPreview": "Task report, not proof of correctness.",
+              "checks": [
+                {
+                  "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "turnId": "turn-1",
+                  "attemptId": "attempt-1",
+                  "ordinal": 1,
+                  "command": "cargo test focused",
+                  "cwd": "/managed/a",
+                  "outcome": "failed",
+                  "exitCode": 1,
+                  "outputPreview": "CHECK_FAILED",
+                  "detailsTruncated": false
+                }
+              ],
+              "artifacts": [],
+              "evidencePartial": false,
+              "usage": {
+                "assistantMessages": 1,
+                "usageSamples": 1,
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "costMicrousd": null
+              },
+              "unavailable": []
+            }
+          ],
+          "selectedThreadId": null
+        }
+      },
+      {
+        "name": "empty_comparison",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "candidates": [],
+          "selectedThreadId": null,
+          "requirement": null
+        }
+      },
+      {
+        "name": "honest_unknown_evidence_usage_cost",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null
+              },
+              "git": null,
+              "resultPreview": null,
+              "checks": [],
+              "artifacts": [],
+              "evidencePartial": true,
+              "usage": {
+                "assistantMessages": 0,
+                "usageSamples": 0,
+                "inputTokens": null,
+                "outputTokens": null,
+                "costMicrousd": null
+              },
+              "unavailable": [
+                "git_unavailable",
+                "transcript_unavailable"
+              ]
+            }
+          ],
+          "selectedThreadId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_owner",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null
+              },
+              "git": {
+                "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "branch": "comparison/a",
+                "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dirty": true,
+                "diffPreview": "+implementation",
+                "statusPreview": " M answer.txt",
+                "truncated": false
+              },
+              "resultPreview": "Task report, not proof of correctness.",
+              "checks": [
+                {
+                  "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "turnId": "turn-1",
+                  "attemptId": "attempt-1",
+                  "ordinal": 1,
+                  "command": "cargo test focused",
+                  "cwd": "/managed/a",
+                  "outcome": "failed",
+                  "exitCode": 1,
+                  "outputPreview": "CHECK_FAILED",
+                  "detailsTruncated": false
+                }
+              ],
+              "artifacts": [],
+              "evidencePartial": false,
+              "usage": {
+                "assistantMessages": 1,
+                "usageSamples": 1,
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "costMicrousd": null
+              },
+              "unavailable": []
+            }
+          ],
+          "selectedThreadId": null
+        }
+      },
+      {
+        "name": "wrong_owner_scalar",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": 17,
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null
+              },
+              "git": {
+                "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "branch": "comparison/a",
+                "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dirty": true,
+                "diffPreview": "+implementation",
+                "statusPreview": " M answer.txt",
+                "truncated": false
+              },
+              "resultPreview": "Task report, not proof of correctness.",
+              "checks": [
+                {
+                  "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "turnId": "turn-1",
+                  "attemptId": "attempt-1",
+                  "ordinal": 1,
+                  "command": "cargo test focused",
+                  "cwd": "/managed/a",
+                  "outcome": "failed",
+                  "exitCode": 1,
+                  "outputPreview": "CHECK_FAILED",
+                  "detailsTruncated": false
+                }
+              ],
+              "artifacts": [],
+              "evidencePartial": false,
+              "usage": {
+                "assistantMessages": 1,
+                "usageSamples": 1,
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "costMicrousd": null
+              },
+              "unavailable": []
+            }
+          ],
+          "selectedThreadId": null
+        }
+      },
+      {
+        "name": "unknown_mutation_field",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null
+              },
+              "git": {
+                "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "branch": "comparison/a",
+                "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dirty": true,
+                "diffPreview": "+implementation",
+                "statusPreview": " M answer.txt",
+                "truncated": false
+              },
+              "resultPreview": "Task report, not proof of correctness.",
+              "checks": [
+                {
+                  "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "turnId": "turn-1",
+                  "attemptId": "attempt-1",
+                  "ordinal": 1,
+                  "command": "cargo test focused",
+                  "cwd": "/managed/a",
+                  "outcome": "failed",
+                  "exitCode": 1,
+                  "outputPreview": "CHECK_FAILED",
+                  "detailsTruncated": false
+                }
+              ],
+              "artifacts": [],
+              "evidencePartial": false,
+              "usage": {
+                "assistantMessages": 1,
+                "usageSamples": 1,
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "costMicrousd": null
+              },
+              "unavailable": []
+            }
+          ],
+          "selectedThreadId": null,
+          "autoMerge": true
+        }
+      },
+      {
+        "name": "unknown_nested_binding",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null,
+                "automaticWinner": true
+              },
+              "git": {
+                "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "branch": "comparison/a",
+                "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dirty": true,
+                "diffPreview": "+implementation",
+                "statusPreview": " M answer.txt",
+                "truncated": false
+              },
+              "resultPreview": "Task report, not proof of correctness.",
+              "checks": [
+                {
+                  "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "turnId": "turn-1",
+                  "attemptId": "attempt-1",
+                  "ordinal": 1,
+                  "command": "cargo test focused",
+                  "cwd": "/managed/a",
+                  "outcome": "failed",
+                  "exitCode": 1,
+                  "outputPreview": "CHECK_FAILED",
+                  "detailsTruncated": false
+                }
+              ],
+              "artifacts": [],
+              "evidencePartial": false,
+              "usage": {
+                "assistantMessages": 1,
+                "usageSamples": 1,
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "costMicrousd": null
+              },
+              "unavailable": []
+            }
+          ],
+          "selectedThreadId": null
+        }
+      },
+      {
+        "name": "invented_check_outcome",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null
+              },
+              "git": {
+                "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "branch": "comparison/a",
+                "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dirty": true,
+                "diffPreview": "+implementation",
+                "statusPreview": " M answer.txt",
+                "truncated": false
+              },
+              "resultPreview": "Task report, not proof of correctness.",
+              "checks": [
+                {
+                  "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "turnId": "turn-1",
+                  "attemptId": "attempt-1",
+                  "ordinal": 1,
+                  "command": "cargo test focused",
+                  "cwd": "/managed/a",
+                  "outcome": "guaranteed_success",
+                  "exitCode": 1,
+                  "outputPreview": "CHECK_FAILED",
+                  "detailsTruncated": false
+                }
+              ],
+              "artifacts": [],
+              "evidencePartial": false,
+              "usage": {
+                "assistantMessages": 1,
+                "usageSamples": 1,
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "costMicrousd": null
+              },
+              "unavailable": []
+            }
+          ],
+          "selectedThreadId": null
+        }
+      },
+      {
+        "name": "native_exit_overflow",
+        "value": {
+          "sourcePath": "/source",
+          "deviceId": "target-1",
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "requirement": "Implement one requirement",
+          "candidates": [
+            {
+              "worktreeId": "alternative-a",
+              "path": "/managed/a",
+              "sourcePath": "/source",
+              "revision": 3,
+              "state": "active",
+              "binding": {
+                "comparisonId": "requirement-1",
+                "ownerThreadId": "owner-1",
+                "deviceId": "target-1",
+                "requirement": "Implement one requirement",
+                "label": "Approach A",
+                "taskId": "task-1",
+                "threadId": "thread-1",
+                "branch": "comparison/a",
+                "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "selection": null
+              },
+              "git": {
+                "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "branch": "comparison/a",
+                "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+                "dirty": true,
+                "diffPreview": "+implementation",
+                "statusPreview": " M answer.txt",
+                "truncated": false
+              },
+              "resultPreview": "Task report, not proof of correctness.",
+              "checks": [
+                {
+                  "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                  "turnId": "turn-1",
+                  "attemptId": "attempt-1",
+                  "ordinal": 1,
+                  "command": "cargo test focused",
+                  "cwd": "/managed/a",
+                  "outcome": "failed",
+                  "exitCode": 2147483648,
+                  "outputPreview": "CHECK_FAILED",
+                  "detailsTruncated": false
+                }
+              ],
+              "artifacts": [],
+              "evidencePartial": false,
+              "usage": {
+                "assistantMessages": 1,
+                "usageSamples": 1,
+                "inputTokens": 100,
+                "outputTokens": 20,
+                "costMicrousd": null
+              },
+              "unavailable": []
+            }
+          ],
+          "selectedThreadId": null
+        }
+      }
+    ]
+  },
+  "TaskComparisonBinding": {
+    "valid": [
+      {
+        "name": "explicit_owned_record",
+        "value": {
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "deviceId": "target-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "taskId": "task-1",
+          "threadId": "thread-1",
+          "branch": "comparison/a",
+          "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selection": null
+        }
+      },
+      {
+        "name": "omitted_optional_selection",
+        "value": {
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "deviceId": "target-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "taskId": "task-1",
+          "threadId": "thread-1",
+          "branch": "comparison/a",
+          "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "selected_existing_alternative",
+        "value": {
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "deviceId": "target-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "taskId": "task-1",
+          "threadId": "thread-1",
+          "branch": "comparison/a",
+          "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selection": {
+            "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "selectedAtMs": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_owner",
+        "value": {
+          "comparisonId": "requirement-1",
+          "deviceId": "target-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "taskId": "task-1",
+          "threadId": "thread-1",
+          "branch": "comparison/a",
+          "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selection": null
+        }
+      },
+      {
+        "name": "wrong_owner_scalar",
+        "value": {
+          "comparisonId": "requirement-1",
+          "ownerThreadId": 17,
+          "deviceId": "target-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "taskId": "task-1",
+          "threadId": "thread-1",
+          "branch": "comparison/a",
+          "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selection": null
+        }
+      },
+      {
+        "name": "unknown_mutation_field",
+        "value": {
+          "comparisonId": "requirement-1",
+          "ownerThreadId": "owner-1",
+          "deviceId": "target-1",
+          "requirement": "Implement one requirement",
+          "label": "Approach A",
+          "taskId": "task-1",
+          "threadId": "thread-1",
+          "branch": "comparison/a",
+          "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "selection": null,
+          "autoMerge": true
+        }
+      }
+    ]
+  }
+}

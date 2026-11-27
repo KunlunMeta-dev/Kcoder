@@ -1,0 +1,260 @@
+{
+  "OfficeDataset": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "schemaVersion": 1,
+          "id": "dataset-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "sourceRefs": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "id": "dataset-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "sourceRefs": [],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeDatasetQuery": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "limit": 10
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "limit": 10,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeDatasetPage": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "dataset": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "totalRows": 2,
+          "matchedRows": 2,
+          "nextCursor": null,
+          "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceRefs": [],
+          "numberText": [
+            [
+              null,
+              "1234.56"
+            ]
+          ],
+          "aggregates": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "dataset": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "totalRows": 2,
+          "matchedRows": 2,
+          "nextCursor": null,
+          "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceRefs": [],
+          "arbitraryAuthority": true,
+          "numberText": [
+            [
+              null,
+              "1234.56"
+            ]
+          ],
+          "aggregates": []
+        }
+      }
+    ]
+  },
+  "OfficeDatasetPageParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "query": {
+            "limit": 10
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "query": {
+            "limit": 10
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAggregateFunction": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": "sum"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": "invalid-function"
+      }
+    ]
+  },
+  "OfficeAggregate": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "column": "amount",
+          "function": "sum",
+          "key": "total"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "column": "amount",
+          "function": "sum",
+          "key": "total",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAggregateResult": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "key": "total",
+          "value": "0.3",
+          "nonNullCount": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "key": "total",
+          "value": "0.3",
+          "nonNullCount": 2,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  }
+}

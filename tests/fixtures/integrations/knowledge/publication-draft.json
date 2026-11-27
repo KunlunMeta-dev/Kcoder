@@ -1,0 +1,18 @@
+{
+  "publicationId": "fixture-policy",
+  "title": "合成报销制度",
+  "visibility": "personal",
+  "audienceId": null,
+  "sources": [
+    {
+      "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+      "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+      "pageRevision": "fixture-page-revision"
+    }
+  ],
+  "validFromMs": null,
+  "validUntilMs": null,
+  "unresolved": [
+    "人工复核业务口径"
+  ]
+}

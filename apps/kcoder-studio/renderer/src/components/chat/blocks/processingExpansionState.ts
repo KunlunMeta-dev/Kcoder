@@ -1,0 +1,92 @@
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
+
+const MAX_STORED_EXPANSION_STATES = 2000
+const expansionStateByKey = new Map<string, boolean>()
+const expansionStateListeners = new Set<() => void>()
+const noSubscribe = () => () => {}
+
+function subscribeToExpansionChanges(listener: () => void) {
+  expansionStateListeners.add(listener)
+  return () => {
+    expansionStateListeners.delete(listener)
+  }
+}
+
+export function useProcessingExpansionSnapshot(keys: readonly string[]): ReadonlyMap<string, boolean> {
+  const read = useCallback(
+    () => JSON.stringify(keys.map(key => expansionStateByKey.get(key) ?? null)), [keys]
+  )
+  const snapshot = useSyncExternalStore(keys.length ? subscribeToExpansionChanges : noSubscribe, read, read)
+  return useMemo(() => {
+    const values = JSON.parse(snapshot) as Array<boolean | null>
+    return new Map(keys.flatMap((key, index) => {
+      const expanded = values[index]
+      return expanded === null ? [] : [[key, expanded] as const]
+    }))
+  }, [keys, snapshot])
+}
+
+type ExpansionUpdate = boolean | ((value: boolean) => boolean)
+
+export function usePersistentProcessingExpansion(
+  key: string | undefined,
+  initialValue = false
+): readonly [boolean, (update: ExpansionUpdate) => void] {
+  const [localChoice, setLocalChoice] = useState<boolean | null>(null)
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!key) return () => {}
+      expansionStateListeners.add(listener)
+      return () => expansionStateListeners.delete(listener)
+    },
+    [key]
+  )
+  const getSnapshot = useCallback(() => readExpansionState(key, initialValue), [initialValue, key])
+  const persistedExpanded = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const expanded = key ? persistedExpanded : localChoice ?? initialValue
+
+  const setPersistentExpanded = useCallback(
+    (update: ExpansionUpdate) => {
+      if (!key) {
+        setLocalChoice(current => {
+          const expanded = current ?? initialValue
+          return typeof update === 'function' ? update(expanded) : update
+        })
+        return
+      }
+
+      const current = readExpansionState(key, initialValue)
+      const next = typeof update === 'function' ? update(current) : update
+      rememberExpansionState(key, next)
+      emitExpansionStateChange()
+    },
+    [initialValue, key]
+  )
+
+  return [expanded, setPersistentExpanded]
+}
+
+export function clearPersistentProcessingExpansions() {
+  if (expansionStateByKey.size === 0) return
+  expansionStateByKey.clear()
+  emitExpansionStateChange()
+}
+
+function readExpansionState(key: string | undefined, initialValue: boolean): boolean {
+  if (!key) return initialValue
+  return expansionStateByKey.get(key) ?? initialValue
+}
+
+function rememberExpansionState(key: string, value: boolean) {
+  if (!expansionStateByKey.has(key) && expansionStateByKey.size >= MAX_STORED_EXPANSION_STATES) {
+    const oldestKey = expansionStateByKey.keys().next().value
+    if (oldestKey) expansionStateByKey.delete(oldestKey)
+  }
+  expansionStateByKey.set(key, value)
+}
+
+function emitExpansionStateChange() {
+  for (const listener of Array.from(expansionStateListeners)) {
+    listener()
+  }
+}

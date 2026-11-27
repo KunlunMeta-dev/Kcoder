@@ -1,0 +1,455 @@
+{
+  "MigrationBranchPrepareParams": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "jobId": "job"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "jobId": "job",
+          "archives": [
+            "raw-id"
+          ]
+        }
+      }
+    ]
+  },
+  "MigrationBranchOperationParams": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "jobId": "job",
+          "viewId": "view"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "MigrationBranchReadParams": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "jobId": "job"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "jobId": "job",
+          "path": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationBranchResumeParams": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "expectedSequence": 4
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "expectedSequence": -1
+        }
+      }
+    ]
+  },
+  "MigrationBranchStateResult": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "choice": {
+            "viewId": "view",
+            "relatedJobIds": [
+              "parent"
+            ]
+          },
+          "progress": {
+            "viewId": "view",
+            "sequence": 1,
+            "source": "codex",
+            "stage": "reconstructing",
+            "checks": 1,
+            "writtenItems": 0,
+            "totalItems": null,
+            "structuralComplete": null,
+            "sourceRecordsWithDiagnostics": 0,
+            "issues": [],
+            "cancelRequested": false,
+            "failureCode": null
+          },
+          "workerRunning": true,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "choice": {
+            "viewId": "view",
+            "relatedJobIds": [
+              "parent"
+            ]
+          },
+          "progress": {
+            "viewId": "view",
+            "sequence": 1,
+            "source": "codex",
+            "stage": "executing_source_tools",
+            "checks": 1,
+            "writtenItems": 0,
+            "totalItems": null,
+            "structuralComplete": null,
+            "sourceRecordsWithDiagnostics": 0,
+            "issues": [],
+            "cancelRequested": false,
+            "failureCode": null
+          },
+          "workerRunning": true,
+          "workerError": null
+        }
+      }
+    ]
+  },
+  "MigrationBranchCancelResult": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "viewId": "view",
+          "cancelRequested": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "viewId": "view",
+          "cancelRequested": "true"
+        }
+      }
+    ]
+  },
+  "MigrationBranchPageParams": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "jobId": "job",
+          "viewId": "view"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "sourcePath": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationBranchBlocksParams": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "position": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "position": 0,
+          "replacementIndex": 0
+        }
+      }
+    ]
+  },
+  "MigrationBranchTextParams": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "position": 0,
+          "blockIndex": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "position": 0,
+          "blockIndex": 0,
+          "offset": 1
+        }
+      }
+    ]
+  },
+  "MigrationBranchPageResult": {
+    "valid": [
+      {
+        "name": "bound_read_only_branch",
+        "value": {
+          "progress": {
+            "viewId": "view",
+            "sequence": 1,
+            "source": "codex",
+            "stage": "ready",
+            "checks": 1,
+            "writtenItems": 0,
+            "totalItems": 0,
+            "structuralComplete": false,
+            "sourceRecordsWithDiagnostics": 0,
+            "issues": [],
+            "cancelRequested": false,
+            "failureCode": null
+          },
+          "title": null,
+          "items": [],
+          "nextCursor": null,
+          "sourceSessionId": "root-session"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_raw_source_authority",
+        "value": {
+          "progress": {
+            "viewId": "view",
+            "sequence": 1,
+            "source": "codex",
+            "stage": "ready",
+            "checks": 1,
+            "writtenItems": 0,
+            "totalItems": 0,
+            "structuralComplete": false,
+            "sourceRecordsWithDiagnostics": 0,
+            "issues": [],
+            "cancelRequested": false,
+            "failureCode": null
+          },
+          "title": null,
+          "items": "not-array",
+          "nextCursor": null
+        }
+      }
+    ]
+  },
+  "MigrationBranchToolsStateResult": {
+    "valid": [
+      {
+        "name": "historical_tools_only",
+        "value": {
+          "state": {
+            "viewId": "view",
+            "run": {
+              "sequence": 2,
+              "stage": "correlating",
+              "failureCode": null
+            },
+            "progress": {
+              "processedRecords": 1,
+              "recordedLinks": 1,
+              "unresolvedLinks": 1,
+              "sealed": false
+            },
+            "workerRunning": true,
+            "cancelRequested": false
+          },
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_active_or_unbound_input",
+        "value": {
+          "state": {
+            "viewId": "view",
+            "run": {
+              "sequence": 1,
+              "stage": "running_source_commands"
+            },
+            "progress": {
+              "processedRecords": 1,
+              "recordedLinks": 1,
+              "unresolvedLinks": 1,
+              "sealed": false
+            },
+            "workerRunning": true,
+            "cancelRequested": false
+          },
+          "workerError": null
+        }
+      }
+    ]
+  },
+  "MigrationBranchToolsPageParams": {
+    "valid": [
+      {
+        "name": "historical_tools_only",
+        "value": {
+          "jobId": "job",
+          "viewId": "view"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_active_or_unbound_input",
+        "value": {
+          "jobId": "job",
+          "viewId": "view",
+          "sourcePath": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationBranchToolsPageResult": {
+    "valid": [
+      {
+        "name": "historical_tools_only",
+        "value": {
+          "links": [
+            {
+              "id": "link",
+              "callId": "call",
+              "name": "write",
+              "namespace": null,
+              "sourceTurnId": null,
+              "call": {
+                "sequence": 0,
+                "record": 12,
+                "block": 0
+              },
+              "result": null,
+              "executionEvent": null,
+              "status": "missing_result",
+              "outcome": "outcome_unknown"
+            }
+          ],
+          "nextCursor": null,
+          "progress": {
+            "processedRecords": 1,
+            "recordedLinks": 1,
+            "unresolvedLinks": 1,
+            "sealed": true
+          }
+        }
+      },
+      {
+        "name": "parent_replacement_origin",
+        "value": {
+          "links": [
+            {
+              "id": "link",
+              "callId": "call",
+              "name": "write",
+              "namespace": null,
+              "sourceTurnId": null,
+              "call": {
+                "sequence": 0,
+                "record": 12,
+                "block": 0,
+                "sourceIndex": 1,
+                "replacementIndex": 2,
+                "sourceBlock": 4
+              },
+              "result": null,
+              "executionEvent": null,
+              "status": "missing_result",
+              "outcome": "outcome_unknown"
+            }
+          ],
+          "nextCursor": null,
+          "progress": {
+            "processedRecords": 1,
+            "recordedLinks": 1,
+            "unresolvedLinks": 1,
+            "sealed": true
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_active_or_unbound_input",
+        "value": {
+          "links": [
+            {
+              "id": "link",
+              "callId": "call",
+              "name": "write",
+              "namespace": null,
+              "sourceTurnId": null,
+              "call": {
+                "sequence": 0,
+                "record": 12,
+                "block": 0,
+                "path": "/other"
+              },
+              "result": null,
+              "executionEvent": null,
+              "status": "missing_result",
+              "outcome": "outcome_unknown"
+            }
+          ],
+          "nextCursor": null,
+          "progress": {
+            "processedRecords": 1,
+            "recordedLinks": 1,
+            "unresolvedLinks": 1,
+            "sealed": true
+          }
+        }
+      }
+    ]
+  }
+}

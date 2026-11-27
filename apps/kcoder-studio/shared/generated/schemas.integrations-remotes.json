@@ -1,0 +1,1707 @@
+{
+  "RemoteCapabilityBoundary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "allowedModels": {
+        "type": "string"
+      },
+      "authorization": {
+        "type": "string"
+      },
+      "budget": {
+        "type": "string"
+      },
+      "confirmation": {
+        "type": "string"
+      },
+      "inputTransfer": {
+        "type": "string"
+      },
+      "location": {
+        "type": "string"
+      },
+      "resource": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationEntityRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "resultTransfer": {
+        "type": "string"
+      },
+      "tools": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "allowedModels",
+      "authorization",
+      "budget",
+      "confirmation",
+      "inputTransfer",
+      "location",
+      "resultTransfer",
+      "tools"
+    ],
+    "title": "RemoteCapabilityBoundary",
+    "type": "object"
+  },
+  "RemoteCapabilityCatalog": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "RemoteCapabilityBoundary": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedModels": {
+            "type": "string"
+          },
+          "authorization": {
+            "type": "string"
+          },
+          "budget": {
+            "type": "string"
+          },
+          "confirmation": {
+            "type": "string"
+          },
+          "inputTransfer": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationEntityRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resultTransfer": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowedModels",
+          "authorization",
+          "budget",
+          "confirmation",
+          "inputTransfer",
+          "location",
+          "resultTransfer",
+          "tools"
+        ],
+        "type": "object"
+      },
+      "RemoteCapabilityEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "boundary": {
+            "$ref": "#/definitions/RemoteCapabilityBoundary"
+          },
+          "businessState": {
+            "$ref": "#/definitions/RemoteCapabilityObservationState"
+          },
+          "capability": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "identityState": {
+            "$ref": "#/definitions/RemoteCapabilityObservationState"
+          },
+          "implementationVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nativeOwner": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationOwner"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "protocolVersion": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "purpose": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": "string"
+          },
+          "schemas": {
+            "items": {
+              "$ref": "#/definitions/RemoteCapabilitySchemaRef"
+            },
+            "type": "array"
+          },
+          "state": {
+            "$ref": "#/definitions/RemoteCapabilityObservationState"
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "transport": {
+            "$ref": "#/definitions/RemoteCapabilityTransport"
+          }
+        },
+        "required": [
+          "boundary",
+          "businessState",
+          "capability",
+          "id",
+          "identityState",
+          "protocol",
+          "purpose",
+          "reasonCode",
+          "schemas",
+          "state",
+          "targetId",
+          "transport"
+        ],
+        "type": "object"
+      },
+      "RemoteCapabilityObservationState": {
+        "enum": [
+          "unknown",
+          "advertised",
+          "observed",
+          "unavailable",
+          "denied"
+        ],
+        "type": "string"
+      },
+      "RemoteCapabilitySchemaRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "producerRevision": {
+            "description": "A local public contract reference is not a remote-producer schema hash.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "protocolVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "protocolVersion"
+        ],
+        "type": "object"
+      },
+      "RemoteCapabilityTransport": {
+        "enum": [
+          "local",
+          "ssh",
+          "relay",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "entries": {
+        "items": {
+          "$ref": "#/definitions/RemoteCapabilityEntry"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "observedAt": {
+        "type": "string"
+      },
+      "snapshotId": {
+        "type": "string"
+      },
+      "total": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "entries",
+      "observedAt",
+      "snapshotId"
+    ],
+    "title": "RemoteCapabilityCatalog",
+    "type": "object"
+  },
+  "RemoteCapabilityCatalogMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "runtime.remotes.readCatalog"
+    ],
+    "title": "RemoteCapabilityCatalogMethod",
+    "type": "string"
+  },
+  "RemoteCapabilityCatalogReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "RemoteCapabilityCatalogReadParams",
+    "type": "object"
+  },
+  "RemoteCapabilityEntry": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "RemoteCapabilityBoundary": {
+        "additionalProperties": false,
+        "properties": {
+          "allowedModels": {
+            "type": "string"
+          },
+          "authorization": {
+            "type": "string"
+          },
+          "budget": {
+            "type": "string"
+          },
+          "confirmation": {
+            "type": "string"
+          },
+          "inputTransfer": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationEntityRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resultTransfer": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "allowedModels",
+          "authorization",
+          "budget",
+          "confirmation",
+          "inputTransfer",
+          "location",
+          "resultTransfer",
+          "tools"
+        ],
+        "type": "object"
+      },
+      "RemoteCapabilityObservationState": {
+        "enum": [
+          "unknown",
+          "advertised",
+          "observed",
+          "unavailable",
+          "denied"
+        ],
+        "type": "string"
+      },
+      "RemoteCapabilitySchemaRef": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "producerRevision": {
+            "description": "A local public contract reference is not a remote-producer schema hash.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "protocolVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "protocolVersion"
+        ],
+        "type": "object"
+      },
+      "RemoteCapabilityTransport": {
+        "enum": [
+          "local",
+          "ssh",
+          "relay",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "boundary": {
+        "$ref": "#/definitions/RemoteCapabilityBoundary"
+      },
+      "businessState": {
+        "$ref": "#/definitions/RemoteCapabilityObservationState"
+      },
+      "capability": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "identityState": {
+        "$ref": "#/definitions/RemoteCapabilityObservationState"
+      },
+      "implementationVersion": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "nativeOwner": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "observedAt": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "protocol": {
+        "type": "string"
+      },
+      "protocolVersion": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "purpose": {
+        "type": "string"
+      },
+      "reasonCode": {
+        "type": "string"
+      },
+      "schemas": {
+        "items": {
+          "$ref": "#/definitions/RemoteCapabilitySchemaRef"
+        },
+        "type": "array"
+      },
+      "state": {
+        "$ref": "#/definitions/RemoteCapabilityObservationState"
+      },
+      "targetId": {
+        "type": "string"
+      },
+      "transport": {
+        "$ref": "#/definitions/RemoteCapabilityTransport"
+      }
+    },
+    "required": [
+      "boundary",
+      "businessState",
+      "capability",
+      "id",
+      "identityState",
+      "protocol",
+      "purpose",
+      "reasonCode",
+      "schemas",
+      "state",
+      "targetId",
+      "transport"
+    ],
+    "title": "RemoteCapabilityEntry",
+    "type": "object"
+  },
+  "RemoteCapabilityObservationState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "unknown",
+      "advertised",
+      "observed",
+      "unavailable",
+      "denied"
+    ],
+    "title": "RemoteCapabilityObservationState",
+    "type": "string"
+  },
+  "RemoteCapabilitySchemaRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "producerRevision": {
+        "description": "A local public contract reference is not a remote-producer schema hash.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "protocolVersion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "name",
+      "protocolVersion"
+    ],
+    "title": "RemoteCapabilitySchemaRef",
+    "type": "object"
+  },
+  "RemoteCapabilityTransport": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "local",
+      "ssh",
+      "relay",
+      "unknown"
+    ],
+    "title": "RemoteCapabilityTransport",
+    "type": "string"
+  },
+  "RemoteOperationArtifact": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytes",
+      "id",
+      "revision",
+      "sha256"
+    ],
+    "title": "RemoteOperationArtifact",
+    "type": "object"
+  },
+  "RemoteOperationCleanupStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "not_observed",
+      "unconfirmed",
+      "confirmed"
+    ],
+    "title": "RemoteOperationCleanupStatus",
+    "type": "string"
+  },
+  "RemoteOperationControlMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/remotes/listOperations",
+      "integrations/remotes/readOperation",
+      "integrations/remotes/cancelOperation"
+    ],
+    "title": "RemoteOperationControlMethod",
+    "type": "string"
+  },
+  "RemoteOperationControlOutcome": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "observed",
+      "cancellation_requested",
+      "already_terminal"
+    ],
+    "title": "RemoteOperationControlOutcome",
+    "type": "string"
+  },
+  "RemoteOperationControlParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      }
+    },
+    "required": [
+      "operationId",
+      "requestId",
+      "scope"
+    ],
+    "title": "RemoteOperationControlParams",
+    "type": "object"
+  },
+  "RemoteOperationControlReply": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOperationPhase": {
+        "enum": [
+          "pending",
+          "executing",
+          "accepted",
+          "completed",
+          "rejected",
+          "unknown",
+          "cancel_requested",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationCleanupStatus": {
+        "enum": [
+          "not_observed",
+          "unconfirmed",
+          "confirmed"
+        ],
+        "type": "string"
+      },
+      "RemoteOperationControlOutcome": {
+        "enum": [
+          "observed",
+          "cancellation_requested",
+          "already_terminal"
+        ],
+        "type": "string"
+      },
+      "RemoteOperationProtocolStage": {
+        "additionalProperties": false,
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/RemoteOperationProtocolStatus"
+          }
+        },
+        "required": [
+          "stage",
+          "status"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationProtocolStatus": {
+        "enum": [
+          "dispatched",
+          "received",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "RemoteOperationReceiver": {
+        "additionalProperties": false,
+        "properties": {
+          "finishedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TurnAttemptIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/RemoteOperationReceiverStatus"
+          },
+          "terminalConfirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "terminalConfirmed"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationReceiverStatus": {
+        "enum": [
+          "not_observed",
+          "accepted",
+          "completed",
+          "failed",
+          "interrupted",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "RemoteOperationSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/RemoteOperationArtifact"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "businessCompleted": {
+            "type": "boolean"
+          },
+          "cleanup": {
+            "$ref": "#/definitions/RemoteOperationCleanupStatus"
+          },
+          "journalRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "operationPhase": {
+            "$ref": "#/definitions/IntegrationOperationPhase"
+          },
+          "operationRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "protocol": {
+            "items": {
+              "$ref": "#/definitions/RemoteOperationProtocolStage"
+            },
+            "type": "array"
+          },
+          "receiver": {
+            "$ref": "#/definitions/RemoteOperationReceiver"
+          }
+        },
+        "required": [
+          "businessCompleted",
+          "cleanup",
+          "journalRevision",
+          "operationId",
+          "operationPhase",
+          "operationRevision",
+          "protocol",
+          "receiver"
+        ],
+        "type": "object"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "operationId": {
+        "type": "string"
+      },
+      "outcome": {
+        "$ref": "#/definitions/RemoteOperationControlOutcome"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "snapshot": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/RemoteOperationSnapshot"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "operationId",
+      "outcome",
+      "requestId",
+      "scope"
+    ],
+    "title": "RemoteOperationControlReply",
+    "type": "object"
+  },
+  "RemoteOperationListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "requestId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      }
+    },
+    "required": [
+      "requestId",
+      "scope"
+    ],
+    "title": "RemoteOperationListParams",
+    "type": "object"
+  },
+  "RemoteOperationListReply": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "journalRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "receiverObserved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "journalRevision",
+          "operationId",
+          "receiverObserved"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/RemoteOperationSummary"
+        },
+        "type": "array"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "total": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "requestId",
+      "scope",
+      "total"
+    ],
+    "title": "RemoteOperationListReply",
+    "type": "object"
+  },
+  "RemoteOperationProtocolStage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "RemoteOperationProtocolStatus": {
+        "enum": [
+          "dispatched",
+          "received",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "stage": {
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/definitions/RemoteOperationProtocolStatus"
+      }
+    },
+    "required": [
+      "stage",
+      "status"
+    ],
+    "title": "RemoteOperationProtocolStage",
+    "type": "object"
+  },
+  "RemoteOperationProtocolStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "dispatched",
+      "received",
+      "unknown"
+    ],
+    "title": "RemoteOperationProtocolStatus",
+    "type": "string"
+  },
+  "RemoteOperationReceiver": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "RemoteOperationReceiverStatus": {
+        "enum": [
+          "not_observed",
+          "accepted",
+          "completed",
+          "failed",
+          "interrupted",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "finishedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "identity": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TurnAttemptIdentity"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/RemoteOperationReceiverStatus"
+      },
+      "terminalConfirmed": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "status",
+      "terminalConfirmed"
+    ],
+    "title": "RemoteOperationReceiver",
+    "type": "object"
+  },
+  "RemoteOperationReceiverStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "not_observed",
+      "accepted",
+      "completed",
+      "failed",
+      "interrupted",
+      "unknown"
+    ],
+    "title": "RemoteOperationReceiverStatus",
+    "type": "string"
+  },
+  "RemoteOperationSnapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationOperationPhase": {
+        "enum": [
+          "pending",
+          "executing",
+          "accepted",
+          "completed",
+          "rejected",
+          "unknown",
+          "cancel_requested",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "RemoteOperationArtifact": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "id",
+          "revision",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationCleanupStatus": {
+        "enum": [
+          "not_observed",
+          "unconfirmed",
+          "confirmed"
+        ],
+        "type": "string"
+      },
+      "RemoteOperationProtocolStage": {
+        "additionalProperties": false,
+        "properties": {
+          "stage": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/RemoteOperationProtocolStatus"
+          }
+        },
+        "required": [
+          "stage",
+          "status"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationProtocolStatus": {
+        "enum": [
+          "dispatched",
+          "received",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "RemoteOperationReceiver": {
+        "additionalProperties": false,
+        "properties": {
+          "finishedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "identity": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TurnAttemptIdentity"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/RemoteOperationReceiverStatus"
+          },
+          "terminalConfirmed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "status",
+          "terminalConfirmed"
+        ],
+        "type": "object"
+      },
+      "RemoteOperationReceiverStatus": {
+        "enum": [
+          "not_observed",
+          "accepted",
+          "completed",
+          "failed",
+          "interrupted",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TurnAttemptIdentity": {
+        "description": "One execution attempt of a logical turn. Shared by recovery and model snapshots. The server chooses attempt_id; credentials are never part of this identity.",
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "artifact": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/RemoteOperationArtifact"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "businessCompleted": {
+        "type": "boolean"
+      },
+      "cleanup": {
+        "$ref": "#/definitions/RemoteOperationCleanupStatus"
+      },
+      "journalRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "operationPhase": {
+        "$ref": "#/definitions/IntegrationOperationPhase"
+      },
+      "operationRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "protocol": {
+        "items": {
+          "$ref": "#/definitions/RemoteOperationProtocolStage"
+        },
+        "type": "array"
+      },
+      "receiver": {
+        "$ref": "#/definitions/RemoteOperationReceiver"
+      }
+    },
+    "required": [
+      "businessCompleted",
+      "cleanup",
+      "journalRevision",
+      "operationId",
+      "operationPhase",
+      "operationRevision",
+      "protocol",
+      "receiver"
+    ],
+    "title": "RemoteOperationSnapshot",
+    "type": "object"
+  },
+  "RemoteOperationSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "journalRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "receiverObserved": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "journalRevision",
+      "operationId",
+      "receiverObserved"
+    ],
+    "title": "RemoteOperationSummary",
+    "type": "object"
+  }
+}

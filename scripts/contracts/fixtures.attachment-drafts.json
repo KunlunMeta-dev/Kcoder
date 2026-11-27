@@ -1,0 +1,81 @@
+{
+  "AttachmentDraftRetainParams": {
+    "valid": [
+      {
+        "name": "initial_seal",
+        "value": {
+          "threadId": "thread-a",
+          "ownerScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "paths": [
+            "/staged/a.txt"
+          ]
+        }
+      },
+      {
+        "name": "recovery_only",
+        "value": {
+          "threadId": "thread-a",
+          "ownerScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "paths": [
+            "/session/draft-attachments/d-a/content/a.txt"
+          ],
+          "recoverOnly": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_parent_owner",
+        "value": {
+          "threadId": "thread-a",
+          "paths": [
+            "/staged/a.txt"
+          ]
+        }
+      },
+      {
+        "name": "unknown_field",
+        "value": {
+          "threadId": "a",
+          "ownerScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "paths": [],
+          "grant": true
+        }
+      }
+    ]
+  },
+  "AttachmentDraftRetainResult": {
+    "valid": [
+      {
+        "name": "sealed_mapping",
+        "value": {
+          "drafts": [
+            {
+              "sourcePath": "/staged/a.txt",
+              "path": "/session/draft-attachments/d-a/content/a.txt"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_source_identity",
+        "value": {
+          "drafts": [
+            {
+              "path": "/a"
+            }
+          ]
+        }
+      },
+      {
+        "name": "unknown_field",
+        "value": {
+          "drafts": [],
+          "grant": true
+        }
+      }
+    ]
+  }
+}

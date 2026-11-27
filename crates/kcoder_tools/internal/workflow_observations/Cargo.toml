@@ -1,0 +1,37 @@
+[package]
+name = "kcoder_workflow_observations"
+description = "Account-scoped workflow observations, archival, and control receipts."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[dependencies]
+kcoder_tool_error = { path = "../tool_error" }
+anyhow = { workspace = true }
+fs2 = "0.4"
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types" }
+kcoder_workflow = { path = "../../../kcoder_workflow" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[target."cfg(target_os = \"linux\")".dependencies]
+libc = { workspace = true }
+nix = { version = "0.30", features = ["fs"] }
+
+[target."cfg(unix)".dev-dependencies]
+libc = { workspace = true }
+
+[lib]
+path = "../../src/internal/workflow_observations/lib.rs"

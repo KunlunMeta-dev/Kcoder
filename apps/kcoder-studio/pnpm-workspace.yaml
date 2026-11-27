@@ -1,0 +1,9 @@
+# Gateway packaging stages portable SSH dependencies and the optional native WebRTC accelerator.
+allowBuilds:
+  '@steipete/peekaboo': false
+  cpu-features: false
+  electron-winstaller: false
+  node-datachannel: true
+  ssh2: false
+onlyBuiltDependencies:
+  - node-datachannel

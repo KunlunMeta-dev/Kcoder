@@ -1,0 +1,475 @@
+{
+  "OfficeCanonicalInputIdentity": [
+    {
+      "decoded": {
+        "reference": {
+          "id": "accepted-input",
+          "kind": "input",
+          "revision": "1"
+        },
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "name": "bounded-canonical-source-contract",
+      "value": {
+        "reference": {
+          "id": "accepted-input",
+          "kind": "input",
+          "revision": "1"
+        },
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      }
+    }
+  ],
+  "OfficeCanonicalSourceAvailability": [
+    {
+      "decoded": "not_recorded",
+      "name": "bounded-canonical-source-contract",
+      "value": "not_recorded"
+    }
+  ],
+  "OfficeCanonicalSourceDescriptor": [
+    {
+      "decoded": {
+        "artifact": {
+          "id": "artifact",
+          "revision": 1
+        },
+        "createdAtMs": 1,
+        "generator": {
+          "component": "@kcoder/office-components",
+          "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schemaRevision": "office-generation/v1",
+          "version": "0.1.0"
+        },
+        "id": "generation-source-fixture",
+        "inputs": [],
+        "operationId": "original-generation",
+        "outputSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "owner": {
+          "accountId": "fixture-account",
+          "organizationId": null,
+          "targetId": "fixture-target",
+          "workspaceId": null
+        },
+        "revision": 1,
+        "schemaVersion": 1,
+        "specificationBytes": 128,
+        "specificationSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "task": {
+          "threadId": "thread",
+          "turnId": "turn"
+        }
+      },
+      "name": "bounded-canonical-source-contract",
+      "value": {
+        "artifact": {
+          "id": "artifact",
+          "revision": 1
+        },
+        "createdAtMs": 1,
+        "generator": {
+          "component": "@kcoder/office-components",
+          "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "schemaRevision": "office-generation/v1",
+          "version": "0.1.0"
+        },
+        "id": "generation-source-fixture",
+        "inputs": [],
+        "operationId": "original-generation",
+        "outputSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "owner": {
+          "accountId": "fixture-account",
+          "targetId": "fixture-target",
+          "workspaceId": null
+        },
+        "revision": 1,
+        "schemaVersion": 1,
+        "specificationBytes": 128,
+        "specificationSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "task": {
+          "threadId": "thread",
+          "turnId": "turn"
+        }
+      }
+    }
+  ],
+  "OfficeCanonicalSourceReadParams": [
+    {
+      "decoded": {
+        "expectedSha256": null,
+        "limit": 65536,
+        "metadataOnly": true,
+        "offset": 0,
+        "reference": {
+          "id": "artifact",
+          "revision": 1
+        }
+      },
+      "name": "bounded-canonical-source-contract",
+      "value": {
+        "reference": {
+          "id": "artifact",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeCanonicalSourceReadResult": [
+    {
+      "decoded": {
+        "availability": "not_recorded",
+        "chunk": null,
+        "complete": false,
+        "nextOffset": null,
+        "offset": 0,
+        "source": null
+      },
+      "name": "bounded-canonical-source-contract",
+      "value": {
+        "availability": "not_recorded",
+        "chunk": null,
+        "complete": false,
+        "nextOffset": null,
+        "offset": 0,
+        "source": null
+      }
+    }
+  ],
+  "OfficeChartSeriesSpec": [
+    {
+      "decoded": {
+        "name": "金额",
+        "values": [
+          1234.56,
+          200
+        ]
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "name": "金额",
+        "values": [
+          1234.56,
+          200
+        ]
+      }
+    }
+  ],
+  "OfficeChartType": [
+    {
+      "decoded": "bar",
+      "name": "bounded-office-contract",
+      "value": "bar"
+    }
+  ],
+  "OfficeFormulaSpec": [
+    {
+      "decoded": {
+        "cell": "A3",
+        "formula": "SUM(A2:A2)"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "cell": "A3",
+        "formula": "SUM(A2:A2)"
+      }
+    }
+  ],
+  "OfficeGenerateParams": [
+    {
+      "decoded": {
+        "sourceRefs": [],
+        "specification": {
+          "kind": "docx",
+          "paragraphs": [],
+          "schemaVersion": 1,
+          "title": "示例"
+        },
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "specification": {
+          "kind": "docx",
+          "paragraphs": [],
+          "schemaVersion": 1,
+          "title": "示例"
+        },
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        }
+      }
+    }
+  ],
+  "OfficeGenerationKind": [
+    {
+      "decoded": "docx",
+      "name": "bounded-office-contract",
+      "value": "docx"
+    }
+  ],
+  "OfficeGenerationSpec": [
+    {
+      "decoded": {
+        "kind": "docx",
+        "paragraphs": [
+          {
+            "text": "金额1234.56元；日期待确认。"
+          }
+        ],
+        "schemaVersion": 1,
+        "template": "report",
+        "title": "已核对报告"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "kind": "docx",
+        "paragraphs": [
+          {
+            "text": "金额1234.56元；日期待确认。"
+          }
+        ],
+        "schemaVersion": 1,
+        "template": "report",
+        "title": "已核对报告"
+      }
+    }
+  ],
+  "OfficeGeneratorIdentity": [
+    {
+      "decoded": {
+        "component": "@kcoder/office-components",
+        "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "schemaRevision": "office-generation/v1",
+        "version": "0.1.0"
+      },
+      "name": "bounded-canonical-source-contract",
+      "value": {
+        "component": "@kcoder/office-components",
+        "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "schemaRevision": "office-generation/v1",
+        "version": "0.1.0"
+      }
+    }
+  ],
+  "OfficeParagraphSpec": [
+    {
+      "decoded": {
+        "bullet": false,
+        "heading": 1,
+        "text": "确认事项"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "bullet": false,
+        "heading": 1,
+        "text": "确认事项"
+      }
+    }
+  ],
+  "OfficePngSpec": [
+    {
+      "decoded": {
+        "alt": "合成测试标记",
+        "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwSpn2HwAEJAIsVIWyawAAAABJRU5ErkJggg=="
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "alt": "合成测试标记",
+        "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwSpn2HwAEJAIsVIWyawAAAABJRU5ErkJggg=="
+      }
+    }
+  ],
+  "OfficeSheetColumnSpec": [
+    {
+      "decoded": {
+        "key": "amount",
+        "title": "金额",
+        "type": "number",
+        "unit": "元"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "key": "amount",
+        "title": "金额",
+        "type": "number",
+        "unit": "元"
+      }
+    }
+  ],
+  "OfficeSheetSpec": [
+    {
+      "decoded": {
+        "columns": [
+          {
+            "key": "amount",
+            "title": "金额",
+            "type": "number",
+            "unit": "元"
+          }
+        ],
+        "formulas": [
+          {
+            "cell": "A3",
+            "formula": "SUM(A2:A2)"
+          }
+        ],
+        "name": "金额",
+        "rows": [
+          [
+            1234.56
+          ]
+        ]
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "columns": [
+          {
+            "key": "amount",
+            "title": "金额",
+            "type": "number",
+            "unit": "元"
+          }
+        ],
+        "formulas": [
+          {
+            "cell": "A3",
+            "formula": "SUM(A2:A2)"
+          }
+        ],
+        "name": "金额",
+        "rows": [
+          [
+            1234.56
+          ]
+        ]
+      }
+    }
+  ],
+  "OfficeSlideChartSpec": [
+    {
+      "decoded": {
+        "labels": [
+          "A",
+          "B"
+        ],
+        "series": [
+          {
+            "name": "金额",
+            "values": [
+              1234.56,
+              200
+            ]
+          }
+        ],
+        "type": "bar",
+        "unit": "元"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "labels": [
+          "A",
+          "B"
+        ],
+        "series": [
+          {
+            "name": "金额",
+            "values": [
+              1234.56,
+              200
+            ]
+          }
+        ],
+        "type": "bar",
+        "unit": "元"
+      }
+    }
+  ],
+  "OfficeSlideSpec": [
+    {
+      "decoded": {
+        "chart": {
+          "labels": [
+            "A",
+            "B"
+          ],
+          "series": [
+            {
+              "name": "金额",
+              "values": [
+                1234.56,
+                200
+              ]
+            }
+          ],
+          "type": "bar",
+          "unit": "元"
+        },
+        "paragraphs": [
+          "金额1234.56元"
+        ],
+        "title": "金额核对"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "chart": {
+          "labels": [
+            "A",
+            "B"
+          ],
+          "series": [
+            {
+              "name": "金额",
+              "values": [
+                1234.56,
+                200
+              ]
+            }
+          ],
+          "type": "bar",
+          "unit": "元"
+        },
+        "paragraphs": [
+          "金额1234.56元"
+        ],
+        "title": "金额核对"
+      }
+    }
+  ],
+  "OfficeTextTableSpec": [
+    {
+      "decoded": {
+        "headers": [
+          "事项",
+          "金额"
+        ],
+        "rows": [
+          [
+            "A",
+            "1234.56"
+          ]
+        ]
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "headers": [
+          "事项",
+          "金额"
+        ],
+        "rows": [
+          [
+            "A",
+            "1234.56"
+          ]
+        ]
+      }
+    }
+  ]
+}

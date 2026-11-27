@@ -1,0 +1,164 @@
+{
+  "TaskWorkspaceAvailability": [
+    {
+      "decoded": "unknown",
+      "name": "original-native-view",
+      "value": "unknown"
+    }
+  ],
+  "TaskWorkspaceEntry": [
+    {
+      "decoded": {
+        "nativeRevision": null,
+        "nativeStatus": "idle",
+        "reference": {
+          "kind": "thread",
+          "threadId": "thread-one"
+        },
+        "sourceMethod": "thread/read",
+        "title": "原生任务"
+      },
+      "name": "original-native-view",
+      "value": {
+        "nativeRevision": null,
+        "nativeStatus": "idle",
+        "reference": {
+          "kind": "thread",
+          "threadId": "thread-one"
+        },
+        "sourceMethod": "thread/read",
+        "title": "原生任务"
+      }
+    }
+  ],
+  "TaskWorkspaceFacet": [
+    {
+      "decoded": {
+        "availability": "available",
+        "kind": "thread",
+        "observedCount": 1,
+        "reasonCode": null
+      },
+      "name": "original-native-view",
+      "value": {
+        "availability": "available",
+        "kind": "thread",
+        "observedCount": 1,
+        "reasonCode": null
+      }
+    }
+  ],
+  "TaskWorkspaceFacetKind": [
+    {
+      "decoded": "thread",
+      "name": "original-native-view",
+      "value": "thread"
+    }
+  ],
+  "TaskWorkspaceMethod": [
+    {
+      "decoded": "integrations/tasks/readWorkspace",
+      "name": "original-native-view",
+      "value": "integrations/tasks/readWorkspace"
+    }
+  ],
+  "TaskWorkspaceNativeRef": [
+    {
+      "decoded": {
+        "kind": "thread",
+        "threadId": "thread-one"
+      },
+      "name": "original-native-view",
+      "value": {
+        "kind": "thread",
+        "threadId": "thread-one"
+      }
+    }
+  ],
+  "TaskWorkspaceReadParams": [
+    {
+      "decoded": {
+        "threadId": "thread-one"
+      },
+      "name": "original-native-view",
+      "value": {
+        "threadId": "thread-one"
+      }
+    }
+  ],
+  "TaskWorkspaceSnapshot": [
+    {
+      "decoded": {
+        "artifactRefs": [],
+        "entries": [],
+        "facets": [
+          {
+            "availability": "available",
+            "kind": "thread",
+            "observedCount": 1,
+            "reasonCode": null
+          }
+        ],
+        "nextCursor": null,
+        "observedAtMs": 1,
+        "runtime": null,
+        "schemaVersion": 1,
+        "scope": {
+          "accountId": "account-one",
+          "identityGeneration": "generation-one",
+          "targetId": "target-one",
+          "targetRevision": "revision-one",
+          "workspaceId": "workspace-one"
+        },
+        "snapshotId": "observation-one",
+        "sourceSelection": null,
+        "thread": {
+          "nativeRevision": null,
+          "nativeStatus": "idle",
+          "reference": {
+            "kind": "thread",
+            "threadId": "thread-one"
+          },
+          "sourceMethod": "thread/read",
+          "title": "原生任务"
+        }
+      },
+      "name": "original-native-view",
+      "value": {
+        "artifactRefs": [],
+        "entries": [],
+        "facets": [
+          {
+            "availability": "available",
+            "kind": "thread",
+            "observedCount": 1,
+            "reasonCode": null
+          }
+        ],
+        "nextCursor": null,
+        "observedAtMs": 1,
+        "runtime": null,
+        "schemaVersion": 1,
+        "scope": {
+          "accountId": "account-one",
+          "identityGeneration": "generation-one",
+          "targetId": "target-one",
+          "targetRevision": "revision-one",
+          "workspaceId": "workspace-one"
+        },
+        "snapshotId": "observation-one",
+        "sourceSelection": null,
+        "thread": {
+          "nativeRevision": null,
+          "nativeStatus": "idle",
+          "reference": {
+            "kind": "thread",
+            "threadId": "thread-one"
+          },
+          "sourceMethod": "thread/read",
+          "title": "原生任务"
+        }
+      }
+    }
+  ]
+}

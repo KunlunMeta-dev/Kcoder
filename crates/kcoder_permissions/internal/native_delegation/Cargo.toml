@@ -1,0 +1,27 @@
+[package]
+name = "kcoder_native_delegation"
+description = "Signed native delegations and durable revocation."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types" }
+ring = "0.17.14"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+zeroize = "1"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/native_delegation/lib.rs"

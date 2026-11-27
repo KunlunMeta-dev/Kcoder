@@ -1,0 +1,693 @@
+{
+  "PeerSshGatewayPinStatusV1": [
+    {
+      "decoded": "none",
+      "name": "closed-observation-0",
+      "value": "none"
+    },
+    {
+      "decoded": "pinned",
+      "name": "closed-observation-1",
+      "value": "pinned"
+    },
+    {
+      "decoded": "revoked",
+      "name": "closed-observation-2",
+      "value": "revoked"
+    },
+    {
+      "decoded": "revoking",
+      "name": "closed-observation-3",
+      "value": "revoking"
+    },
+    {
+      "decoded": "setup_unconfirmed",
+      "name": "closed-observation-4",
+      "value": "setup_unconfirmed"
+    },
+    {
+      "decoded": "scope_changed",
+      "name": "closed-observation-5",
+      "value": "scope_changed"
+    }
+  ],
+  "PeerSshGatewayProposalPhaseV1": [
+    {
+      "decoded": "proposed",
+      "name": "closed-observation-0",
+      "value": "proposed"
+    },
+    {
+      "decoded": "dispatching",
+      "name": "closed-observation-1",
+      "value": "dispatching"
+    },
+    {
+      "decoded": "setup_unconfirmed",
+      "name": "closed-observation-2",
+      "value": "setup_unconfirmed"
+    },
+    {
+      "decoded": "completed",
+      "name": "closed-observation-3",
+      "value": "completed"
+    },
+    {
+      "decoded": "discarded",
+      "name": "closed-observation-4",
+      "value": "discarded"
+    }
+  ],
+  "PeerSshGatewayProposalV1": [
+    {
+      "decoded": {
+        "action": "authorize",
+        "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "enrollment": {
+          "enrollmentId": "controlled-enrollment",
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "keyGeneration": 2,
+            "publicKey": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "generation": 7,
+          "native": {
+            "accountUid": 20001,
+            "identityEpoch": "profile-epoch",
+            "profileIdentity": "physical-profile",
+            "publicKey": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace"
+          },
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "target": {
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user",
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "version": 1
+        },
+        "operationId": "original-operation",
+        "phase": "proposed",
+        "proposalId": "original-proposal"
+      },
+      "name": "closed-observation-0",
+      "value": {
+        "action": "authorize",
+        "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "enrollment": {
+          "enrollmentId": "controlled-enrollment",
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "keyGeneration": 2,
+            "publicKey": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "generation": 7,
+          "native": {
+            "accountUid": 20001,
+            "identityEpoch": "profile-epoch",
+            "profileIdentity": "physical-profile",
+            "publicKey": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace"
+          },
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "target": {
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user",
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "version": 1
+        },
+        "operationId": "original-operation",
+        "phase": "proposed",
+        "proposalId": "original-proposal"
+      }
+    },
+    {
+      "decoded": {
+        "action": "authorize",
+        "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "enrollment": {
+          "enrollmentId": "controlled-enrollment",
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "keyGeneration": 2,
+            "publicKey": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "generation": 7,
+          "native": {
+            "accountUid": 20001,
+            "identityEpoch": "profile-epoch",
+            "profileIdentity": "physical-profile",
+            "publicKey": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace"
+          },
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "target": {
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user",
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "version": 1
+        },
+        "operationId": "original-operation",
+        "phase": "discarded",
+        "proposalId": "original-proposal"
+      },
+      "name": "closed-observation-1",
+      "value": {
+        "action": "authorize",
+        "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "enrollment": {
+          "enrollmentId": "controlled-enrollment",
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "keyGeneration": 2,
+            "publicKey": [
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1,
+              1
+            ]
+          },
+          "generation": 7,
+          "native": {
+            "accountUid": 20001,
+            "identityEpoch": "profile-epoch",
+            "profileIdentity": "physical-profile",
+            "publicKey": [
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              2
+            ],
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace"
+          },
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "target": {
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user",
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "version": 1
+        },
+        "operationId": "original-operation",
+        "phase": "discarded",
+        "proposalId": "original-proposal"
+      }
+    }
+  ],
+  "PeerSshGatewayStatusV1": [
+    {
+      "decoded": {
+        "configured": true,
+        "pinStatus": "scope_changed",
+        "proposals": [
+          {
+            "action": "authorize",
+            "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "enrollment": {
+              "enrollmentId": "controlled-enrollment",
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "keyGeneration": 2,
+                "publicKey": [
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1
+                ]
+              },
+              "generation": 7,
+              "native": {
+                "accountUid": 20001,
+                "identityEpoch": "profile-epoch",
+                "profileIdentity": "physical-profile",
+                "publicKey": [
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2
+                ],
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace"
+              },
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "target": {
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user",
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "version": 1
+            },
+            "operationId": "original-operation",
+            "phase": "proposed",
+            "proposalId": "original-proposal"
+          }
+        ]
+      },
+      "name": "closed-observation-0",
+      "value": {
+        "configured": true,
+        "pinStatus": "scope_changed",
+        "proposals": [
+          {
+            "action": "authorize",
+            "digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "enrollment": {
+              "enrollmentId": "controlled-enrollment",
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "keyGeneration": 2,
+                "publicKey": [
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1,
+                  1
+                ]
+              },
+              "generation": 7,
+              "native": {
+                "accountUid": 20001,
+                "identityEpoch": "profile-epoch",
+                "profileIdentity": "physical-profile",
+                "publicKey": [
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2,
+                  2
+                ],
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace"
+              },
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "target": {
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user",
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+              },
+              "version": 1
+            },
+            "operationId": "original-operation",
+            "phase": "proposed",
+            "proposalId": "original-proposal"
+          }
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "configured": false,
+        "pinStatus": "none",
+        "proposals": []
+      },
+      "name": "closed-observation-1",
+      "value": {
+        "configured": false,
+        "pinStatus": "none",
+        "proposals": []
+      }
+    }
+  ]
+}

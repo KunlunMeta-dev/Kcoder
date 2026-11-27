@@ -1,0 +1,36 @@
+/* Fade only the overlay surface. Positioning transforms, fixed descendants,
+   focus and immediate teardown remain owned by the existing component. */
+@keyframes studio-overlay-enter {
+  from { opacity: 0; }
+}
+
+:where(
+  [role="dialog"],
+  [role="alertdialog"],
+  [role="menu"],
+  [data-overlay-motion="popover"],
+  [data-overlay-motion="dialog"],
+  [data-overlay-motion="drawer"]
+):not(:where(
+  [hidden], [hidden] *, [inert], [inert] *,
+  [aria-hidden="true"], [aria-hidden="true"] *,
+  [data-state="closed"],
+  [data-overlay-motion="none"], [data-overlay-motion="none"] *,
+  [class^="ant-"], [class*=" ant-"],
+  [class^="octop-"], [class*=" octop-"],
+  [class*="animate-"],
+  [style*="animation"], [style*="opacity:"],
+  [style*="visibility: hidden"], [style*="visibility:hidden"]
+)) {
+  --studio-overlay-duration: var(--duration-base);
+  animation-name: studio-overlay-enter;
+  animation-duration: var(--studio-overlay-duration);
+  animation-timing-function: var(--ease-out, var(--ease-standard));
+  animation-iteration-count: 1;
+  animation-fill-mode: backwards;
+}
+
+/* A nested menu resets its own duration above instead of inheriting the drawer's. */
+:where([data-overlay-motion="drawer"]) {
+  --studio-overlay-duration: var(--duration-panel, 200ms);
+}

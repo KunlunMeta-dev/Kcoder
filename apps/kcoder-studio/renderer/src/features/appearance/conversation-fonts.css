@@ -1,0 +1,14 @@
+@font-face {
+  font-family: 'KCoder Noto Sans SC';
+  src: url('../../../../shared/assets/fonts/noto-sans-sc/NotoSansSC-Regular.otf') format('opentype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'KCoder Noto Sans SC';
+  src: url('../../../../shared/assets/fonts/noto-sans-sc/NotoSansSC-Bold.otf') format('opentype');
+  font-style: normal;
+  font-weight: 600 900;
+  font-display: swap;
+}

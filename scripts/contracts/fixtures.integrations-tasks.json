@@ -1,0 +1,225 @@
+{
+  "TaskWorkspaceMethod": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": "integrations/tasks/readWorkspace"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": "unsupported-private-operation"
+      }
+    ]
+  },
+  "TaskWorkspaceNativeRef": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": {
+          "kind": "thread",
+          "threadId": "thread-one"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": {
+          "kind": "thread",
+          "threadId": "thread-one",
+          "path": "not-a-native-grant"
+        }
+      }
+    ]
+  },
+  "TaskWorkspaceFacetKind": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": "thread"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": "unsupported-private-operation"
+      }
+    ]
+  },
+  "TaskWorkspaceAvailability": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": "unsupported-private-operation"
+      }
+    ]
+  },
+  "TaskWorkspaceFacet": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": {
+          "kind": "thread",
+          "availability": "available",
+          "observedCount": 1,
+          "reasonCode": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": {
+          "kind": "thread",
+          "availability": "available",
+          "observedCount": 1,
+          "reasonCode": null,
+          "path": "not-a-native-grant"
+        }
+      }
+    ]
+  },
+  "TaskWorkspaceEntry": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": {
+          "reference": {
+            "kind": "thread",
+            "threadId": "thread-one"
+          },
+          "title": "原生任务",
+          "nativeStatus": "idle",
+          "sourceMethod": "thread/read",
+          "nativeRevision": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": {
+          "reference": {
+            "kind": "thread",
+            "threadId": "thread-one"
+          },
+          "title": "原生任务",
+          "nativeStatus": "idle",
+          "sourceMethod": "thread/read",
+          "nativeRevision": null,
+          "path": "not-a-native-grant"
+        }
+      }
+    ]
+  },
+  "TaskWorkspaceReadParams": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": {
+          "threadId": "thread-one"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": {
+          "threadId": "thread-one",
+          "path": "not-a-native-grant"
+        }
+      }
+    ]
+  },
+  "TaskWorkspaceSnapshot": {
+    "valid": [
+      {
+        "name": "original-native-view",
+        "value": {
+          "schemaVersion": 1,
+          "scope": {
+            "accountId": "account-one",
+            "targetId": "target-one",
+            "workspaceId": "workspace-one",
+            "identityGeneration": "generation-one",
+            "targetRevision": "revision-one"
+          },
+          "snapshotId": "observation-one",
+          "observedAtMs": 1,
+          "thread": {
+            "reference": {
+              "kind": "thread",
+              "threadId": "thread-one"
+            },
+            "title": "原生任务",
+            "nativeStatus": "idle",
+            "sourceMethod": "thread/read",
+            "nativeRevision": null
+          },
+          "entries": [],
+          "facets": [
+            {
+              "kind": "thread",
+              "availability": "available",
+              "observedCount": 1,
+              "reasonCode": null
+            }
+          ],
+          "artifactRefs": [],
+          "runtime": null,
+          "sourceSelection": null,
+          "nextCursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "closed-native-contract",
+        "value": {
+          "schemaVersion": 1,
+          "scope": {
+            "accountId": "account-one",
+            "targetId": "target-one",
+            "workspaceId": "workspace-one",
+            "identityGeneration": "generation-one",
+            "targetRevision": "revision-one"
+          },
+          "snapshotId": "observation-one",
+          "observedAtMs": 1,
+          "thread": {
+            "reference": {
+              "kind": "thread",
+              "threadId": "thread-one"
+            },
+            "title": "原生任务",
+            "nativeStatus": "idle",
+            "sourceMethod": "thread/read",
+            "nativeRevision": null
+          },
+          "entries": [],
+          "facets": [
+            {
+              "kind": "thread",
+              "availability": "available",
+              "observedCount": 1,
+              "reasonCode": null
+            }
+          ],
+          "artifactRefs": [],
+          "runtime": null,
+          "sourceSelection": null,
+          "nextCursor": null,
+          "path": "not-a-native-grant"
+        }
+      }
+    ]
+  }
+}

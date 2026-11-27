@@ -1,0 +1,254 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-10-18",
+  "scope": "Per-vendor current, pinned older and unknown historical record structures; not a vendor binary or continuation certification",
+  "fixtureKind": "synthetic-structural-comparison",
+  "nativeVendorAcceptance": false,
+  "observations": [
+    {
+      "id": "codex-old",
+      "url": "https://raw.githubusercontent.com/openai/codex/74d1f7b2b3af383bd3605344f3c842b194fd1d70/codex-rs/protocol/src/protocol.rs",
+      "repository": "https://github.com/openai/codex",
+      "commit": "74d1f7b2b3af383bd3605344f3c842b194fd1d70",
+      "path": "codex-rs/protocol/src/protocol.rs",
+      "retrievedAtUtc": "2026-10-18T10:54:53.529465+00:00",
+      "bytes": 110906,
+      "sha256": "740eb6843b7638af19bf35213436c4e17bd6c1ffe078dccc62b7e89a2f8a7109"
+    },
+    {
+      "id": "codex-old-config",
+      "url": "https://raw.githubusercontent.com/openai/codex/74d1f7b2b3af383bd3605344f3c842b194fd1d70/codex-rs/core/src/config/mod.rs",
+      "repository": "https://github.com/openai/codex",
+      "commit": "74d1f7b2b3af383bd3605344f3c842b194fd1d70",
+      "path": "codex-rs/core/src/config/mod.rs",
+      "retrievedAtUtc": "2026-10-18T10:54:53.428118+00:00",
+      "bytes": 194362,
+      "sha256": "975e3775d0d26ea412ec4e8f9bf7b93ca8b1498ef9b6d557b3017559b5c0d54e"
+    },
+    {
+      "id": "claude-old",
+      "url": "https://raw.githubusercontent.com/anthropics/claude-agent-sdk-python/a7fd631911c9f5269a01e7a5eea5c67d6aa7bce6/src/claude_agent_sdk/_internal/sessions.py",
+      "repository": "https://github.com/anthropics/claude-agent-sdk-python",
+      "commit": "a7fd631911c9f5269a01e7a5eea5c67d6aa7bce6",
+      "path": "src/claude_agent_sdk/_internal/sessions.py",
+      "retrievedAtUtc": "2026-10-18T10:54:53.271540+00:00",
+      "bytes": 36072,
+      "sha256": "5c428dd1891b1f16c958694ea6f2e1f07b034008a60630f58d93c869b6dd2806"
+    },
+    {
+      "id": "claude-old-version",
+      "url": "https://raw.githubusercontent.com/anthropics/claude-agent-sdk-python/a7fd631911c9f5269a01e7a5eea5c67d6aa7bce6/src/claude_agent_sdk/_cli_version.py",
+      "repository": "https://github.com/anthropics/claude-agent-sdk-python",
+      "commit": "a7fd631911c9f5269a01e7a5eea5c67d6aa7bce6",
+      "path": "src/claude_agent_sdk/_cli_version.py",
+      "retrievedAtUtc": "2026-10-18T10:54:52.956807+00:00",
+      "bytes": 67,
+      "sha256": "48193466e62d6d777209021a551877de4410a29bf38f254b3129c1a5b601fbcc"
+    },
+    {
+      "id": "codex-current-0",
+      "url": "https://raw.githubusercontent.com/openai/codex/83086188ae0614bd882818ff1aa23f3194962012/codex-rs/protocol/src/protocol.rs",
+      "repository": "https://github.com/openai/codex",
+      "commit": "83086188ae0614bd882818ff1aa23f3194962012",
+      "path": "codex-rs/protocol/src/protocol.rs",
+      "retrievedAtUtc": "2026-10-18T10:56:06.551335+00:00",
+      "bytes": 239956,
+      "sha256": "8a586a54d3ce19e3eaa5410e08c6724b7554f9a70126b3eb309180e54da98655"
+    },
+    {
+      "id": "codex-current-1",
+      "url": "https://raw.githubusercontent.com/openai/codex/83086188ae0614bd882818ff1aa23f3194962012/codex-rs/protocol/src/models.rs",
+      "repository": "https://github.com/openai/codex",
+      "commit": "83086188ae0614bd882818ff1aa23f3194962012",
+      "path": "codex-rs/protocol/src/models.rs",
+      "retrievedAtUtc": "2026-10-18T10:56:06.437155+00:00",
+      "bytes": 165432,
+      "sha256": "df9a3da250376d86203a8a1219b2e4b5353a62274d094bb36998560433bd58eb"
+    },
+    {
+      "id": "claudeCode-current-0",
+      "url": "https://raw.githubusercontent.com/anthropics/claude-agent-sdk-python/a39c96edf8cc414e640620ff3360f17475db0bd9/src/claude_agent_sdk/_internal/sessions.py",
+      "repository": "https://github.com/anthropics/claude-agent-sdk-python",
+      "commit": "a39c96edf8cc414e640620ff3360f17475db0bd9",
+      "path": "src/claude_agent_sdk/_internal/sessions.py",
+      "retrievedAtUtc": "2026-10-18T10:56:06.363121+00:00",
+      "bytes": 71476,
+      "sha256": "d5323963daf711c8bcc684057fd48d0cb786ee04d8329be6dec82444ec505662"
+    },
+    {
+      "id": "claudeCode-current-1",
+      "url": "https://raw.githubusercontent.com/anthropics/claude-agent-sdk-python/a39c96edf8cc414e640620ff3360f17475db0bd9/src/claude_agent_sdk/_internal/session_resume.py",
+      "repository": "https://github.com/anthropics/claude-agent-sdk-python",
+      "commit": "a39c96edf8cc414e640620ff3360f17475db0bd9",
+      "path": "src/claude_agent_sdk/_internal/session_resume.py",
+      "retrievedAtUtc": "2026-10-18T10:56:06.403618+00:00",
+      "bytes": 24137,
+      "sha256": "0dd9ab8d14b7641a46d166423844cf11adbfa7b8e1f1bf63c696f581f91e8726"
+    },
+    {
+      "id": "claudeCode-current-2",
+      "url": "https://raw.githubusercontent.com/anthropics/claude-agent-sdk-python/a39c96edf8cc414e640620ff3360f17475db0bd9/src/claude_agent_sdk/_cli_version.py",
+      "repository": "https://github.com/anthropics/claude-agent-sdk-python",
+      "commit": "a39c96edf8cc414e640620ff3360f17475db0bd9",
+      "path": "src/claude_agent_sdk/_cli_version.py",
+      "retrievedAtUtc": "2026-10-18T10:56:06.100337+00:00",
+      "bytes": 68,
+      "sha256": "370ddef0d1fe851fd81356ae97d13e1599eb4a539752958eecbdf813a3af58be"
+    }
+  ],
+  "fixtures": [
+    {
+      "id": "claude-code-current",
+      "vendor": "claude-code",
+      "structure": "current",
+      "version": "2.1.301",
+      "fixture": "tests/fixtures/versioned-history/claude-current-2.1.301.jsonl",
+      "sha256": "32574496b736d762a9958a74b42ea857bb4cda267cbd58d5ba957a684195ec9c",
+      "bytes": 986,
+      "references": [
+        "claudeCode-current-0",
+        "claudeCode-current-1",
+        "claudeCode-current-2"
+      ],
+      "adapter": "kcoder_migration::history_records::parse_reader",
+      "test": "valid_claude_record_shapes_are_readable_regardless_of_product_version",
+      "sequence": [
+        "user",
+        "assistant",
+        "tool",
+        "assistant"
+      ],
+      "preservedAsReadOnlyEvidence": false,
+      "unknownMustRemainOpaque": false,
+      "legacyV5VersionDiagnostic": null,
+      "expectedDiagnostics": []
+    },
+    {
+      "id": "claude-code-old",
+      "vendor": "claude-code",
+      "structure": "old",
+      "version": "2.1.81",
+      "fixture": "tests/fixtures/versioned-history/claude-old-2.1.81.jsonl",
+      "sha256": "fde11b330fbc7cf0e708ec5262230d1027eac97d45a94d191aee89c05da4ba29",
+      "bytes": 957,
+      "references": [
+        "claude-old",
+        "claude-old-version"
+      ],
+      "adapter": "kcoder_migration::history_records::parse_reader",
+      "test": "valid_claude_record_shapes_are_readable_regardless_of_product_version",
+      "sequence": [
+        "user",
+        "assistant",
+        "tool",
+        "assistant"
+      ],
+      "preservedAsReadOnlyEvidence": true,
+      "unknownMustRemainOpaque": false,
+      "legacyV5VersionDiagnostic": "unsupported_claude_source_version",
+      "expectedDiagnostics": []
+    },
+    {
+      "id": "claude-code-unknown",
+      "vendor": "claude-code",
+      "structure": "unknown",
+      "version": "999.0.0",
+      "fixture": "tests/fixtures/versioned-history/claude-unknown.jsonl",
+      "sha256": "6f460679daa6658c6e3e0ece8622f3eae0ae3195f210d68433e667a70e727c2d",
+      "bytes": 159,
+      "references": [],
+      "adapter": "kcoder_migration::history_records::parse_reader",
+      "test": "valid_claude_record_shapes_are_readable_regardless_of_product_version",
+      "sequence": [
+        "unknown"
+      ],
+      "preservedAsReadOnlyEvidence": true,
+      "unknownMustRemainOpaque": true,
+      "legacyV5VersionDiagnostic": "unsupported_claude_source_version",
+      "expectedDiagnostics": [
+        "unknown_source_record"
+      ]
+    },
+    {
+      "id": "codex-current",
+      "vendor": "codex",
+      "structure": "current",
+      "version": "0.163.0",
+      "fixture": "tests/fixtures/versioned-history/codex-current-0.163.0.jsonl",
+      "sha256": "6b25d264e86347c79664ada19f4191aefd46f437bb79e4fae6e1711dff73d555",
+      "bytes": 813,
+      "references": [
+        "codex-current-0",
+        "codex-current-1"
+      ],
+      "adapter": "kcoder_migration::history_records::parse_reader",
+      "test": "valid_codex_record_shapes_are_readable_regardless_of_product_version",
+      "sequence": [
+        "session",
+        "user",
+        "assistant",
+        "tool",
+        "assistant"
+      ],
+      "preservedAsReadOnlyEvidence": false,
+      "unknownMustRemainOpaque": false,
+      "legacyV5VersionDiagnostic": null,
+      "expectedDiagnostics": []
+    },
+    {
+      "id": "codex-old",
+      "vendor": "codex",
+      "structure": "old",
+      "version": "0.104.0",
+      "fixture": "tests/fixtures/versioned-history/codex-old-0.104.0.jsonl",
+      "sha256": "9f52e6eef63bdc24b545af779dd3d9331de177d0257e281b366e575b820df54e",
+      "bytes": 847,
+      "references": [
+        "codex-old",
+        "codex-old-config"
+      ],
+      "adapter": "kcoder_migration::history_records::parse_reader",
+      "test": "valid_codex_record_shapes_are_readable_regardless_of_product_version",
+      "sequence": [
+        "session",
+        "user",
+        "assistant",
+        "tool",
+        "assistant"
+      ],
+      "preservedAsReadOnlyEvidence": true,
+      "unknownMustRemainOpaque": false,
+      "legacyV5VersionDiagnostic": "unsupported_codex_source_version",
+      "expectedDiagnostics": []
+    },
+    {
+      "id": "codex-unknown",
+      "vendor": "codex",
+      "structure": "unknown",
+      "version": "999.0.0",
+      "fixture": "tests/fixtures/versioned-history/codex-unknown.jsonl",
+      "sha256": "409d17f85d3c7241f53a2d52eb087fac087143ceb0a86eff8b642a61abab7399",
+      "bytes": 243,
+      "references": [],
+      "adapter": "kcoder_migration::history_records::parse_reader",
+      "test": "valid_codex_record_shapes_are_readable_regardless_of_product_version",
+      "sequence": [
+        "session",
+        "unknown"
+      ],
+      "preservedAsReadOnlyEvidence": true,
+      "unknownMustRemainOpaque": true,
+      "legacyV5VersionDiagnostic": "unsupported_codex_source_version",
+      "expectedDiagnostics": [
+        "unknown_source_record"
+      ]
+    }
+  ],
+  "boundaries": [
+    "Older known record fields are preserved as read-only evidence. Their unsupported-version diagnostics continue to block automatic model continuation.",
+    "Unknown future records remain opaque, with no command execution or credential preview.",
+    "Current means the fixed reviewed comparison baseline, not a claim to follow vendor releases automatically.",
+    "Pinned official source is read as text only. Vendor CLIs and SDK code are never executed by these tests.",
+    "Configuration/profile/asset formats retain their independent tests and comparison baselines."
+  ]
+}

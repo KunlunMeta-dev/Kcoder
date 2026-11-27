@@ -1,0 +1,13 @@
+// Synthetic explicit budgets matching the v0.6.0 and 2026-11-04 package reader.
+{
+  "meta": { "config_version": 1 },
+  "resources": {
+    "idle_budget": {
+      "max_processes": 3,
+      "max_resident_bytes": 104857600,
+      "sweep_interval_ms": 10000,
+      "sample_max_age_ms": 30000,
+      "sample_limit": 8,
+    },
+  },
+}

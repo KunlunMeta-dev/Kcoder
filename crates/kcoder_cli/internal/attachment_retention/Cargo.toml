@@ -1,0 +1,35 @@
+[package]
+name = "kcoder_attachment_retention"
+description = "Private retained attachment lifecycle and verified turn receipts."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[lib]
+path = "../../src/app_server/attachment_retention.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+fs2 = "0.4"
+hmac = "0.12"
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+kcoder_config = { path = "../../../kcoder_config", features = ["private-file-test-hooks"] }
+kcoder_test_harness = { path = "../../../../tests/harness" }
+tempfile = { workspace = true }
+
+[target."cfg(target_os = \"linux\")".dependencies]
+libc = { workspace = true }

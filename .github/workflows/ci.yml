@@ -1,0 +1,1190 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  schedule:
+    - cron: "23 18 * * *"
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: "Test tier to run"
+        required: true
+        default: full
+        type: choice
+        options:
+          - full
+          - real-model
+          - platform
+          - benchmarks
+      platform_target:
+        description: "Protected target to run for the platform tier"
+        required: true
+        type: choice
+        default: linux-desktop
+        options:
+          - linux-desktop
+          - windows-desktop
+          - macos-desktop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}-${{ inputs.tier || 'default' }}-${{ inputs.platform_target || 'default' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  searxng-runtime:
+    name: Bundled SearXNG / ${{ matrix.platform }}
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux-x64
+          - runner: windows-latest
+            platform: win-x64
+          - runner: macos-15-intel
+            platform: mac-x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned build-only runtime resolver
+        run: python -m pip install uv==0.12.17
+      - name: Search launcher proxy precedence and build resources
+        run: |
+          python -m unittest discover -s scripts/searxng -p test_launch.py
+          python -m unittest discover -s scripts/searxng -p test_prepare.py
+      - name: Prepare sealed native search service
+        run: python scripts/searxng/prepare.py --platform ${{ matrix.platform }} --destination target/runtime/searxng/${{ matrix.platform }}
+      - name: Verify prepared runtime inventory reuse
+        run: python scripts/searxng/prepare.py --platform ${{ matrix.platform }} --destination target/runtime/searxng/${{ matrix.platform }}
+      - name: Real search service with an owned offline source and owner cancellation
+        run: python scripts/searxng/test_runtime.py --runtime target/runtime/searxng/${{ matrix.platform }}
+
+  relay:
+    name: Multi-Gateway relay contracts
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_AUTO_PIN: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: apps/kcoder-relay/package-lock.json
+      - name: Install locked relay and Gateway fixture dependencies
+        run: |
+          npm --prefix apps/kcoder-relay ci --no-audit --no-fund
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile --ignore-scripts
+      - name: Relay routing, registration, isolation and cleanup contracts
+        run: npm --prefix apps/kcoder-relay test
+
+  repository-tooling:
+    name: Repository scripts, resources and tooling
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install release helper test dependencies
+        env:
+          COREPACK_ENABLE_AUTO_PIN: '0'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ripgrep
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile --ignore-scripts
+      - name: Validate all tracked support scripts
+        run: python3 scripts/ci/check_repository_syntax.py
+      - name: Quality gate coverage and package-manager pins
+        run: python3 scripts/ci/check_quality_contracts.py
+      - name: CI scanner negative and non-execution contracts
+        run: python3 -m unittest discover -s scripts/ci -p 'test_*.py' -v
+      - name: Documentation checker contracts
+        run: python3 -m unittest discover -s scripts/docs -p 'test_*.py' -v
+      - name: Full source documentation coverage and references
+        if: github.repository != 'KunlunMeta-dev/Kcoder'
+        run: python3 scripts/docs/check_documentation.py
+      - name: Public source documentation boundary
+        if: github.repository == 'KunlunMeta-dev/Kcoder'
+        run: python3 scripts/docs/check_documentation.py --public-snapshot
+      - name: Workflow syntax and expression checks
+        run: |
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/actionlint.tar.gz" https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -shellcheck= -pyflakes=
+      - name: Contract, release helper and resource tests
+        run: node --test scripts/audit/*.test.mjs scripts/contracts/*.test.mjs scripts/quality/*.test.mjs scripts/release/*.test.mjs site/assets/__tests__/*.spec.js
+      - name: Install terminal tooling dependencies
+        run: npm --prefix tools/tui-lab ci --no-audit --no-fund
+      - name: TUI Lab unit and ownership contracts
+        run: npm --prefix tools/tui-lab test
+
+  gateway-desktop:
+    name: Gateway, Electron and E2E harness contracts
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CI: 'true'
+      COREPACK_ENABLE_AUTO_PIN: '0'
+      pnpm_config_verify_deps_before_run: error
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: '1.95'
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: gateway-owned-cli
+      - name: Build actual CLI used by account and protocol fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config xvfb imagemagick
+          cargo build --locked -p kcoder_cli --bin kcoder
+      - name: Install locked Gateway dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile --ignore-scripts
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/skill-runtime install --frozen-lockfile --ignore-scripts
+      - name: Prepare the pinned lark-cli for the composed-PATH execution test
+        run: node scripts/release/prepare-lark-cli.mjs --platform linux-x64 --dest target/packages/kcoder-studio/linux-input/lark-cli
+      - name: Gateway and desktop module tests
+        env:
+          KCODER_STUDIO_TEST_LARK_CLI_DIR: ${{ github.workspace }}/target/packages/kcoder-studio/linux-input/lark-cli
+        run: npm --prefix apps/kcoder-studio test
+      - name: E2E harness, registration and cleanup contracts
+        run: npm --prefix apps/kcoder-studio run test:e2e:harness
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - name: Install pinned external ACP acceptance client in an isolated environment
+        run: |
+          python -m venv "${{ runner.temp }}/acp-toad"
+          "${{ runner.temp }}/acp-toad/bin/python" -m pip install -r crates/kcoder_cli/tests/acp/toad-requirements.txt
+      - name: Prepare bundled search for the actual CLI ownership acceptance
+        run: |
+          python -m pip install uv==0.12.17
+          python scripts/searxng/prepare.py --platform linux-x64 --destination target/runtime/searxng/linux-x64
+      - name: Actual managed search startup, discovery and new-conversation activation
+        env:
+          KCODER_TEST_SEARXNG_RUNTIME: ${{ github.workspace }}/target/runtime/searxng/linux-x64
+        run: cargo test --locked -p kcoder_cli --test app_server_stdio bundled_searxng_starts_through_the_actual_owned_cli_and_obeys_activation -- --ignored
+      - name: Actual Toad ACP client, permissions and cancellation
+        env:
+          KCODER_ACP_TOAD_PYTHON: ${{ runner.temp }}/acp-toad/bin/python
+          KCODER_TEST_ACP_TOAD: '1'
+        run: cargo run --locked -p kcoder_test_runner -- --tier platform --suite acp-toad-application --consent acp-toad-application
+      - name: Upload ACP client acceptance receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acp-toad-client
+          path: target/test-runs/project/
+          retention-days: 7
+
+  python-runtime:
+    name: Python desktop, account and deployment helpers
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      COREPACK_ENABLE_AUTO_PIN: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: '1.95'
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: python-owned-cli
+      - name: Install actual CLI for isolated Unix account fixtures
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+          cargo build --locked -p kcoder_cli --bin kcoder
+          # These ephemeral runner paths must satisfy the same production trust guard.
+          sudo chown root:root /usr/local /usr/local/bin
+          sudo chmod 755 /usr/local /usr/local/bin
+          sudo install -m 755 target/debug/kcoder /usr/local/bin/kcoder
+      - name: Desktop worker adapter unit tests
+        run: |
+          python3 -m pip install --only-binary=:all: pillow==12.3.0
+          python3 -m unittest discover -s scripts/computer-use -p 'test_*.py' -v
+      - name: Install owned loopback SSH fixture prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openssh-server
+          sudo install -d -m 755 /run/sshd
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile --ignore-scripts
+      - name: Account, Wiki worker and deployment contracts
+        run: sudo env "PATH=$PATH" KCODER_TEST_SYSTEM_USERS=1 python3 -m unittest discover -s scripts/install/tests -p 'test_*.py' -v
+
+  provider-sdk:
+    name: Vendored model SDK unit contracts
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: '1.95'
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: third_party/genai -> target
+          key: provider-sdk
+      - name: Actual SDK library tests without external provider calls
+        run: cargo test --manifest-path third_party/genai/Cargo.toml --lib
+
+  windows-scripts:
+    name: PowerShell syntax and installation transactions
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Parse every tracked PowerShell script without executing it
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $scripts = @(git ls-files -- '*.ps1')
+          if ($LASTEXITCODE -ne 0 -or $scripts.Count -eq 0) { throw 'No tracked PowerShell scripts found' }
+          $invalid = @()
+          foreach ($script in $scripts) {
+            $tokens = $null
+            $parseErrors = $null
+            [void][Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD $script), [ref]$tokens, [ref]$parseErrors)
+            if ($parseErrors.Count) { $invalid += "$script`: $($parseErrors | Out-String)" }
+          }
+          if ($invalid.Count) { throw ($invalid -join "`n") }
+          Write-Output "PowerShell syntax: $($scripts.Count) files passed"
+      - name: Owned temporary installation and rollback contracts
+        run: |
+          ./scripts/release/tests/windows-package-transaction.ps1
+          ./scripts/install/tests/windows-cli-release-transaction.ps1
+          $helper = './apps/kcoder-studio/desktop/windows-shell/close-installed-processes.ps1'
+          ./apps/kcoder-studio/desktop/windows-shell-close-processes.test.ps1 -Helper $helper
+          ./apps/kcoder-studio/desktop/windows-shell-stop-tasks.test.ps1 -Helper $helper
+
+  platform-preflight:
+    name: Validate protected desktop prerequisites
+    if: github.event_name == 'workflow_dispatch' && inputs.tier == 'platform'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: protected-platform-tests
+    outputs:
+      labels: ${{ steps.target.outputs.labels }}
+      suite: ${{ steps.target.outputs.suite }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require an explicitly configured owned runner
+        id: target
+        env:
+          TARGET: ${{ inputs.platform_target }}
+          RUNNERS: ${{ vars.KCODER_PLATFORM_RUNNERS_JSON }}
+          KCODER_E2E_KCODER_BIN: ${{ vars.KCODER_E2E_KCODER_BIN }}
+          KCODER_E2E_ELECTRON_BIN: ${{ vars.KCODER_E2E_ELECTRON_BIN }}
+          KCODER_E2E_PACKAGED_DIR: ${{ vars.KCODER_E2E_PACKAGED_DIR }}
+        run: |
+          node --input-type=module <<'EOF'
+          import { appendFileSync } from 'node:fs';
+          const targets = {
+            'linux-desktop': 'electron-workspace-file-upload',
+            'macos-desktop': 'electron-workspace-file-upload',
+            'windows-desktop': 'windows-computer-use',
+          };
+          let mapping;
+          try { mapping = JSON.parse(process.env.RUNNERS || '{}'); }
+          catch { throw new Error('KCODER_PLATFORM_RUNNERS_JSON must be valid JSON'); }
+          if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) throw new Error('Invalid owned runner mapping');
+          const labels = mapping[process.env.TARGET];
+          if (!targets[process.env.TARGET] || !Array.isArray(labels) || !labels.includes('self-hosted') ||
+              labels.some(label => typeof label !== 'string' || !/^[A-Za-z0-9._-]+$/.test(label))) {
+            throw new Error('Configure KCODER_PLATFORM_RUNNERS_JSON with owned self-hosted labels for this target');
+          }
+          // Paths belong to the selected host; this preflight never probes a remote filesystem.
+          const required = process.env.TARGET === 'windows-desktop' ? 'KCODER_E2E_PACKAGED_DIR' : 'KCODER_E2E_ELECTRON_BIN';
+          if (!process.env[required]?.trim()) throw new Error(`Configure ${required} for the selected owned target`);
+          for (const name of ['KCODER_E2E_KCODER_BIN', 'KCODER_E2E_ELECTRON_BIN', 'KCODER_E2E_PACKAGED_DIR']) {
+            if (/[\r\n\u0000]/.test(process.env[name] || '')) throw new Error(`Invalid owned target path: ${name}`);
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `labels=${JSON.stringify(labels)}\nsuite=${targets[process.env.TARGET]}\n`);
+          EOF
+
+  platform:
+    name: Protected native desktop acceptance
+    needs: platform-preflight
+    if: github.event_name == 'workflow_dispatch' && inputs.tier == 'platform'
+    runs-on: ${{ fromJSON(needs.platform-preflight.outputs.labels) }}
+    environment: protected-platform-tests
+    timeout-minutes: 60
+    env:
+      COREPACK_ENABLE_AUTO_PIN: '0'
+      KCODER_E2E_KCODER_BIN: ${{ vars.KCODER_E2E_KCODER_BIN }}
+      KCODER_E2E_ELECTRON_BIN: ${{ vars.KCODER_E2E_ELECTRON_BIN }}
+      KCODER_E2E_PACKAGED_DIR: ${{ vars.KCODER_E2E_PACKAGED_DIR }}
+      KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX: '1'
+      pnpm_config_verify_deps_before_run: error
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked desktop verification dependencies
+        shell: bash
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer exec playwright install chromium
+      - name: Owned real desktop fixture and cleanup
+        shell: bash
+        env:
+          SUITE: ${{ needs.platform-preflight.outputs.suite }}
+        run: node apps/kcoder-studio/e2e/run-all.mjs --model-independent --suite "$SUITE"
+      - name: Upload bounded native acceptance records
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ inputs.platform_target }}-records
+          path: |
+            target/e2e/*/*/*/suites/**/*/manifest.json
+            target/e2e/*/*/*/suites/**/*/artifacts/result.json
+          if-no-files-found: ignore
+          retention-days: 5
+
+  benchmarks:
+    name: Explicit offline performance benchmarks
+    if: github.event_name == 'workflow_dispatch' && inputs.tier == 'benchmarks'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: '1.95'
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Install credential-store build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+      - name: Only explicitly named offline benchmarks
+        run: cargo test --locked -p kcoder_engine -p kcoder_memory -p kcoder_repl --lib benchmark -- --ignored --nocapture --test-threads=1
+
+  studio-frontend:
+    name: Studio frontend
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: 'true'
+      TZ: Asia/Shanghai
+      COREPACK_ENABLE_AUTO_PIN: '0'
+      pnpm_config_verify_deps_before_run: error
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+      - name: Locate pnpm store
+        id: pnpm-store
+        run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+      - name: Cache pnpm downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-store.outputs.path }}
+          key: ${{ runner.os }}-node22-studio-pnpm-${{ hashFiles('apps/kcoder-studio/pnpm-lock.yaml', 'apps/kcoder-studio/renderer/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-node22-studio-pnpm-
+      - name: Install locked frontend dependencies
+        run: |
+          # Renderer contracts import Gateway modules; no native host build runs here.
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile --ignore-scripts
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+      - name: TypeScript
+        run: pnpm --dir apps/kcoder-studio/renderer typecheck
+      - name: Renderer React dependency identity
+        run: node --test apps/kcoder-studio/renderer/scripts/vite-react-singleton.check.mjs
+      - name: Lint, typography and task lifecycle
+        run: pnpm --dir apps/kcoder-studio/renderer lint
+      - name: Renderer and shared chat unit tests
+        run: |
+          mkdir -p target/ci/frontend
+          pnpm --dir apps/kcoder-studio/renderer exec vitest run --maxWorkers=2 --reporter=json --outputFile="$GITHUB_WORKSPACE/target/ci/frontend/studio-vitest.json"
+      - name: Production renderer build
+        run: pnpm --dir apps/kcoder-studio/renderer build
+      - name: Upload unit test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: studio-frontend-test-report
+          path: target/ci/frontend/studio-vitest.json
+          if-no-files-found: ignore
+          retention-days: 5
+
+  file-size:
+    name: Source file size gate
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node --test scripts/quality/check-file-size.test.mjs
+      - run: node scripts/quality/check-file-size.mjs --strict
+
+  skills:
+    name: Skills system gate
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Install Linux credential-store build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libdbus-1-dev pkg-config
+
+      - name: Core skill behavior tests
+        run: cargo test --locked -p kcoder_specs --test core_skills
+
+      - name: Skill store transaction and process tests
+        run: cargo test --locked -p kcoder_skills
+
+      - name: Skill lifecycle and safety tests
+        run: cargo test --locked -p kcoder_tools skill_
+
+      - name: Core skill pressure integration tests
+        run: cargo test --locked -p kcoder_engine core_skill_pressure
+
+      - name: Skill activation integration test
+        run: cargo test --locked -p kcoder_engine skill_tool_activation_updates_next_provider_request_and_usage
+
+  rust:
+    name: Rust quality gate
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install JavaScript and TUI browser test dependencies
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          npm --prefix apps/kcoder-relay ci --no-audit --no-fund
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          npm --prefix tools/tui-lab ci
+          npm --prefix tools/tui-lab exec -- playwright install --with-deps chromium
+
+      - name: Install audit tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libappindicator3-dev \
+            libdbus-1-dev \
+            pkg-config \
+            librsvg2-dev \
+            patchelf \
+            ripgrep
+
+      - name: Audit scripts selftest
+        run: scripts/audit/audit_scripts_selftest.sh
+
+      - name: Release packaging contract
+        run: scripts/release/test-packaging-contract.sh
+
+      - name: Generated public contract compatibility
+        run: |
+          node scripts/contracts/generate.mjs --check
+          node --test scripts/contracts/contracts.test.mjs
+          pnpm --dir apps/kcoder-studio/renderer exec tsc -p ../../../scripts/contracts/tsconfig.json
+
+      - name: Embedded plugin guidance integrity
+        run: cargo test --locked -p kcoder_plugins --lib bundled
+
+      - name: Secret and history scan
+        run: scripts/audit/audit_release_check.sh
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Shipped CLI build has no dead code or unused imports
+        # Workflow-level RUSTFLAGS denies warnings. This builds only the
+        # non-test kcoder_cli binaries and their path crates (kcoder_cli_runtime
+        # and the internal Native crates), so code kept alive solely by tests
+        # or `test-oracle` features fails here before the full Clippy pass.
+        run: cargo check --locked -p kcoder_cli --bins
+
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
+
+      - name: Review exact Linux ignored test roster
+        run: python3 scripts/ci/check_quality_contracts.py --check-ignored
+
+      - name: Project PR test matrix
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: cargo run --locked -p kcoder_test_runner -- --tier pr --keep-going
+
+      - name: Docs
+        run: cargo doc --locked --workspace --no-deps
+
+      - name: Release build
+        run: cargo build --locked --release --all-features
+
+  full:
+    name: Nightly/full matrix
+    if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.tier == 'full')
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install full-tier system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libappindicator3-dev \
+            libdbus-1-dev \
+            pkg-config \
+            librsvg2-dev \
+            patchelf \
+            xvfb \
+            openssh-server
+
+      - name: Install JavaScript and browser dependencies
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          npm --prefix apps/kcoder-relay ci --no-audit --no-fund
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          npm --prefix tools/tui-lab ci
+          npm --prefix tools/tui-lab exec -- playwright install --with-deps chromium
+          pnpm --dir apps/kcoder-studio/renderer exec playwright install --with-deps chromium
+
+      - name: Widget rendering, process and target domain acceptance
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+          KCODER_E2E_CHROMIUM_NO_SANDBOX: '0'
+          KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX: '1'
+        run: |
+          # These owned Linux probes do not enable production Linux isolated HTML.
+          node apps/kcoder-studio/node_modules/electron/install.js
+          test "$(cat apps/kcoder-studio/node_modules/electron/dist/version)" = '42.3.3'
+          KCODER_E2E_CHROMIUM_BIN="$(node --input-type=module -e 'import { chromium } from "./apps/kcoder-studio/renderer/node_modules/@playwright/test/index.mjs"; console.log(chromium.executablePath())')"
+          export KCODER_E2E_CHROMIUM_BIN
+          test -x "$KCODER_E2E_CHROMIUM_BIN"
+          cargo build --locked -p kcoder_cli --bin kcoder
+          pnpm --dir apps/kcoder-studio/renderer build
+          for suite in widget-managed-rendering widget-isolation-boundaries electron-widget-resources electron-widget-isolation; do
+            node "apps/kcoder-studio/e2e/suites/browser/$suite.e2e.mjs"
+          done
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --failed-chart
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --libraries
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --lifecycle
+          node apps/kcoder-studio/e2e/suites/browser/widget-completed-workbench-scroll.e2e.mjs --readiness
+          node apps/kcoder-studio/integration/gateway/kworker-widget-runtime-targets.integration.mjs
+          node apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs test e2e/tests/widget-scroll.spec.ts e2e/tests/plugin-skill-layout.spec.ts
+          node apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs test e2e/tests/reference-panels.spec.ts --grep 'Studio work mode'
+
+      - name: Upload bounded widget domain receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-widget-domain-records
+          path: |
+            target/e2e/*/*/*/suites/browser/widget-managed-rendering.e2e.mjs/**/manifest.json
+            target/e2e/*/*/*/suites/browser/widget-managed-rendering.e2e.mjs/**/artifacts/*.json
+            target/e2e/*/*/*/suites/browser/widget-completed-workbench-scroll.e2e.mjs/**/manifest.json
+            target/e2e/*/*/*/suites/browser/widget-completed-workbench-scroll.e2e.mjs/**/artifacts/*.json
+            target/e2e/*/*/*/suites/browser/widget-isolation-boundaries.e2e.mjs/**/manifest.json
+            target/e2e/*/*/*/suites/browser/widget-isolation-boundaries.e2e.mjs/**/artifacts/*.json
+            target/e2e/*/*/*/suites/browser/electron-widget-resources.e2e.mjs/**/manifest.json
+            target/e2e/*/*/*/suites/browser/electron-widget-resources.e2e.mjs/**/artifacts/*.json
+            target/e2e/*/*/*/suites/browser/electron-widget-isolation.e2e.mjs/**/manifest.json
+            target/e2e/*/*/*/suites/browser/electron-widget-isolation.e2e.mjs/**/artifacts/*.json
+            target/e2e/*/*/*/suites/gateway/kworker-widget-runtime-targets.e2e.mjs/**/manifest.json
+            target/e2e/*/*/*/suites/gateway/kworker-widget-runtime-targets.e2e.mjs/**/artifacts/*.json
+            target/test/apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs/**/manifest.json
+            target/test/apps/kcoder-studio/renderer/e2e/harness/run-playwright.mjs/**/artifacts/playwright-results.json
+          if-no-files-found: ignore
+          retention-days: 5
+
+      - name: Run full matrix
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/ms-playwright
+          KCODER_E2E_CHROMIUM_NO_SANDBOX: "1"
+        run: |
+          KCODER_E2E_CHROMIUM_BIN="$(node --input-type=module -e 'import { chromium } from "./apps/kcoder-studio/renderer/node_modules/@playwright/test/index.mjs"; console.log(chromium.executablePath())')"
+          export KCODER_E2E_CHROMIUM_BIN
+          test -x "$KCODER_E2E_CHROMIUM_BIN"
+          cargo run --locked -p kcoder_test_runner -- --tier full --keep-going
+
+      - name: Upload manual model stream receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-manual-model-stream-records
+          path: |
+            target/e2e/*/*/*/suites/browser/manual-model-stream-reconnect.e2e.mjs/*/manifest.json
+            target/e2e/*/*/*/suites/browser/manual-model-stream-reconnect.e2e.mjs/*/artifacts/*.json
+            target/e2e/*/*/*/suites/gateway/model-stream-stdio.e2e.mjs/*/manifest.json
+            target/e2e/*/*/*/suites/gateway/model-stream-stdio.e2e.mjs/*/artifacts/*.json
+          if-no-files-found: ignore
+          retention-days: 5
+
+  real-model:
+    name: Protected real-model matrix
+    if: github.event_name == 'workflow_dispatch' && inputs.tier == 'real-model'
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: protected-tests
+    env:
+      KCODER_E2E_REAL_MODEL: "1"
+      KCODER_E2E_MODEL_PROFILE: ${{ vars.KCODER_E2E_MODEL_PROFILE }}
+      KCODER_E2E_MODEL_ENDPOINT: ${{ vars.KCODER_E2E_MODEL_ENDPOINT }}
+      KCODER_E2E_MODEL_NAME: ${{ vars.KCODER_E2E_MODEL_NAME }}
+      KCODER_E2E_MODEL_API_FORMAT: ${{ vars.KCODER_E2E_MODEL_API_FORMAT }}
+      KCODER_E2E_MODEL_CREDENTIAL_ENV: ${{ vars.KCODER_E2E_MODEL_CREDENTIAL_ENV }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Check protected credential availability
+        env:
+          KCODER_E2E_MODEL_CREDENTIAL_VALUE: ${{ secrets.KCODER_E2E_MODEL_CREDENTIAL_VALUE }}
+        run: python3 scripts/ci/protected_model_env.py --check-credential
+
+      - name: Install Studio dependencies
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.24.0 --activate
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+
+      - name: Materialize minimal protected Provider configuration
+        run: |
+          python3 scripts/ci/protected_model_env.py --validate-name
+          export KCODER_CONFIG_DIR="$RUNNER_TEMP/kcoder-real-model-config"
+          echo "KCODER_CONFIG_DIR=$KCODER_CONFIG_DIR" >> "$GITHUB_ENV"
+          install -d -m 700 "$KCODER_CONFIG_DIR"
+          node --input-type=module <<'EOF'
+          import { writeFile } from "node:fs/promises";
+          const profile = process.env.KCODER_E2E_MODEL_PROFILE;
+          const endpoint = process.env.KCODER_E2E_MODEL_ENDPOINT;
+          const model = process.env.KCODER_E2E_MODEL_NAME;
+          const apiFormat = process.env.KCODER_E2E_MODEL_API_FORMAT;
+          const credentialEnv = process.env.KCODER_E2E_MODEL_CREDENTIAL_ENV;
+          if (!/^[A-Za-z0-9._-]+$/.test(profile || "")) throw new Error("protected environment must define a valid KCODER_E2E_MODEL_PROFILE");
+          if (!endpoint || !model || !["anthropic_messages", "openai_chat_completions", "openai_responses"].includes(apiFormat)) throw new Error("protected environment is missing endpoint/model/api format");
+          const settings = { active_provider: profile, providers: { [profile]: {
+            credential_env: [credentialEnv], api_format: apiFormat, endpoint,
+            default_model: model, discover_models: false, context_window_tokens: 131072,
+            output_headroom_tokens: 4096, max_output_tokens: 4096, request_timeout_secs: 120,
+            no_proxy: false, extra_body: {},
+          } } };
+          await writeFile(`${process.env.KCODER_CONFIG_DIR}/settings.json`, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+          EOF
+
+      - name: Build protected test executables without provider credentials
+        run: |
+          cargo build --locked -p kcoder_cli --bin kcoder -p kcoder_test_runner --bin kcoder_test_runner
+
+      - name: Install optional protocol and TUI verification dependencies
+        if: env.KCODER_E2E_MODEL_NAME == 'MiniMax-M3'
+        run: |
+          npm --prefix tools/tui-lab ci
+          npm --prefix tools/tui-lab exec -- playwright install --with-deps chromium
+
+      - name: Verify configuration through the real CLI
+        env:
+          KCODER_E2E_MODEL_CREDENTIAL_VALUE: ${{ secrets.KCODER_E2E_MODEL_CREDENTIAL_VALUE }}
+        run: |
+          python3 scripts/ci/protected_model_env.py target/debug/kcoder --cwd "$GITHUB_WORKSPACE" config get providers > /dev/null
+          python3 scripts/ci/protected_model_env.py target/debug/kcoder --cwd "$RUNNER_TEMP" --json auth status | node -e 'let text="";process.stdin.on("data",chunk=>text+=chunk);process.stdin.on("end",()=>{if(!JSON.parse(text).providers.some(row=>row.id===process.env.KCODER_E2E_MODEL_PROFILE&&row.configured))process.exit(1)})'
+
+      - name: Run real-model matrix
+        env:
+          KCODER_E2E_MODEL_CREDENTIAL_VALUE: ${{ secrets.KCODER_E2E_MODEL_CREDENTIAL_VALUE }}
+        run: |
+          python3 scripts/ci/protected_model_env.py target/debug/kcoder_test_runner --tier real-model --consent real-model --keep-going
+
+      - name: MiniMax three-protocol and TUI acceptance
+        if: env.KCODER_E2E_MODEL_NAME == 'MiniMax-M3'
+        env:
+          KCODER_E2E_MODEL_CREDENTIAL_VALUE: ${{ secrets.KCODER_E2E_MODEL_CREDENTIAL_VALUE }}
+        run: |
+          python3 scripts/ci/protected_model_env.py node apps/kcoder-studio/e2e/run-all.mjs --real-model --suite real-model-protocol-matrix
+
+  # No live external-provider test entrypoint is registered in the default matrix.
+  # Retire this dispatch/job until a real suite and protected prerequisites exist.
+  # The runner still supports consent-gated external-provider suites in custom matrices.
+
+  windows-portable:
+    name: Windows portable Rust and contracts
+    if: github.event_name != 'workflow_dispatch' || inputs.tier == 'full'
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Windows storage handles, locks and identity
+        shell: pwsh
+        run: |
+          cargo build --locked -p kcoder_native_storage --lib
+          if ($LASTEXITCODE -ne 0) { throw 'Native storage addon build failed' }
+          cargo test --locked -p kcoder_config --lib storage:: -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Native storage contracts failed' }
+          cargo test --locked -p kcoder_native_storage --lib -- --test-threads=1
+          if ($LASTEXITCODE -ne 0) { throw 'Native storage lease contracts failed' }
+          node --test apps/kcoder-studio/src/storage-paths.test.mjs apps/kcoder-studio/src/storage-lease.test.mjs apps/kcoder-studio/src/storage-startup.test.mjs apps/kcoder-studio/src/windows-current-identity.test.mjs apps/kcoder-studio/desktop/windows-profile-startup.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Windows storage and actual Known Folder contracts failed' }
+          $owned = Join-Path $env:RUNNER_TEMP ('kcoder-storage-addon-' + [Guid]::NewGuid().ToString())
+          [void][IO.Directory]::CreateDirectory($owned)
+          try {
+            $addon = Join-Path $owned 'kcoder-native-storage.node'
+            Copy-Item -LiteralPath target/debug/kcoder_native_storage.dll -Destination $addon
+            node --expose-gc crates/kcoder_native_storage/tests/owned-node.mjs $addon
+            if ($LASTEXITCODE -ne 0) { throw 'Native Node storage lease acceptance failed' }
+          } finally { Remove-Item -LiteralPath $owned -Recurse -Force }
+
+      - name: Native Windows cross-volume storage recovery or explicit missing-volume skip
+        shell: pwsh
+        run: |
+          @'
+          import assert from 'node:assert/strict';
+          import { execFileSync, spawnSync } from 'node:child_process';
+          import { randomUUID } from 'node:crypto';
+          import { appendFileSync, writeFileSync } from 'node:fs';
+          import { join, win32 } from 'node:path';
+          import { ownedCreationScript, ownedCleanupScript } from './apps/kcoder-studio/e2e/harness/windows-package-probe.mjs';
+          const ps = script => execFileSync('powershell', ['-NoProfile', '-NonInteractive', '-EncodedCommand',
+            Buffer.from("$ErrorActionPreference='Stop';$ProgressPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);" + script, 'utf16le').toString('base64')],
+            { encoding: 'utf8', timeout: 30_000 });
+          const sourceDrive = win32.parse(process.env.RUNNER_TEMP).root.toUpperCase();
+          const drives = JSON.parse(ps("ConvertTo-Json -InputObject @(Get-CimInstance Win32_LogicalDisk | Where-Object {$_.DriveType -eq 3 -and $_.FileSystem -eq 'NTFS'} | Select-Object -ExpandProperty DeviceID) -Compress"));
+          const second = drives.find(drive => (drive + '\\').toUpperCase() !== sourceDrive);
+          const receipt = { status: 'skipped', reason: 'No second fixed NTFS volume; cross-volume acceptance is not verified', sourceDrive };
+          try {
+            if (second) {
+              receipt.status = 'failed'; delete receipt.reason;
+              const owner = randomUUID();
+              const root = JSON.parse(ps(ownedCreationScript(second + '\\', owner)));
+              receipt.targetRoot = root;
+              try {
+                const result = spawnSync('cargo', ['test', '--locked', '-p', 'kcoder_config', '--lib',
+                  'storage::component_publication::tests::windows_cross_volume_publication_recovers_original_operation_and_preserves_source',
+                  '--', '--exact', '--ignored', '--nocapture', '--test-threads=1'], {
+                  encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: 128 * 1024,
+                  timeout: 180_000, env: { ...process.env, TEMP: process.env.RUNNER_TEMP, TMP: process.env.RUNNER_TEMP,
+                    KCODER_E2E_STORAGE_CROSS_VOLUME: '1', KCODER_E2E_STORAGE_CROSS_VOLUME_ROOT: root },
+                });
+                console.log(result.stdout ?? '');
+                if (result.error) throw result.error;
+                assert.equal(result.status, 0, 'Actual cross-volume storage recovery failed');
+                assert.match(result.stdout, /test result: ok\. 1 passed; 0 failed; 0 ignored;/);
+              } finally {
+                receipt.cleanup = JSON.parse(ps(ownedCleanupScript(root, owner)));
+                assert.equal(receipt.cleanup.cleaned, true);
+              }
+              receipt.status = 'passed';
+            }
+          } finally {
+            writeFileSync(join(process.env.RUNNER_TEMP, 'kcoder-storage-cross-volume.json'), JSON.stringify(receipt, null, 2));
+            const summary = `Windows cross-volume storage: ${receipt.status}${receipt.reason ? ' — ' + receipt.reason : ''}`;
+            console.log(summary);
+            appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
+          }
+          '@ | node --input-type=module
+          if ($LASTEXITCODE -ne 0) { throw 'Cross-volume storage acceptance failed' }
+
+      - name: Upload Windows storage volume disposition
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-storage-cross-volume
+          path: ${{ runner.temp }}/kcoder-storage-cross-volume.json
+          if-no-files-found: error
+          retention-days: 5
+
+      - name: Build and configure Windows process supervisor
+        shell: pwsh
+        run: |
+          cargo build --locked -p kcoder_process_supervisor --bin kcoder-process-supervisor
+          if ($LASTEXITCODE -ne 0) { throw "failed to build Windows process supervisor" }
+          $supervisor = (Resolve-Path "target/debug/kcoder-process-supervisor.exe").Path
+          "KCODER_PROCESS_SUPERVISOR_BIN=$supervisor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "KCODER_E2E_PROCESS_SUPERVISOR_BIN=$supervisor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Native Windows process supervisor acceptance
+        run: cargo test --locked -p kcoder_process_supervisor --all-targets -- --test-threads=1
+
+      - name: Native Windows private stdio MCP Jobs, isolation and cleanup receipts
+        run: cargo test --locked -p kcoder_mcp owned_windows_stdio_sessions_are_isolated_and_exit_receipts_include_descendants -- --nocapture --test-threads=1
+
+      - name: Native Windows Specs process adapter acceptance
+        run: cargo test --locked -p kcoder_specs windows_adapter -- --test-threads=1
+
+      - name: Native Windows Specs bounded command owner
+        run: |
+          cargo test --locked -p kcoder_specs process::tests:: -- --test-threads=1
+
+      - name: Portable Rust harness and runner
+        run: cargo test --locked -p kcoder_test_harness -p kcoder_test_runner
+
+      - name: Actual CLI and Gateway dependencies for Windows harness fixtures
+        shell: pwsh
+        run: |
+          cargo build --locked -p kcoder_cli --bin kcoder
+          if ($LASTEXITCODE -ne 0) { throw "failed to build fixture CLI" }
+          corepack enable
+          if ($LASTEXITCODE -ne 0) { throw "Corepack setup failed" }
+          corepack prepare pnpm@11.24.0 --activate
+          if ($LASTEXITCODE -ne 0) { throw "pnpm setup failed" }
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw "Gateway dependency installation failed" }
+
+      - name: Windows Studio harness and nested-process cleanup
+        run: npm --prefix apps/kcoder-studio run test:e2e:harness
+
+      - name: Install the pinned native Electron widget runtime
+        shell: pwsh
+        run: |
+          node apps/kcoder-studio/node_modules/electron/install.js
+          if ($LASTEXITCODE -ne 0) { throw "Pinned Electron installation failed" }
+          $widgetElectronVersion = (Get-Content apps/kcoder-studio/node_modules/electron/dist/version -Raw).Trim()
+          if ($widgetElectronVersion -ne '42.3.3') { throw "Unverified Electron widget runtime: $widgetElectronVersion" }
+
+      - name: Native widget production IPC and owner isolation
+        shell: pwsh
+        env:
+          KCODER_E2E_REQUIRE_CHROMIUM_SANDBOX: '1'
+        run: |
+          if ($env:KCODER_E2E_CHROMIUM_NO_SANDBOX -eq '1') { throw 'Native widget CI must keep the OS sandbox enabled' }
+          node apps/kcoder-studio/e2e/run-all.mjs --model-independent --suite electron-widget-controller
+          if ($LASTEXITCODE -ne 0) { throw 'Native widget IPC/ownership acceptance failed' }
+
+      - name: Upload bounded native widget receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-widget-isolation-records
+          path: |
+            target/e2e/*/*/*/suites/browser/electron-widget-controller.e2e.mjs/**/manifest.json
+            target/e2e/*/*/*/suites/browser/electron-widget-controller.e2e.mjs/**/artifacts/*.json
+          if-no-files-found: ignore
+          retention-days: 5
+
+      - name: Native CLI compile contract
+        run: cargo check --locked -p kcoder_cli -p kcoder_cli_runtime -p kcoder_session_configuration -p kcoder_browser -p kcoder_attachment_retention -p kcoder_migration_rpc -p kcoder_workspace_resources -p kcoder_native_journal -p kcoder_knowledge_rpc -p kcoder_cli_headless -p kcoder_cli_support -p kcoder_connectivity_storage -p kcoder_transcript -p kcoder_attachments --all-targets
+
+      - name: Native CLI attachment reparse-point rejection
+        run: cargo test --locked -p kcoder_attachments --lib tests::windows_reparse_replacement_fails_materialization_without_reading_outside -- --exact
+
+      - name: Native CLI attachment owner lock contract
+        run: cargo test --locked -p kcoder_attachments --lib tests::attachment_owner_os_lock_survives_peer_scavenging_and_releases_after_crash -- --exact
+
+      - name: Native CLI private artifact capability and ACL contract
+        run: cargo test --locked -p kcoder_cli_runtime --lib app_server::private_files::tests -- --test-threads=1
+
+      - name: Native Windows plugin store transaction and DACL contract
+        run: cargo test --locked -p kcoder_plugins store::tests::local_install_update_and_uninstall_preserve_data_by_default -- --exact --test-threads=1
+
+      - name: Native Windows plugin reparse-point and hard-link rejection
+        run: cargo test --locked -p kcoder_plugins store::copy::windows_tests::secure_copy_rejects_windows_reparse_points_and_hard_links -- --exact --test-threads=1
+
+      - name: Native Windows skill store lock replace and recovery
+        run: cargo test --locked -p kcoder_skills -- --test-threads=1
+
+  specs-process-darwin:
+    name: Specs process ownership (${{ matrix.architecture }})
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            architecture: x86_64
+          - runner: macos-15
+            architecture: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+
+      - name: Test native process ownership
+        run: |
+          cargo test --locked -p kcoder_specs process::tests:: -- --test-threads=1
+          cargo test --locked -p kcoder_skills -- --test-threads=1
+
+  specs-process-bsd:
+    name: Specs process ownership (${{ matrix.system }})
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: FreeBSD
+            operating_system: freebsd
+            version: "15.1"
+            host_triple: x86_64-unknown-freebsd
+            toolchain_source: rust-dist
+            toolchain_sha256: 226f146a6c23aeb359ae299386d7dae2e8578f9116948610015fdcbb822d1a39
+          # DragonFly BSD 6.4.2 DPorts does not provide a verifiable native Rust 1.95
+          # toolchain. Retain x86_64-unknown-dragonfly cfg for environments that have
+          # one, but mark it unsupported and exclude it from completion gates until a verifiable native source exists.
+          - system: OpenBSD
+            operating_system: openbsd
+            version: "7.9"
+            host_triple: x86_64-unknown-openbsd
+            toolchain_source: openbsd-snapshot
+          - system: NetBSD
+            operating_system: netbsd
+            version: "10.1"
+            host_triple: x86_64-unknown-netbsd
+            toolchain_source: rust-dist
+            toolchain_sha256: a23080886b46318ea910da8fda91cd9a17c33c2c7e9709b5fbee2454a2a82750
+    defaults:
+      run:
+        shell: cpa.sh {0}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Start native BSD VM
+        uses: cross-platform-actions/action@5ea7e8e4677bd726033a10b094ba1c5762b15dee # v1.3.0
+        with:
+          operating_system: ${{ matrix.operating_system }}
+          version: ${{ matrix.version }}
+          architecture: x86-64
+          shell: bash
+          memory: 6G
+          cpu_count: 2
+
+      - name: Stage signed OpenBSD snapshot upgrade
+        if: matrix.toolchain_source == 'openbsd-snapshot'
+        run: sudo sysupgrade -s -n
+
+      - name: Reboot into the OpenBSD snapshot
+        if: matrix.toolchain_source == 'openbsd-snapshot'
+        shell: bash
+        run: cpa.sh --reboot
+
+      - name: Install and verify native Rust 1.95+
+        run: |
+          case "${{ matrix.toolchain_source }}" in
+            rust-dist)
+              archive="rust-1.95.0-${{ matrix.host_triple }}.tar.xz"
+              curl --fail --location --retry 3 \
+                --output "$archive" \
+                "https://static.rust-lang.org/dist/$archive"
+              test "$(sha256 -q "$archive")" = "${{ matrix.toolchain_sha256 }}"
+              tar -xJf "$archive"
+              "${archive%.tar.xz}/install.sh" \
+                --prefix="$HOME/.kcoder-rust-1.95" \
+                --without=rust-docs
+              export PATH="$HOME/.kcoder-rust-1.95/bin:$PATH"
+              ;;
+            openbsd-snapshot)
+              # OpenBSD 7.9 release ships Rust 1.94.1 and Rust does not publish
+              # Tier-3 host archives, so explicitly select the signed snapshot package.
+              sudo pkg_add -Dsnap -I -u rust || sudo pkg_add -Dsnap -I rust
+              ;;
+            *) echo "unsupported Rust toolchain source" >&2; exit 1 ;;
+          esac
+          rust_version="$(rustc --version | awk '{print $2}')"
+          rust_host="$(rustc -vV | sed -n 's/^host: //p')"
+          awk -F. -v version="$rust_version" 'BEGIN {
+            split(version, parts, ".");
+            if (parts[1] < 1 || (parts[1] == 1 && parts[2] < 95)) exit 1;
+          }'
+          test "$rust_host" = "${{ matrix.host_triple }}"
+          cargo --version
+          rustc -vV
+
+      - name: Test native process and skill store ownership
+        run: |
+          if [ "${{ matrix.toolchain_source }}" = rust-dist ]; then
+            export PATH="$HOME/.kcoder-rust-1.95/bin:$PATH"
+          fi
+          cargo test --locked -p kcoder_specs process::tests:: -- --test-threads=1
+          cargo test --locked -p kcoder_skills -- --test-threads=1

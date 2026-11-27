@@ -1,0 +1,171 @@
+{
+  "CronParams": {
+    "valid": [
+      {
+        "name": "legacy",
+        "value": {}
+      },
+      {
+        "name": "original_receipt",
+        "value": {
+          "clientRequestId": "original"
+        }
+      },
+      {
+        "name": "read_creation_context",
+        "value": {
+          "creationContext": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "nonstring_identity",
+        "value": {
+          "clientRequestId": 1
+        }
+      },
+      {
+        "name": "unknown_input",
+        "value": {
+          "newRequest": true
+        }
+      },
+      {
+        "name": "bad_creation_context",
+        "value": {
+          "creationContext": "true"
+        }
+      }
+    ]
+  },
+  "CronCreateParams": {
+    "valid": [
+      {
+        "name": "legacy_without_receipt",
+        "value": {
+          "prompt": "review",
+          "schedule": {
+            "kind": "every",
+            "every_seconds": 3600
+          }
+        }
+      },
+      {
+        "name": "stable_creation",
+        "value": {
+          "prompt": "review",
+          "schedule": {
+            "kind": "every",
+            "every_seconds": 3600
+          },
+          "confirmed": true,
+          "clientRequestId": "original"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_schedule",
+        "value": {
+          "prompt": "review"
+        }
+      },
+      {
+        "name": "nonstring_identity",
+        "value": {
+          "prompt": "review",
+          "schedule": {
+            "kind": "every",
+            "every_seconds": 3600
+          },
+          "clientRequestId": 1
+        }
+      }
+    ]
+  },
+  "CronCreationReadResult": {
+    "valid": [
+      {
+        "name": "missing_receipt",
+        "value": {
+          "clientRequestId": "original",
+          "creationReceipt": null
+        }
+      },
+      {
+        "name": "original_job",
+        "value": {
+          "clientRequestId": "original",
+          "creationReceipt": {
+            "id": "original-job"
+          }
+        }
+      },
+      {
+        "name": "retired_original",
+        "value": {
+          "clientRequestId": "cron-v1-0-original",
+          "creationReceipt": null,
+          "retired": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong_job_id_type",
+        "value": {
+          "clientRequestId": "original",
+          "creationReceipt": {
+            "id": 1
+          }
+        }
+      },
+      {
+        "name": "missing_identity",
+        "value": {
+          "creationReceipt": {
+            "id": "job"
+          }
+        }
+      }
+    ]
+  },
+  "CronCreationContext": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "epoch": 1
+        }
+      },
+      {
+        "name": "unsupported_target",
+        "value": {
+          "epoch": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "negative",
+        "value": {
+          "epoch": -1
+        }
+      },
+      {
+        "name": "wrong_type",
+        "value": {
+          "epoch": "1"
+        }
+      },
+      {
+        "name": "extra_field",
+        "value": {
+          "epoch": 1,
+          "other": true
+        }
+      }
+    ]
+  }
+}

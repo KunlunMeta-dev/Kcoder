@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "gatewayFiles": [
+    "servers.json",
+    "settings.json",
+    "ssh_connections.jsonc",
+    "ssh_credentials.key",
+    "account_credentials.json",
+    ".account-credential-key",
+    "public-access.json",
+    "resource_policy.jsonc",
+    "desktop-relay.json",
+    "studio-login-url.txt",
+    ".product-account-cookie-scope.json"
+  ],
+  "gatewayDirectories": [
+    "mobile-device-auth",
+    "peer-ssh-enrollment-v1",
+    "channels",
+    "desktop-relay",
+    "relay",
+    "relay-profiles",
+    "renderer-vite-cache",
+    "renderer-vite-relay-cache",
+    "skill-runtime"
+  ],
+  "desktopFiles": [
+    "gateway-port",
+    "Local State",
+    "Cookies",
+    "Cookies-journal",
+    "DevToolsActivePort",
+    "Network Persistent State",
+    "Preferences",
+    "SharedStorage",
+    "Trust Tokens",
+    "Trust Tokens-journal"
+  ],
+  "desktopDirectories": [
+    "Crashpad",
+    "Dictionaries",
+    "Cache",
+    "Code Cache",
+    "Local Storage",
+    "Network",
+    "Shared Dictionary",
+    "blob_storage",
+    "shell-icons"
+  ],
+  "controls": [
+    "kcoder-storage.lock",
+    "kcoder-storage-writers.lock",
+    "kcoder-storage-instances.lock"
+  ],
+  "desktopControls": [
+    "SingletonLock",
+    "SingletonSocket",
+    "SingletonCookie"
+  ],
+  "partition": "Partitions/kcoder-studio-desktop",
+  "gatewayBackupPattern": "^settings\\.json\\.v[12]-[a-f0-9]{64}\\.bak$"
+}

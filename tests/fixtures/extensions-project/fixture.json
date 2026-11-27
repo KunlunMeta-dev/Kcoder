@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "name": "extensions-project",
+  "version": "1",
+  "description": "插件、技能与 workflow 公共边界测试工作区"
+}

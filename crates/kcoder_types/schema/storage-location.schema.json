@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StorageLocationRecord",
+  "type": "object",
+  "required": [
+    "cacheRoot",
+    "dataRoot",
+    "revision",
+    "version"
+  ],
+  "properties": {
+    "cacheRoot": {
+      "type": "string"
+    },
+    "dataRoot": {
+      "type": "string"
+    },
+    "operationId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "format": "uint64",
+      "maximum": 9007199254740991.0,
+      "minimum": 1.0
+    },
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "maximum": 1.0,
+      "minimum": 1.0
+    }
+  },
+  "additionalProperties": false
+}

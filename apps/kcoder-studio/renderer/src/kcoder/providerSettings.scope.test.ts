@@ -1,0 +1,58 @@
+import { beforeEach, expect, test, vi } from 'vitest'
+import { requestLocalExecutor } from '@/host/localExecutor'
+import { readProviderSettings, saveProviderSettings } from './providerSettings'
+vi.mock('@/host/localExecutor', () => ({ requestLocalExecutor: vi.fn() }))
+beforeEach(() => vi.clearAllMocks())
+
+test('selected conversation context reaches the Runtime once for capability negotiation', async () => {
+  vi.mocked(requestLocalExecutor).mockResolvedValue({ profiles: [], restartRequired: false })
+  await readProviderSettings('remote', 'selected-task')
+  expect(requestLocalExecutor).toHaveBeenCalledTimes(1)
+  expect(requestLocalExecutor).toHaveBeenCalledWith('runtime.providers.request', {
+    serverId: 'remote',
+    preferredTaskId: 'selected-task',
+    method: 'runtime.providers.list',
+    params: {},
+  })
+})
+
+test('capable target metadata does not trigger a second cross-Runtime query', async () => {
+  vi.mocked(requestLocalExecutor).mockResolvedValue({
+    profiles: [],
+    restartRequired: false,
+    supportsRuntimeScope: true,
+  })
+  await readProviderSettings('remote', 'selected-task')
+  expect(requestLocalExecutor).toHaveBeenCalledTimes(1)
+  expect(requestLocalExecutor).toHaveBeenLastCalledWith('runtime.providers.request', {
+    serverId: 'remote',
+    preferredTaskId: 'selected-task',
+    method: 'runtime.providers.list',
+    params: {},
+  })
+})
+
+test('conversation routing stays in the Gateway envelope rather than provider persisted fields', async () => {
+  vi.mocked(requestLocalExecutor).mockResolvedValue({ profiles: [], restartRequired: false })
+  await saveProviderSettings('remote', {
+    id: 'provider',
+    model: 'model',
+    apiFormat: 'openai_chat_completions',
+    endpoint: 'http://127.0.0.1:1',
+    contextWindowTokens: 100000,
+    maxOutputTokens: 65536,
+    apiKey: '',
+    makeDefault: false,
+    runtimeTaskId: 'selected-task',
+    validateConnection: false,
+  })
+  const input = vi.mocked(requestLocalExecutor).mock.calls[0][1] as {
+    taskId: string
+    params: Record<string, unknown>
+  }
+  expect(input.taskId).toBe('selected-task')
+  expect(input.params).not.toHaveProperty('runtimeTaskId')
+  expect(input.params).not.toHaveProperty('taskId')
+  expect(input.params).not.toHaveProperty('apiKey')
+  expect(input.params.validateConnection).toBe(false)
+})

@@ -1,0 +1,513 @@
+{
+  "WebSearchProbeReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "requestId"
+    ],
+    "title": "WebSearchProbeReadParams",
+    "type": "object"
+  },
+  "WebSearchProbeResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WebSearchAttemptV1": {
+        "properties": {
+          "elapsedMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchErrorKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "provider": {
+            "$ref": "#/definitions/WebSearchProvider"
+          },
+          "requestSent": {
+            "description": "A sent request may have consumed an upstream quota even when its reply was lost.",
+            "type": "boolean"
+          },
+          "status": {
+            "$ref": "#/definitions/WebSearchStatus"
+          }
+        },
+        "required": [
+          "elapsedMs",
+          "provider",
+          "requestSent",
+          "status"
+        ],
+        "type": "object"
+      },
+      "WebSearchEngineFailureV1": {
+        "description": "Bounded upstream diagnostics; messages must never contain request bodies or credentials.",
+        "properties": {
+          "engine": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "engine",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "WebSearchErrorKind": {
+        "enum": [
+          "invalid_input",
+          "policy_denied",
+          "authentication",
+          "rate_limited",
+          "quota_exhausted",
+          "network",
+          "tls",
+          "timeout",
+          "challenge",
+          "contract_invalid",
+          "component_unavailable",
+          "unsupported",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "WebSearchHitV1": {
+        "properties": {
+          "author": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "publishedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "snippet": {
+            "type": "string"
+          },
+          "sourceId": {
+            "default": "",
+            "description": "Assigned by the native router, never accepted as authority from a page.",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "snippet",
+          "title",
+          "url"
+        ],
+        "type": "object"
+      },
+      "WebSearchPageV1": {
+        "properties": {
+          "constraintNotes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "engineFailures": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/WebSearchEngineFailureV1"
+            },
+            "type": "array"
+          },
+          "incomplete": {
+            "default": false,
+            "type": "boolean"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/definitions/WebSearchHitV1"
+            },
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "results"
+        ],
+        "type": "object"
+      },
+      "WebSearchProbeState": {
+        "enum": [
+          "running",
+          "completed",
+          "cancelled",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "WebSearchProvider": {
+        "enum": [
+          "exa-public",
+          "searxng-bundled",
+          "bing-html"
+        ],
+        "type": "string"
+      },
+      "WebSearchResponseV1": {
+        "properties": {
+          "attempts": {
+            "items": {
+              "$ref": "#/definitions/WebSearchAttemptV1"
+            },
+            "type": "array"
+          },
+          "cacheAgeMs": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cacheHit": {
+            "default": false,
+            "type": "boolean"
+          },
+          "elapsedMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failure": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchErrorKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "page": {
+            "$ref": "#/definitions/WebSearchPageV1"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchProvider"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "retrievedAt": {
+            "type": "string"
+          },
+          "schemaVersion": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/definitions/WebSearchStatus"
+          }
+        },
+        "required": [
+          "attempts",
+          "elapsedMs",
+          "page",
+          "requestId",
+          "retrievedAt",
+          "schemaVersion",
+          "status"
+        ],
+        "type": "object"
+      },
+      "WebSearchStatus": {
+        "enum": [
+          "success",
+          "empty",
+          "partial",
+          "failed",
+          "cancelled"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "requestId": {
+        "type": "string"
+      },
+      "response": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WebSearchResponseV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "revision": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "#/definitions/WebSearchProbeState"
+      },
+      "targetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "requestId",
+      "revision",
+      "state",
+      "targetId"
+    ],
+    "title": "WebSearchProbeResult",
+    "type": "object"
+  },
+  "WebSearchProbeStartParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "StudioWorkMode": {
+        "enum": [
+          "kcoder",
+          "kworker"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "mode": {
+        "$ref": "#/definitions/StudioWorkMode"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "mode",
+      "requestId"
+    ],
+    "title": "WebSearchProbeStartParams",
+    "type": "object"
+  },
+  "WebSearchStatusReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "StudioWorkMode": {
+        "enum": [
+          "kcoder",
+          "kworker"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "mode": {
+        "$ref": "#/definitions/StudioWorkMode"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "mode"
+    ],
+    "title": "WebSearchStatusReadParams",
+    "type": "object"
+  },
+  "WebSearchStatusReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "StudioWorkMode": {
+        "enum": [
+          "kcoder",
+          "kworker"
+        ],
+        "type": "string"
+      },
+      "WebSearchComponentState": {
+        "enum": [
+          "unknown",
+          "available",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "WebSearchErrorKind": {
+        "enum": [
+          "invalid_input",
+          "policy_denied",
+          "authentication",
+          "rate_limited",
+          "quota_exhausted",
+          "network",
+          "tls",
+          "timeout",
+          "challenge",
+          "contract_invalid",
+          "component_unavailable",
+          "unsupported",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "WebSearchProvider": {
+        "enum": [
+          "exa-public",
+          "searxng-bundled",
+          "bing-html"
+        ],
+        "type": "string"
+      },
+      "WebSearchSourceObservation": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "$ref": "#/definitions/WebSearchComponentState"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchErrorKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "observedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "$ref": "#/definitions/WebSearchProvider"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WebSearchStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "component",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "WebSearchStatus": {
+        "enum": [
+          "success",
+          "empty",
+          "partial",
+          "failed",
+          "cancelled"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "automatic": {
+        "type": "boolean"
+      },
+      "candidates": {
+        "items": {
+          "$ref": "#/definitions/WebSearchProvider"
+        },
+        "type": "array"
+      },
+      "mode": {
+        "$ref": "#/definitions/StudioWorkMode"
+      },
+      "observations": {
+        "items": {
+          "$ref": "#/definitions/WebSearchSourceObservation"
+        },
+        "type": "array"
+      },
+      "revision": {
+        "type": "string"
+      },
+      "targetId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "webFetchVisible": {
+        "type": "boolean"
+      },
+      "webSearchVisible": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "automatic",
+      "candidates",
+      "mode",
+      "observations",
+      "revision",
+      "targetId",
+      "webFetchVisible",
+      "webSearchVisible"
+    ],
+    "title": "WebSearchStatusReadResult",
+    "type": "object"
+  }
+}

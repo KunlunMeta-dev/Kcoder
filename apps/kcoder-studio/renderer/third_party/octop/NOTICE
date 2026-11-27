@@ -1,0 +1,12 @@
+Expert and channel presentation adapted from TencentCloud/Octop.
+Source: https://github.com/TencentCloud/Octop
+Revision: dd9dce470844c25d59effb50615bb3c667ea25cd
+Copyright (c) 2026 Octop. MIT License (see LICENSE).
+
+Adapted files: src/features/octop/experts.module.css, channels.module.css,
+surface.css, OctopSurface.tsx, EmptyGuide/empty styling, channel icons,
+default and builtin avatars, market portraits/presentation metadata, workflowMarkdown.ts,
+marketWorkflow.ts, ExpertConversationShell.tsx, expert-conversations.css and expert/channel presentation. Workflow parsing and quick-card
+generation follow the source frontend markdown helpers and backend skillhub_market.py.
+KCoder keeps its Native storage, permissions, private credential transport,
+request ownership and unknown-outcome recovery.

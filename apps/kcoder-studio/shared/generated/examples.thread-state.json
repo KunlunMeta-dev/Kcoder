@@ -1,0 +1,587 @@
+{
+  "ThreadAttachParams": [
+    {
+      "decoded": {
+        "clientId": "00000000-0000-4000-8000-000000000001",
+        "generation": "00000000-0000-4000-8000-000000000002",
+        "threadId": "task"
+      },
+      "name": "real-client-slot",
+      "value": {
+        "clientId": "00000000-0000-4000-8000-000000000001",
+        "generation": "00000000-0000-4000-8000-000000000002",
+        "threadId": "task"
+      }
+    }
+  ],
+  "ThreadContextUsage": [
+    {
+      "decoded": {
+        "last": {
+          "cachedInputTokens": 39168,
+          "inputTokens": 609,
+          "outputTokens": 559,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 40336
+        },
+        "total": {
+          "cachedInputTokens": 39168,
+          "inputTokens": 609,
+          "outputTokens": 559,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 40336
+        }
+      },
+      "name": "restored_without_window",
+      "value": {
+        "last": {
+          "cachedInputTokens": 39168,
+          "inputTokens": 609,
+          "outputTokens": 559,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 40336
+        },
+        "total": {
+          "cachedInputTokens": 39168,
+          "inputTokens": 609,
+          "outputTokens": 559,
+          "reasoningOutputTokens": 0,
+          "totalTokens": 40336
+        }
+      }
+    }
+  ],
+  "ThreadEvictedParams": [
+    {
+      "decoded": {
+        "reason": "capacity",
+        "threadId": "thread-1"
+      },
+      "name": "capacity",
+      "value": {
+        "reason": "capacity",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadGoalStatusBatchParams": [
+    {
+      "decoded": {
+        "threadIds": [
+          "thread-1",
+          "thread-2"
+        ]
+      },
+      "name": "thread-ids",
+      "value": {
+        "threadIds": [
+          "thread-1",
+          "thread-2"
+        ]
+      }
+    }
+  ],
+  "ThreadGoalStatusBatchResult": [
+    {
+      "decoded": {
+        "observations": [
+          {
+            "availability": "available",
+            "status": "active",
+            "threadId": "thread-1"
+          },
+          {
+            "availability": "available",
+            "status": null,
+            "threadId": "thread-2"
+          },
+          {
+            "availability": "unavailable",
+            "threadId": "thread-3"
+          }
+        ]
+      },
+      "name": "available-and-unavailable",
+      "value": {
+        "observations": [
+          {
+            "availability": "available",
+            "status": "active",
+            "threadId": "thread-1"
+          },
+          {
+            "availability": "available",
+            "status": null,
+            "threadId": "thread-2"
+          },
+          {
+            "availability": "unavailable",
+            "threadId": "thread-3"
+          }
+        ]
+      }
+    }
+  ],
+  "ThreadLifetimeReadParams": [
+    {
+      "decoded": {
+        "threadId": "task"
+      },
+      "name": "original-task",
+      "value": {
+        "threadId": "task"
+      }
+    }
+  ],
+  "ThreadLifetimeResult": [
+    {
+      "decoded": {
+        "attachedClients": 0,
+        "backgroundAuthorized": false,
+        "pausedReason": "background_authorization_required",
+        "reconnectGraceMs": 3000,
+        "setting": {
+          "mode": "background",
+          "revision": 1
+        },
+        "threadId": "task"
+      },
+      "name": "ungranted-background",
+      "value": {
+        "attachedClients": 0,
+        "backgroundAuthorized": false,
+        "pausedReason": "background_authorization_required",
+        "reconnectGraceMs": 3000,
+        "setting": {
+          "mode": "background",
+          "revision": 1
+        },
+        "threadId": "task"
+      }
+    }
+  ],
+  "ThreadLifetimeSetParams": [
+    {
+      "decoded": {
+        "expectedRevision": 2,
+        "mode": "background",
+        "threadId": "task"
+      },
+      "name": "revisioned-background",
+      "value": {
+        "expectedRevision": 2,
+        "mode": "background",
+        "threadId": "task"
+      }
+    }
+  ],
+  "ThreadMaintenanceBusyErrorDataV1": [
+    {
+      "decoded": {
+        "operation": "compact",
+        "threadId": "thread-1"
+      },
+      "name": "compact",
+      "value": {
+        "operation": "compact",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadMaintenanceCancelParams": [
+    {
+      "decoded": {
+        "maintenanceId": "00000000-0000-4000-8000-000000000001",
+        "threadId": "thread-1"
+      },
+      "name": "exact-compaction",
+      "value": {
+        "maintenanceId": "00000000-0000-4000-8000-000000000001",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadMaintenanceCancelResult": [
+    {
+      "decoded": {
+        "cancellationRequested": true
+      },
+      "name": "requested",
+      "value": {
+        "cancellationRequested": true
+      }
+    },
+    {
+      "decoded": {
+        "cancellationRequested": false
+      },
+      "name": "no-matching-job",
+      "value": {
+        "cancellationRequested": false
+      }
+    }
+  ],
+  "ThreadMaintenanceParams": [
+    {
+      "decoded": {
+        "operation": "compact",
+        "status": "started",
+        "threadId": "thread-1"
+      },
+      "name": "compact-started",
+      "value": {
+        "operation": "compact",
+        "status": "started",
+        "threadId": "thread-1"
+      }
+    },
+    {
+      "decoded": {
+        "maintenanceId": "00000000-0000-4000-8000-000000000001",
+        "operation": "compact",
+        "status": "started",
+        "threadId": "thread-1"
+      },
+      "name": "addressable-compact",
+      "value": {
+        "maintenanceId": "00000000-0000-4000-8000-000000000001",
+        "operation": "compact",
+        "status": "started",
+        "threadId": "thread-1"
+      }
+    },
+    {
+      "decoded": {
+        "operation": "rollback",
+        "status": "failed",
+        "threadId": "thread-1"
+      },
+      "name": "rollback-failed",
+      "value": {
+        "operation": "rollback",
+        "status": "failed",
+        "threadId": "thread-1"
+      }
+    },
+    {
+      "decoded": {
+        "operation": "compact",
+        "status": "cancelled",
+        "threadId": "thread-1"
+      },
+      "name": "compact-cancelled",
+      "value": {
+        "operation": "compact",
+        "status": "cancelled",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadModelSelectionParams": [
+    {
+      "decoded": {
+        "model": "provider::model",
+        "threadId": "thread-1"
+      },
+      "name": "qualified-selection",
+      "value": {
+        "model": "provider::model",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadModelSelectionResult": [
+    {
+      "decoded": {
+        "accepted": true,
+        "appliesAt": "next_tool_result_or_response_boundary",
+        "model": "provider::model"
+      },
+      "name": "queued-at-safe-boundary",
+      "value": {
+        "accepted": true,
+        "appliesAt": "next_tool_result_or_response_boundary",
+        "model": "provider::model"
+      }
+    },
+    {
+      "decoded": {
+        "accepted": false,
+        "appliesAt": "next_turn",
+        "model": "provider::model"
+      },
+      "name": "next-turn-fallback",
+      "value": {
+        "accepted": false,
+        "appliesAt": "next_turn",
+        "model": "provider::model"
+      }
+    }
+  ],
+  "ThreadNotResidentErrorDataV1": [
+    {
+      "decoded": {
+        "reason": "capacity",
+        "threadId": "thread-1"
+      },
+      "name": "evicted",
+      "value": {
+        "reason": "capacity",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadPresenceReadParams": [
+    {
+      "decoded": {
+        "threadId": "thread-1"
+      },
+      "name": "thread-id-only",
+      "value": {
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadPresenceReadResultV1": [
+    {
+      "decoded": {
+        "reason": "residentRuntime",
+        "status": "present",
+        "threadId": "thread-1"
+      },
+      "name": "resident-present",
+      "value": {
+        "reason": "residentRuntime",
+        "status": "present",
+        "threadId": "thread-1"
+      }
+    },
+    {
+      "decoded": {
+        "reason": "boundDeletedPrimarySource",
+        "status": "absent",
+        "threadId": "thread-1"
+      },
+      "name": "bound-deleted-absent",
+      "value": {
+        "reason": "boundDeletedPrimarySource",
+        "status": "absent",
+        "threadId": "thread-1"
+      }
+    },
+    {
+      "decoded": {
+        "reason": "coldSourceNotAuthorized",
+        "status": "unknown",
+        "threadId": "thread-1"
+      },
+      "name": "cold-source-unknown",
+      "value": {
+        "reason": "coldSourceNotAuthorized",
+        "status": "unknown",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "ThreadRuntimeHandoffReadParams": [
+    {
+      "decoded": {
+        "operationId": "release-operation",
+        "threadId": "thread"
+      },
+      "name": "original_runtime_owner",
+      "value": {
+        "operationId": "release-operation",
+        "threadId": "thread"
+      }
+    }
+  ],
+  "ThreadRuntimeHandoffReadResult": [
+    {
+      "decoded": {
+        "operation": {
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "serverId": "server",
+          "status": "released",
+          "threadId": "thread"
+        },
+        "snapshot": {
+          "clientTurnCount": 2,
+          "ownerRef": "runtime-owner",
+          "releasable": true,
+          "serverId": "server",
+          "threadId": "thread"
+        }
+      },
+      "name": "original_runtime_owner",
+      "value": {
+        "operation": {
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "serverId": "server",
+          "status": "released",
+          "threadId": "thread"
+        },
+        "snapshot": {
+          "clientTurnCount": 2,
+          "ownerRef": "runtime-owner",
+          "releasable": true,
+          "serverId": "server",
+          "threadId": "thread"
+        }
+      }
+    }
+  ],
+  "ThreadRuntimeHandoffReceipt": [
+    {
+      "decoded": {
+        "operationId": "release-operation",
+        "ownerRef": "runtime-owner",
+        "serverId": "server",
+        "status": "released",
+        "threadId": "thread"
+      },
+      "name": "original_runtime_owner",
+      "value": {
+        "operationId": "release-operation",
+        "ownerRef": "runtime-owner",
+        "serverId": "server",
+        "status": "released",
+        "threadId": "thread"
+      }
+    }
+  ],
+  "ThreadRuntimeHandoffReleaseParams": [
+    {
+      "decoded": {
+        "expectedClientTurnCount": 2,
+        "expectedOwnerRef": "runtime-owner",
+        "expectedServerId": "server",
+        "operationId": "release-operation",
+        "threadId": "thread"
+      },
+      "name": "original_runtime_owner",
+      "value": {
+        "expectedClientTurnCount": 2,
+        "expectedOwnerRef": "runtime-owner",
+        "expectedServerId": "server",
+        "operationId": "release-operation",
+        "threadId": "thread"
+      }
+    }
+  ],
+  "ThreadRuntimeHandoffReleaseResult": [
+    {
+      "decoded": {
+        "receipt": {
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "serverId": "server",
+          "status": "released",
+          "threadId": "thread"
+        },
+        "snapshot": {
+          "clientTurnCount": null,
+          "ownerRef": null,
+          "releasable": false,
+          "serverId": "server",
+          "threadId": "thread"
+        }
+      },
+      "name": "original_runtime_owner",
+      "value": {
+        "receipt": {
+          "operationId": "release-operation",
+          "ownerRef": "runtime-owner",
+          "serverId": "server",
+          "status": "released",
+          "threadId": "thread"
+        },
+        "snapshot": {
+          "clientTurnCount": null,
+          "ownerRef": null,
+          "releasable": false,
+          "serverId": "server",
+          "threadId": "thread"
+        }
+      }
+    }
+  ],
+  "ThreadRuntimeHandoffSnapshot": [
+    {
+      "decoded": {
+        "clientTurnCount": 2,
+        "ownerRef": "runtime-owner",
+        "releasable": true,
+        "serverId": "server",
+        "threadId": "thread"
+      },
+      "name": "original_runtime_owner",
+      "value": {
+        "clientTurnCount": 2,
+        "ownerRef": "runtime-owner",
+        "releasable": true,
+        "serverId": "server",
+        "threadId": "thread"
+      }
+    }
+  ],
+  "ThreadRuntimeHandoffStatus": [
+    {
+      "decoded": "released",
+      "name": "original_runtime_owner",
+      "value": "released"
+    }
+  ],
+  "ThreadTranscriptObservationV1": [
+    {
+      "decoded": {
+        "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "name": "request-local-observation",
+      "value": {
+        "observationId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    }
+  ],
+  "ThreadTranscriptSnapshotV1": [
+    {
+      "decoded": {
+        "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "available",
+        "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "name": "committed-projection",
+      "value": {
+        "snapshotId": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "available",
+        "viewKey": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    {
+      "decoded": {
+        "code": "legacyReader",
+        "status": "unavailable"
+      },
+      "name": "legacy-reader",
+      "value": {
+        "code": "legacyReader",
+        "status": "unavailable"
+      }
+    },
+    {
+      "decoded": {
+        "code": "unprovenSource",
+        "status": "unavailable"
+      },
+      "name": "unproven-source",
+      "value": {
+        "code": "unprovenSource",
+        "status": "unavailable"
+      }
+    }
+  ]
+}

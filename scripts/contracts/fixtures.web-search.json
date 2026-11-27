@@ -1,0 +1,161 @@
+{
+  "WebSearchStatusReadParams": {
+    "valid": [
+      {
+        "name": "minimal",
+        "value": {
+          "mode": "kcoder"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field",
+        "value": {
+          "mode": "kcoder",
+          "query": "private query forbidden"
+        }
+      },
+      {
+        "name": "missing-required",
+        "value": {}
+      }
+    ]
+  },
+  "WebSearchStatusReadResult": {
+    "valid": [
+      {
+        "name": "minimal",
+        "value": {
+          "targetId": "fixture-target",
+          "revision": "r1",
+          "mode": "kcoder",
+          "webSearchVisible": true,
+          "webFetchVisible": true,
+          "automatic": true,
+          "candidates": [
+            "exa-public",
+            "searxng-bundled",
+            "bing-html"
+          ],
+          "observations": [
+            {
+              "provider": "exa-public",
+              "component": "unknown"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field",
+        "value": {
+          "targetId": "fixture-target",
+          "revision": "r1",
+          "mode": "kcoder",
+          "webSearchVisible": true,
+          "webFetchVisible": true,
+          "automatic": true,
+          "candidates": [
+            "exa-public",
+            "searxng-bundled",
+            "bing-html"
+          ],
+          "observations": [
+            {
+              "provider": "exa-public",
+              "component": "unknown"
+            }
+          ],
+          "query": "private query forbidden"
+        }
+      },
+      {
+        "name": "missing-required",
+        "value": {}
+      }
+    ]
+  },
+  "WebSearchProbeStartParams": {
+    "valid": [
+      {
+        "name": "minimal",
+        "value": {
+          "mode": "kcoder",
+          "requestId": "probe-1",
+          "expectedRevision": "r1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field",
+        "value": {
+          "mode": "kcoder",
+          "requestId": "probe-1",
+          "expectedRevision": "r1",
+          "query": "private query forbidden"
+        }
+      },
+      {
+        "name": "missing-required",
+        "value": {}
+      }
+    ]
+  },
+  "WebSearchProbeReadParams": {
+    "valid": [
+      {
+        "name": "minimal",
+        "value": {
+          "requestId": "probe-1",
+          "expectedRevision": "r1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field",
+        "value": {
+          "requestId": "probe-1",
+          "expectedRevision": "r1",
+          "query": "private query forbidden"
+        }
+      },
+      {
+        "name": "missing-required",
+        "value": {}
+      }
+    ]
+  },
+  "WebSearchProbeResult": {
+    "valid": [
+      {
+        "name": "minimal",
+        "value": {
+          "targetId": "fixture-target",
+          "requestId": "probe-1",
+          "revision": "r1",
+          "state": "unknown"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field",
+        "value": {
+          "targetId": "fixture-target",
+          "requestId": "probe-1",
+          "revision": "r1",
+          "state": "unknown",
+          "query": "private query forbidden"
+        }
+      },
+      {
+        "name": "missing-required",
+        "value": {}
+      }
+    ]
+  }
+}

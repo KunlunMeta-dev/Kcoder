@@ -1,0 +1,20 @@
+.turn-process-summary,
+.process-activity-group {
+  container: turn-process / inline-size;
+}
+
+.process-summary-line {
+  height: var(--process-summary-line-height, 1.5rem);
+  min-height: var(--process-summary-line-height, 1.5rem);
+  line-height: var(--process-summary-line-height, 1.5rem);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+@container turn-process (max-width: 22rem) {
+  .turn-process-activity,
+  .process-summary-text {
+    display: none;
+  }
+}

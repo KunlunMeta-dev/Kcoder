@@ -1,0 +1,79 @@
+{
+  "skill_name": "pptx",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "用 pptxgenjs 帮我做一个 5 页的产品发布会 PPT：封面、问题、方案、路线图、致谢。给出完整脚本，配色用深蓝主题。",
+      "expected_output": "A CommonJS pptxgenjs script that sets the layout first, uses hex colors without #, builds the five slides and validates the file.",
+      "expectations": [
+        "Uses require('pptxgenjs') and creates one new pptxgen() instance for the output",
+        "Sets pres.layout before adding slides and keeps coordinates within the 10 x 5.625 inch canvas (or the chosen layout)",
+        "Writes hex colors without # and without 8-digit alpha",
+        "Uses bullet: true for lists instead of literal bullet characters",
+        "Runs scripts/office/validate.py on the deck after writeFile()"
+      ],
+      "assertions": [
+        {
+          "contains": "pptxgenjs"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Add a stacked column chart of quarterly revenue by region (3 regions, 4 quarters) to a pptxgenjs slide, with data labels shown. Show the addChart call.",
+      "expected_output": "An addChart call for a stacked bar chart with a data label position allowed for stacked charts.",
+      "expectations": [
+        "Uses addChart with a bar chart type and barGrouping set to stacked",
+        "Sets showValue: true with dataLabelPosition ctr, inEnd or inBase, not outEnd",
+        "Gives the chart a title and explicit chartColors"
+      ],
+      "assertions": [
+        {
+          "contains": "addChart"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我想在现有的公司模板 template.pptx 基础上做一份新 deck：复制第 3 页版式做两页新内容，删掉模板里的示例页。步骤是什么？",
+      "expected_output": "Unpack, duplicate slides with add_slide.py, edit slideN.xml, update sldIdLst, run clean.py, rezip and validate with --original.",
+      "expectations": [
+        "Uses scripts/add_slide.py to duplicate the slide with its package bookkeeping",
+        "Deletes or reorders slides by editing <p:sldIdLst> in ppt/presentation.xml",
+        "Runs scripts/clean.py after the slide list is final",
+        "Validates with scripts/office/validate.py and --original template.pptx"
+      ],
+      "assertions": [
+        {
+          "contains": "add_slide.py"
+        },
+        {
+          "contains": "clean.py"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Each slide of my talk needs speaker notes with the script I will say. How do I add them with pptxgenjs?",
+      "expected_output": "Use slide.addNotes() once per slide with plain text, never a text box on the slide.",
+      "expectations": [
+        "Uses slide.addNotes(\"...\") once per slide",
+        "Does not put the speaker script into a text box on the slide"
+      ],
+      "assertions": [
+        {
+          "contains": "addNotes"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "帮我把 deck.pptx 里每页的文字和备注提取出来，我要写会议纪要。",
+      "expected_output": "Reads slide text and notes with the read tool or scripts/slide_text.py, without modifying the deck.",
+      "expectations": [
+        "Uses the read tool or scripts/slide_text.py to extract slide titles, text and speaker notes",
+        "Does not unpack or edit the deck for a read-only task"
+      ]
+    }
+  ]
+}

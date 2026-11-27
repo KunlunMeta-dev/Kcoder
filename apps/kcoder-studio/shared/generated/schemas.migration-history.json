@@ -1,0 +1,2260 @@
+{
+  "MigrationContinuationCreateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      },
+      "HistoricalContextPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "maxAttachmentBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxAttachments": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxContextBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxEntries": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxAttachmentBytes",
+          "maxAttachments",
+          "maxContextBytes",
+          "maxEntries"
+        ],
+        "type": "object"
+      },
+      "HistoricalContinuationOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "localAttachments": {
+            "items": {
+              "$ref": "#/definitions/HistoricalLocalAttachmentBinding"
+            },
+            "type": "array"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settingsTemplate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "studioWorkMode": {
+            "$ref": "#/definitions/StudioWorkMode"
+          }
+        },
+        "required": [
+          "studioWorkMode"
+        ],
+        "type": "object"
+      },
+      "HistoricalLocalAttachmentBinding": {
+        "additionalProperties": false,
+        "description": "Caller selection is exact: no implicit latest operation or attachment substitution.",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/definitions/HistoricalAttachmentReceipt"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          }
+        },
+        "required": [
+          "operationId",
+          "receipt",
+          "selection"
+        ],
+        "type": "object"
+      },
+      "StudioWorkMode": {
+        "enum": [
+          "kcoder",
+          "kworker"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "options": {
+        "$ref": "#/definitions/HistoricalContinuationOptions"
+      },
+      "policy": {
+        "$ref": "#/definitions/HistoricalContextPolicy"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "sourceJobId": {
+        "type": "string"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "options",
+      "policy",
+      "requestId",
+      "sourceJobId",
+      "viewId"
+    ],
+    "title": "MigrationContinuationCreateParams",
+    "type": "object"
+  },
+  "MigrationContinuationReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationContinuationReadParams",
+    "type": "object"
+  },
+  "MigrationContinuationRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId"
+    ],
+    "title": "MigrationContinuationRunParams",
+    "type": "object"
+  },
+  "MigrationContinuationSourceParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "MigrationContinuationSourceParams",
+    "type": "object"
+  },
+  "MigrationContinuationSourceResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalContinuationSource": {
+        "additionalProperties": false,
+        "description": "Durable provenance for presentation, independent of the current model-context generation.",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "sourceJobId": {
+            "type": "string"
+          },
+          "viewId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "sourceJobId",
+          "viewId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "source": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/HistoricalContinuationSource"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "title": "MigrationContinuationSourceResult",
+    "type": "object"
+  },
+  "MigrationContinuationStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalAttachmentReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "chunkBytes": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attachmentId",
+          "bytes",
+          "chunkBytes",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "HistoricalAttachmentSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "toolItemIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "blockIndex",
+          "jobId",
+          "position"
+        ],
+        "type": "object"
+      },
+      "HistoricalContextIssue": {
+        "additionalProperties": false,
+        "properties": {
+          "blockIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "type": "object"
+      },
+      "HistoricalContextPolicy": {
+        "additionalProperties": false,
+        "properties": {
+          "maxAttachmentBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxAttachments": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxContextBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxEntries": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maxAttachmentBytes",
+          "maxAttachments",
+          "maxContextBytes",
+          "maxEntries"
+        ],
+        "type": "object"
+      },
+      "HistoricalContextReport": {
+        "additionalProperties": false,
+        "properties": {
+          "attachmentBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "attachments": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "contextCompiled": {
+            "description": "Source compilation only; not model compatibility, task completion or permission to run.",
+            "type": "boolean"
+          },
+          "encodedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "entries": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "excludedProviderBlocks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/definitions/HistoricalContextIssue"
+            },
+            "type": "array"
+          },
+          "issuesTruncated": {
+            "type": "boolean"
+          },
+          "selectedItems": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "attachmentBytes",
+          "attachments",
+          "contextCompiled",
+          "encodedBytes",
+          "entries",
+          "excludedProviderBlocks",
+          "issues",
+          "issuesTruncated",
+          "selectedItems"
+        ],
+        "type": "object"
+      },
+      "HistoricalContinuationJob": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "compilation": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalContextReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "options": {
+            "$ref": "#/definitions/HistoricalContinuationOptions"
+          },
+          "policy": {
+            "$ref": "#/definitions/HistoricalContextPolicy"
+          },
+          "processedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "projection": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalModelProjectionReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceJobId": {
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalContinuationStage"
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelRevision",
+          "jobId",
+          "options",
+          "policy",
+          "processedBytes",
+          "sequence",
+          "sourceJobId",
+          "stage",
+          "viewId"
+        ],
+        "type": "object"
+      },
+      "HistoricalContinuationOptions": {
+        "additionalProperties": false,
+        "properties": {
+          "localAttachments": {
+            "items": {
+              "$ref": "#/definitions/HistoricalLocalAttachmentBinding"
+            },
+            "type": "array"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "settingsTemplate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "studioWorkMode": {
+            "$ref": "#/definitions/StudioWorkMode"
+          }
+        },
+        "required": [
+          "studioWorkMode"
+        ],
+        "type": "object"
+      },
+      "HistoricalContinuationStage": {
+        "enum": [
+          "planned",
+          "preparing",
+          "admitting",
+          "publishing",
+          "imported",
+          "blocked",
+          "cancelled",
+          "failed",
+          "publish_unknown"
+        ],
+        "type": "string"
+      },
+      "HistoricalLocalAttachmentBinding": {
+        "additionalProperties": false,
+        "description": "Caller selection is exact: no implicit latest operation or attachment substitution.",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/definitions/HistoricalAttachmentReceipt"
+          },
+          "selection": {
+            "$ref": "#/definitions/HistoricalAttachmentSelection"
+          }
+        },
+        "required": [
+          "operationId",
+          "receipt",
+          "selection"
+        ],
+        "type": "object"
+      },
+      "HistoricalModelProjectionReport": {
+        "additionalProperties": false,
+        "properties": {
+          "estimatedInputTokens": {
+            "description": "Local estimate only, never measured provider usage or a successful model response.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "files": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "images": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputLimitTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/definitions/HistoricalContextIssue"
+            },
+            "type": "array"
+          },
+          "projectionReady": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "files",
+          "images",
+          "issues",
+          "projectionReady"
+        ],
+        "type": "object"
+      },
+      "StudioWorkMode": {
+        "enum": [
+          "kcoder",
+          "kworker"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "job": {
+        "$ref": "#/definitions/HistoricalContinuationJob"
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "job",
+      "workerRunning"
+    ],
+    "title": "MigrationContinuationStateResult",
+    "type": "object"
+  },
+  "MigrationHistoryCreateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationResourceLimits": {
+        "additionalProperties": false,
+        "description": "Existing per-file, frame, archive and decoding limits remain independent hard bounds.",
+        "properties": {
+          "maxPayloadFiles": {
+            "default": 10000,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maxTotalBytes": {
+            "default": 21474836480,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeBytes": {
+            "default": 134217728,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "minFreeFileNodes": {
+            "default": 32,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "requestId": {
+        "description": "Canonical UUID chosen before submission; also the durable job identity.",
+        "type": "string"
+      },
+      "resourceLimits": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationResourceLimits"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sourceHandle": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "catalogId",
+      "requestId",
+      "sourceHandle"
+    ],
+    "title": "MigrationHistoryCreateParams",
+    "type": "object"
+  },
+  "MigrationHistoryDiscoverParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      }
+    },
+    "required": [
+      "source"
+    ],
+    "title": "MigrationHistoryDiscoverParams",
+    "type": "object"
+  },
+  "MigrationHistoryJobResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalProjectionProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "normalizationComplete": {
+            "type": "boolean"
+          },
+          "normalizedRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "recordsWithDiagnostics": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "normalizationComplete",
+          "normalizedRecords",
+          "recordsWithDiagnostics",
+          "sourceRecords"
+        ],
+        "type": "object"
+      },
+      "HistoryImportJobView": {
+        "additionalProperties": false,
+        "description": "A target-owned job projection, without source paths or transcript content.",
+        "properties": {
+          "archiveId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "normalization": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalProjectionProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoryImportStage"
+          }
+        },
+        "required": [
+          "archived",
+          "cancelRequested",
+          "jobId",
+          "sequence",
+          "source",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoryImportStage": {
+        "oneOf": [
+          {
+            "enum": [
+              "capturing",
+              "planned",
+              "archiving",
+              "normalizing",
+              "cancelled",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Parsing completed; branch selection, attachments and continuation are separate gates.",
+            "enum": [
+              "normalized"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "MigrationHistoryPhase": {
+        "enum": [
+          "capturing",
+          "copying_original",
+          "reading_original",
+          "decoding",
+          "copying",
+          "indexing",
+          "verifying",
+          "normalizing"
+        ],
+        "type": "string"
+      },
+      "MigrationHistoryProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "$ref": "#/definitions/MigrationHistoryPhase"
+          },
+          "processed": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/definitions/MigrationHistoryProgressUnit"
+          }
+        },
+        "required": [
+          "phase",
+          "processed",
+          "total",
+          "unit"
+        ],
+        "type": "object"
+      },
+      "MigrationHistoryProgressUnit": {
+        "enum": [
+          "bytes",
+          "records"
+        ],
+        "type": "string"
+      },
+      "MigrationHistoryWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "job": {
+        "$ref": "#/definitions/HistoryImportJobView"
+      },
+      "progress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationHistoryProgress"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "type": "boolean"
+      },
+      "workerState": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationHistoryWorkerState"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Only serialized for clients that opted into migrationHistoryWorkerStateV1."
+      }
+    },
+    "required": [
+      "job",
+      "workerRunning"
+    ],
+    "title": "MigrationHistoryJobResult",
+    "type": "object"
+  },
+  "MigrationHistoryJobsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalProjectionProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "normalizationComplete": {
+            "type": "boolean"
+          },
+          "normalizedRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "recordsWithDiagnostics": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "normalizationComplete",
+          "normalizedRecords",
+          "recordsWithDiagnostics",
+          "sourceRecords"
+        ],
+        "type": "object"
+      },
+      "HistoryImportJobView": {
+        "additionalProperties": false,
+        "description": "A target-owned job projection, without source paths or transcript content.",
+        "properties": {
+          "archiveId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "normalization": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalProjectionProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoryImportStage"
+          }
+        },
+        "required": [
+          "archived",
+          "cancelRequested",
+          "jobId",
+          "sequence",
+          "source",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoryImportStage": {
+        "oneOf": [
+          {
+            "enum": [
+              "capturing",
+              "planned",
+              "archiving",
+              "normalizing",
+              "cancelled",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Parsing completed; branch selection, attachments and continuation are separate gates.",
+            "enum": [
+              "normalized"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "MigrationHistoryJobResult": {
+        "additionalProperties": false,
+        "properties": {
+          "job": {
+            "$ref": "#/definitions/HistoryImportJobView"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationHistoryProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workerError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workerRunning": {
+            "type": "boolean"
+          },
+          "workerState": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/MigrationHistoryWorkerState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Only serialized for clients that opted into migrationHistoryWorkerStateV1."
+          }
+        },
+        "required": [
+          "job",
+          "workerRunning"
+        ],
+        "type": "object"
+      },
+      "MigrationHistoryPhase": {
+        "enum": [
+          "capturing",
+          "copying_original",
+          "reading_original",
+          "decoding",
+          "copying",
+          "indexing",
+          "verifying",
+          "normalizing"
+        ],
+        "type": "string"
+      },
+      "MigrationHistoryProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "phase": {
+            "$ref": "#/definitions/MigrationHistoryPhase"
+          },
+          "processed": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "total": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "unit": {
+            "$ref": "#/definitions/MigrationHistoryProgressUnit"
+          }
+        },
+        "required": [
+          "phase",
+          "processed",
+          "total",
+          "unit"
+        ],
+        "type": "object"
+      },
+      "MigrationHistoryProgressUnit": {
+        "enum": [
+          "bytes",
+          "records"
+        ],
+        "type": "string"
+      },
+      "MigrationHistoryWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "jobs": {
+        "items": {
+          "$ref": "#/definitions/MigrationHistoryJobResult"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "jobs"
+    ],
+    "title": "MigrationHistoryJobsResult",
+    "type": "object"
+  },
+  "MigrationHistoryPhase": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "capturing",
+      "copying_original",
+      "reading_original",
+      "decoding",
+      "copying",
+      "indexing",
+      "verifying",
+      "normalizing"
+    ],
+    "title": "MigrationHistoryPhase",
+    "type": "string"
+  },
+  "MigrationHistoryProgress": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationHistoryPhase": {
+        "enum": [
+          "capturing",
+          "copying_original",
+          "reading_original",
+          "decoding",
+          "copying",
+          "indexing",
+          "verifying",
+          "normalizing"
+        ],
+        "type": "string"
+      },
+      "MigrationHistoryProgressUnit": {
+        "enum": [
+          "bytes",
+          "records"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "phase": {
+        "$ref": "#/definitions/MigrationHistoryPhase"
+      },
+      "processed": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "total": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "unit": {
+        "$ref": "#/definitions/MigrationHistoryProgressUnit"
+      }
+    },
+    "required": [
+      "phase",
+      "processed",
+      "total",
+      "unit"
+    ],
+    "title": "MigrationHistoryProgress",
+    "type": "object"
+  },
+  "MigrationHistoryProgressUnit": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "bytes",
+      "records"
+    ],
+    "title": "MigrationHistoryProgressUnit",
+    "type": "string"
+  },
+  "MigrationHistoryReinterpretCreateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSourceSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "requestId": {
+        "description": "Canonical UUID selected before the request; a lost reply keeps this identity.",
+        "type": "string"
+      },
+      "sourceJobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSourceSequence",
+      "requestId",
+      "sourceJobId"
+    ],
+    "title": "MigrationHistoryReinterpretCreateParams",
+    "type": "object"
+  },
+  "MigrationHistoryReinterpretPreviewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "sourceJobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceJobId"
+    ],
+    "title": "MigrationHistoryReinterpretPreviewParams",
+    "type": "object"
+  },
+  "MigrationHistoryReinterpretPreviewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "canCreate": {
+        "type": "boolean"
+      },
+      "parserRevision": {
+        "type": "string"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourceJobId": {
+        "type": "string"
+      },
+      "sourceRevision": {
+        "type": "string"
+      },
+      "sourceSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "canCreate",
+      "parserRevision",
+      "sourceJobId",
+      "sourceRevision",
+      "sourceSequence"
+    ],
+    "title": "HistoryReinterpretationPreview",
+    "type": "object"
+  },
+  "MigrationHistoryRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId"
+    ],
+    "title": "MigrationHistoryRunParams",
+    "type": "object"
+  },
+  "MigrationHistorySearchParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "caseSensitive": {
+        "default": false,
+        "type": "boolean"
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "limit": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "query": {
+        "type": "string"
+      },
+      "viewId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "jobId",
+      "query"
+    ],
+    "title": "MigrationHistorySearchParams",
+    "type": "object"
+  },
+  "MigrationHistorySearchResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalDisplayBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "bodyAvailable": {
+            "type": "boolean"
+          },
+          "callId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decodedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/definitions/HistoricalDisplayBlockKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "namespace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bodyAvailable",
+          "index",
+          "kind",
+          "sourceBytes"
+        ],
+        "type": "object"
+      },
+      "HistoricalDisplayBlockKind": {
+        "enum": [
+          "text",
+          "thinking",
+          "tool_call",
+          "tool_result",
+          "attachment",
+          "opaque"
+        ],
+        "type": "string"
+      },
+      "HistoricalRole": {
+        "enum": [
+          "user",
+          "assistant",
+          "system",
+          "developer",
+          "tool",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "HistoricalToolOutcome": {
+        "oneOf": [
+          {
+            "enum": [
+              "recorded_success",
+              "recorded_error",
+              "recorded_cancelled",
+              "outcome_unknown"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "A result exists, but the source did not record whether execution succeeded.",
+            "enum": [
+              "recorded_result"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "MigrationHistorySearchHit": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "block": {
+            "$ref": "#/definitions/HistoricalDisplayBlock"
+          },
+          "bodyCursor": {
+            "type": "string"
+          },
+          "matched": {
+            "type": "string"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "record": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "after",
+          "before",
+          "block",
+          "bodyCursor",
+          "matched",
+          "position",
+          "record"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "excludedBlocks": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/MigrationHistorySearchHit"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "processedBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "scannedRecords": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "totalRecords": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "unsupportedBlocks": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "excludedBlocks",
+      "items",
+      "processedBytes",
+      "scannedRecords",
+      "totalRecords",
+      "unsupportedBlocks"
+    ],
+    "title": "MigrationHistorySearchResult",
+    "type": "object"
+  },
+  "MigrationHistorySourcesParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "catalogId"
+    ],
+    "title": "MigrationHistorySourcesParams",
+    "type": "object"
+  },
+  "MigrationHistorySourcesResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoryDiscoveryProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "count": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "count"
+        ],
+        "type": "object"
+      },
+      "HistorySourceSummary": {
+        "additionalProperties": false,
+        "description": "User-visible source metadata; titles and project labels are private user content.",
+        "properties": {
+          "agentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "archived": {
+            "type": "boolean"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "compressed": {
+            "type": "boolean"
+          },
+          "importIssues": {
+            "description": "Known import blockers, independent of bounded preview availability.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "modifiedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parentSessionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "previewIncomplete": {
+            "type": "boolean"
+          },
+          "project": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceArtifactId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceHandle": {
+            "type": "string"
+          },
+          "sourceSessionId": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "archived",
+          "bytes",
+          "compressed",
+          "importIssues",
+          "previewIncomplete",
+          "source",
+          "sourceHandle",
+          "sourceSessionId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "discoveryComplete": {
+        "type": "boolean"
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/HistorySourceSummary"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "problems": {
+        "items": {
+          "$ref": "#/definitions/HistoryDiscoveryProblem"
+        },
+        "type": "array"
+      },
+      "totalItems": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "catalogId",
+      "discoveryComplete",
+      "items",
+      "problems",
+      "totalItems"
+    ],
+    "title": "HistorySourcePage",
+    "type": "object"
+  },
+  "MigrationHistoryUndoCreateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "continuationJobId": {
+        "type": "string"
+      },
+      "expectedContinuationSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "continuationJobId",
+      "expectedContinuationSequence",
+      "requestId"
+    ],
+    "title": "MigrationHistoryUndoCreateParams",
+    "type": "object"
+  },
+  "MigrationHistoryUndoLookupParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "continuationJobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "continuationJobId"
+    ],
+    "title": "MigrationHistoryUndoPreviewParams",
+    "type": "object"
+  },
+  "MigrationHistoryUndoLookupResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalUndoJob": {
+        "additionalProperties": false,
+        "properties": {
+          "archivesRetained": {
+            "type": "boolean"
+          },
+          "attachmentsRetained": {
+            "type": "boolean"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "checkedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "continuationJobId": {
+            "type": "string"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalUndoStage"
+          }
+        },
+        "required": [
+          "archivesRetained",
+          "attachmentsRetained",
+          "cancelRequested",
+          "cancelRevision",
+          "checkedBytes",
+          "continuationJobId",
+          "jobId",
+          "sequence",
+          "sessionId",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalUndoStage": {
+        "enum": [
+          "planned",
+          "checking",
+          "retiring",
+          "undone",
+          "cancelled",
+          "conflict",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "existingJob": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/HistoricalUndoJob"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "title": "MigrationHistoryUndoLookupResult",
+    "type": "object"
+  },
+  "MigrationHistoryUndoPreviewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "continuationJobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "continuationJobId"
+    ],
+    "title": "MigrationHistoryUndoPreviewParams",
+    "type": "object"
+  },
+  "MigrationHistoryUndoPreviewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalUndoJob": {
+        "additionalProperties": false,
+        "properties": {
+          "archivesRetained": {
+            "type": "boolean"
+          },
+          "attachmentsRetained": {
+            "type": "boolean"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "checkedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "continuationJobId": {
+            "type": "string"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalUndoStage"
+          }
+        },
+        "required": [
+          "archivesRetained",
+          "attachmentsRetained",
+          "cancelRequested",
+          "cancelRevision",
+          "checkedBytes",
+          "continuationJobId",
+          "jobId",
+          "sequence",
+          "sessionId",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalUndoStage": {
+        "enum": [
+          "planned",
+          "checking",
+          "retiring",
+          "undone",
+          "cancelled",
+          "conflict",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "archivesRetained": {
+        "type": "boolean"
+      },
+      "attachmentsRetained": {
+        "type": "boolean"
+      },
+      "canUndo": {
+        "type": "boolean"
+      },
+      "continuationJobId": {
+        "type": "string"
+      },
+      "existingJob": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/HistoricalUndoJob"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sessionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "archivesRetained",
+      "attachmentsRetained",
+      "canUndo",
+      "continuationJobId"
+    ],
+    "title": "HistoricalUndoPreview",
+    "type": "object"
+  },
+  "MigrationHistoryUndoReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationHistoryUndoReadParams",
+    "type": "object"
+  },
+  "MigrationHistoryUndoRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId"
+    ],
+    "title": "MigrationHistoryUndoRunParams",
+    "type": "object"
+  },
+  "MigrationHistoryUndoStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalUndoJob": {
+        "additionalProperties": false,
+        "properties": {
+          "archivesRetained": {
+            "type": "boolean"
+          },
+          "attachmentsRetained": {
+            "type": "boolean"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "checkedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "continuationJobId": {
+            "type": "string"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalUndoStage"
+          }
+        },
+        "required": [
+          "archivesRetained",
+          "attachmentsRetained",
+          "cancelRequested",
+          "cancelRevision",
+          "checkedBytes",
+          "continuationJobId",
+          "jobId",
+          "sequence",
+          "sessionId",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalUndoStage": {
+        "enum": [
+          "planned",
+          "checking",
+          "retiring",
+          "undone",
+          "cancelled",
+          "conflict",
+          "failed",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "job": {
+        "$ref": "#/definitions/HistoricalUndoJob"
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "job",
+      "workerRunning"
+    ],
+    "title": "MigrationHistoryUndoStateResult",
+    "type": "object"
+  }
+}

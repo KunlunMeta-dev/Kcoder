@@ -1,0 +1,1914 @@
+{
+  "OfficeCanonicalInputIdentity": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "reference": {
+        "$ref": "#/definitions/OfficeResourceRef"
+      },
+      "sha256": {
+        "description": "Actual immutable content identity resolved under native authority.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "reference",
+      "sha256"
+    ],
+    "title": "OfficeCanonicalInputIdentity",
+    "type": "object"
+  },
+  "OfficeCanonicalSourceAvailability": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "oneOf": [
+      {
+        "enum": [
+          "available"
+        ],
+        "type": "string"
+      },
+      {
+        "description": "Older or externally written artifacts have no generation source; never reconstruct from previews.",
+        "enum": [
+          "not_recorded"
+        ],
+        "type": "string"
+      }
+    ],
+    "title": "OfficeCanonicalSourceAvailability"
+  },
+  "OfficeCanonicalSourceDescriptor": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeCanonicalInputIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "$ref": "#/definitions/OfficeResourceRef"
+          },
+          "sha256": {
+            "description": "Actual immutable content identity resolved under native authority.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "OfficeGeneratorIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "type": "string"
+          },
+          "dependencyLockSha256": {
+            "type": "string"
+          },
+          "implementationSha256": {
+            "type": "string"
+          },
+          "schemaRevision": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "component",
+          "dependencyLockSha256",
+          "implementationSha256",
+          "schemaRevision",
+          "version"
+        ],
+        "type": "object"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeTaskRef": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "artifact": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "generator": {
+        "$ref": "#/definitions/OfficeGeneratorIdentity"
+      },
+      "id": {
+        "type": "string"
+      },
+      "inputs": {
+        "items": {
+          "$ref": "#/definitions/OfficeCanonicalInputIdentity"
+        },
+        "type": "array"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "outputSha256": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specificationBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "specificationSha256": {
+        "description": "Hash/length of key-normalized UTF-8 JSON; array order and all strings are preserved.",
+        "type": "string"
+      },
+      "task": {
+        "$ref": "#/definitions/OfficeTaskRef"
+      }
+    },
+    "required": [
+      "artifact",
+      "createdAtMs",
+      "generator",
+      "id",
+      "inputs",
+      "operationId",
+      "outputSha256",
+      "owner",
+      "revision",
+      "schemaVersion",
+      "specificationBytes",
+      "specificationSha256",
+      "task"
+    ],
+    "title": "OfficeCanonicalSourceDescriptor",
+    "type": "object"
+  },
+  "OfficeCanonicalSourceReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedSha256": {
+        "default": null,
+        "description": "Required for byte reads; must match the exact descriptor, never latest.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "default": 65536,
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "metadataOnly": {
+        "default": true,
+        "type": "boolean"
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "reference": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      }
+    },
+    "required": [
+      "reference"
+    ],
+    "title": "OfficeCanonicalSourceReadParams",
+    "type": "object"
+  },
+  "OfficeCanonicalSourceReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeCanonicalInputIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "reference": {
+            "$ref": "#/definitions/OfficeResourceRef"
+          },
+          "sha256": {
+            "description": "Actual immutable content identity resolved under native authority.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "OfficeCanonicalSourceAvailability": {
+        "oneOf": [
+          {
+            "enum": [
+              "available"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Older or externally written artifacts have no generation source; never reconstruct from previews.",
+            "enum": [
+              "not_recorded"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "OfficeCanonicalSourceDescriptor": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact": {
+            "$ref": "#/definitions/OfficeArtifactRef"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "generator": {
+            "$ref": "#/definitions/OfficeGeneratorIdentity"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "$ref": "#/definitions/OfficeCanonicalInputIdentity"
+            },
+            "type": "array"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "outputSha256": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "specificationBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "specificationSha256": {
+            "description": "Hash/length of key-normalized UTF-8 JSON; array order and all strings are preserved.",
+            "type": "string"
+          },
+          "task": {
+            "$ref": "#/definitions/OfficeTaskRef"
+          }
+        },
+        "required": [
+          "artifact",
+          "createdAtMs",
+          "generator",
+          "id",
+          "inputs",
+          "operationId",
+          "outputSha256",
+          "owner",
+          "revision",
+          "schemaVersion",
+          "specificationBytes",
+          "specificationSha256",
+          "task"
+        ],
+        "type": "object"
+      },
+      "OfficeGeneratorIdentity": {
+        "additionalProperties": false,
+        "properties": {
+          "component": {
+            "type": "string"
+          },
+          "dependencyLockSha256": {
+            "type": "string"
+          },
+          "implementationSha256": {
+            "type": "string"
+          },
+          "schemaRevision": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "component",
+          "dependencyLockSha256",
+          "implementationSha256",
+          "schemaRevision",
+          "version"
+        ],
+        "type": "object"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeTaskRef": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "availability": {
+        "$ref": "#/definitions/OfficeCanonicalSourceAvailability"
+      },
+      "chunk": {
+        "description": "Only returned on an explicit authorized full-source read. Never auto-append to model context.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "complete": {
+        "description": "Byte transfer completion only; never Office correctness or edit support.",
+        "type": "boolean"
+      },
+      "nextOffset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "source": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeCanonicalSourceDescriptor"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "availability",
+      "complete",
+      "offset"
+    ],
+    "title": "OfficeCanonicalSourceReadResult",
+    "type": "object"
+  },
+  "OfficeChartSeriesSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "name": {
+        "type": "string"
+      },
+      "values": {
+        "items": {
+          "format": "double",
+          "type": "number"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "name",
+      "values"
+    ],
+    "title": "OfficeChartSeriesSpec",
+    "type": "object"
+  },
+  "OfficeChartType": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "bar",
+      "line",
+      "pie"
+    ],
+    "title": "OfficeChartType",
+    "type": "string"
+  },
+  "OfficeFormulaSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cell": {
+        "description": "A1 cell address. Header row cannot be overwritten. No arbitrary range writes.",
+        "type": "string"
+      },
+      "formula": {
+        "description": "SUM/AVERAGE/MIN/MAX/COUNT/COUNTA/ABS/ROUND only. No external references or web functions.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cell",
+      "formula"
+    ],
+    "title": "OfficeFormulaSpec",
+    "type": "object"
+  },
+  "OfficeGenerateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeChartSeriesSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "values"
+        ],
+        "type": "object"
+      },
+      "OfficeChartType": {
+        "enum": [
+          "bar",
+          "line",
+          "pie"
+        ],
+        "type": "string"
+      },
+      "OfficeColumnType": {
+        "enum": [
+          "string",
+          "number",
+          "boolean",
+          "date"
+        ],
+        "type": "string"
+      },
+      "OfficeFormulaSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "cell": {
+            "description": "A1 cell address. Header row cannot be overwritten. No arbitrary range writes.",
+            "type": "string"
+          },
+          "formula": {
+            "description": "SUM/AVERAGE/MIN/MAX/COUNT/COUNTA/ABS/ROUND only. No external references or web functions.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cell",
+          "formula"
+        ],
+        "type": "object"
+      },
+      "OfficeGenerationKind": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx"
+        ],
+        "type": "string"
+      },
+      "OfficeGenerationSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "$ref": "#/definitions/OfficeGenerationKind"
+          },
+          "paragraphs": {
+            "description": "DOCX only, up to 500 paragraphs. Text is literal, not HTML or Markdown execution.",
+            "items": {
+              "$ref": "#/definitions/OfficeParagraphSpec"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "schemaVersion": {
+            "description": "Must be 1. Only structured new documents are supported.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sheets": {
+            "description": "XLSX only, 1..16 uniquely named sheets. Numbers must be finite and JS-safe for integer writes.",
+            "items": {
+              "$ref": "#/definitions/OfficeSheetSpec"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "slides": {
+            "description": "PPTX only, 1..60 slides. Longer prose must be split into more slides.",
+            "items": {
+              "$ref": "#/definitions/OfficeSlideSpec"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "sourceRefs": {
+            "description": "Host-reconciled opaque source IDs, never a permission grant.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tables": {
+            "description": "DOCX only, up to 20 text tables, each row matching its headers.",
+            "items": {
+              "$ref": "#/definitions/OfficeTextTableSpec"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "template": {
+            "description": "Fixed layout only: DOCX report/letter; PPTX briefing/minimal. No imported template path.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "description": "User-language title, at most 200 characters.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "schemaVersion",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeParagraphSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "bullet": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "heading": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "OfficePngSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "description": "Required literal alternative text, up to 200 characters.",
+            "type": "string"
+          },
+          "data": {
+            "description": "Raw data:image/png;base64,... only; no local path, URL, SVG or active content.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alt",
+          "data"
+        ],
+        "type": "object"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeSheetColumnSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "numberFormat": {
+            "description": "Restricted number-format characters; never executable spreadsheet code.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/definitions/OfficeColumnType"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "type"
+        ],
+        "type": "object"
+      },
+      "OfficeSheetSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/definitions/OfficeSheetColumnSpec"
+            },
+            "type": "array"
+          },
+          "formulas": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFormulaSpec"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rows": {
+            "description": "Flat scalar rows, each matching columns exactly. Date cells use Gregorian YYYY-MM-DD.",
+            "items": {
+              "items": true,
+              "type": "array"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "columns",
+          "name",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "OfficeSlideChartSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/definitions/OfficeChartSeriesSpec"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/definitions/OfficeChartType"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "labels",
+          "series",
+          "type"
+        ],
+        "type": "object"
+      },
+      "OfficeSlideSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "chart": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/OfficeSlideChartSpec"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One editable chart. Cannot be combined with images on the same slide."
+          },
+          "images": {
+            "description": "At most 2 bounded PNGs. Images are displayed with preserved aspect ratio.",
+            "items": {
+              "$ref": "#/definitions/OfficePngSpec"
+            },
+            "type": "array"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paragraphs": {
+            "description": "At most 8 entries, 400 visible characters total (160 with chart/images).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "paragraphs",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeTaskRef": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "OfficeTextTableSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "headers",
+          "rows"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "sourceRefs": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeResourceRef"
+        },
+        "type": "array"
+      },
+      "specification": {
+        "$ref": "#/definitions/OfficeGenerationSpec"
+      },
+      "task": {
+        "$ref": "#/definitions/OfficeTaskRef"
+      }
+    },
+    "required": [
+      "specification",
+      "task"
+    ],
+    "title": "OfficeGenerateParams",
+    "type": "object"
+  },
+  "OfficeGenerationKind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "docx",
+      "xlsx",
+      "pptx"
+    ],
+    "title": "OfficeGenerationKind",
+    "type": "string"
+  },
+  "OfficeGenerationSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeChartSeriesSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "values"
+        ],
+        "type": "object"
+      },
+      "OfficeChartType": {
+        "enum": [
+          "bar",
+          "line",
+          "pie"
+        ],
+        "type": "string"
+      },
+      "OfficeColumnType": {
+        "enum": [
+          "string",
+          "number",
+          "boolean",
+          "date"
+        ],
+        "type": "string"
+      },
+      "OfficeFormulaSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "cell": {
+            "description": "A1 cell address. Header row cannot be overwritten. No arbitrary range writes.",
+            "type": "string"
+          },
+          "formula": {
+            "description": "SUM/AVERAGE/MIN/MAX/COUNT/COUNTA/ABS/ROUND only. No external references or web functions.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cell",
+          "formula"
+        ],
+        "type": "object"
+      },
+      "OfficeGenerationKind": {
+        "enum": [
+          "docx",
+          "xlsx",
+          "pptx"
+        ],
+        "type": "string"
+      },
+      "OfficeParagraphSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "bullet": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "heading": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "OfficePngSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "description": "Required literal alternative text, up to 200 characters.",
+            "type": "string"
+          },
+          "data": {
+            "description": "Raw data:image/png;base64,... only; no local path, URL, SVG or active content.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alt",
+          "data"
+        ],
+        "type": "object"
+      },
+      "OfficeSheetColumnSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "numberFormat": {
+            "description": "Restricted number-format characters; never executable spreadsheet code.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/definitions/OfficeColumnType"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "type"
+        ],
+        "type": "object"
+      },
+      "OfficeSheetSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "columns": {
+            "items": {
+              "$ref": "#/definitions/OfficeSheetColumnSpec"
+            },
+            "type": "array"
+          },
+          "formulas": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFormulaSpec"
+            },
+            "type": "array"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rows": {
+            "description": "Flat scalar rows, each matching columns exactly. Date cells use Gregorian YYYY-MM-DD.",
+            "items": {
+              "items": true,
+              "type": "array"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "columns",
+          "name",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "OfficeSlideChartSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/definitions/OfficeChartSeriesSpec"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/definitions/OfficeChartType"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "labels",
+          "series",
+          "type"
+        ],
+        "type": "object"
+      },
+      "OfficeSlideSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "chart": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/OfficeSlideChartSpec"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "One editable chart. Cannot be combined with images on the same slide."
+          },
+          "images": {
+            "description": "At most 2 bounded PNGs. Images are displayed with preserved aspect ratio.",
+            "items": {
+              "$ref": "#/definitions/OfficePngSpec"
+            },
+            "type": "array"
+          },
+          "notes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paragraphs": {
+            "description": "At most 8 entries, 400 visible characters total (160 with chart/images).",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "paragraphs",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeTextTableSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "headers",
+          "rows"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "kind": {
+        "$ref": "#/definitions/OfficeGenerationKind"
+      },
+      "paragraphs": {
+        "description": "DOCX only, up to 500 paragraphs. Text is literal, not HTML or Markdown execution.",
+        "items": {
+          "$ref": "#/definitions/OfficeParagraphSpec"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "schemaVersion": {
+        "description": "Must be 1. Only structured new documents are supported.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sheets": {
+        "description": "XLSX only, 1..16 uniquely named sheets. Numbers must be finite and JS-safe for integer writes.",
+        "items": {
+          "$ref": "#/definitions/OfficeSheetSpec"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "slides": {
+        "description": "PPTX only, 1..60 slides. Longer prose must be split into more slides.",
+        "items": {
+          "$ref": "#/definitions/OfficeSlideSpec"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "sourceRefs": {
+        "description": "Host-reconciled opaque source IDs, never a permission grant.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "tables": {
+        "description": "DOCX only, up to 20 text tables, each row matching its headers.",
+        "items": {
+          "$ref": "#/definitions/OfficeTextTableSpec"
+        },
+        "type": [
+          "array",
+          "null"
+        ]
+      },
+      "template": {
+        "description": "Fixed layout only: DOCX report/letter; PPTX briefing/minimal. No imported template path.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "description": "User-language title, at most 200 characters.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "kind",
+      "schemaVersion",
+      "title"
+    ],
+    "title": "OfficeGenerationSpec",
+    "type": "object"
+  },
+  "OfficeGeneratorIdentity": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "component": {
+        "type": "string"
+      },
+      "dependencyLockSha256": {
+        "type": "string"
+      },
+      "implementationSha256": {
+        "type": "string"
+      },
+      "schemaRevision": {
+        "type": "string"
+      },
+      "version": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "component",
+      "dependencyLockSha256",
+      "implementationSha256",
+      "schemaRevision",
+      "version"
+    ],
+    "title": "OfficeGeneratorIdentity",
+    "type": "object"
+  },
+  "OfficeParagraphSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bullet": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "heading": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "text"
+    ],
+    "title": "OfficeParagraphSpec",
+    "type": "object"
+  },
+  "OfficePngSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "alt": {
+        "description": "Required literal alternative text, up to 200 characters.",
+        "type": "string"
+      },
+      "data": {
+        "description": "Raw data:image/png;base64,... only; no local path, URL, SVG or active content.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "alt",
+      "data"
+    ],
+    "title": "OfficePngSpec",
+    "type": "object"
+  },
+  "OfficeSheetColumnSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeColumnType": {
+        "enum": [
+          "string",
+          "number",
+          "boolean",
+          "date"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "numberFormat": {
+        "description": "Restricted number-format characters; never executable spreadsheet code.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "type": "string"
+      },
+      "type": {
+        "$ref": "#/definitions/OfficeColumnType"
+      },
+      "unit": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "key",
+      "title",
+      "type"
+    ],
+    "title": "OfficeSheetColumnSpec",
+    "type": "object"
+  },
+  "OfficeSheetSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeColumnType": {
+        "enum": [
+          "string",
+          "number",
+          "boolean",
+          "date"
+        ],
+        "type": "string"
+      },
+      "OfficeFormulaSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "cell": {
+            "description": "A1 cell address. Header row cannot be overwritten. No arbitrary range writes.",
+            "type": "string"
+          },
+          "formula": {
+            "description": "SUM/AVERAGE/MIN/MAX/COUNT/COUNTA/ABS/ROUND only. No external references or web functions.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cell",
+          "formula"
+        ],
+        "type": "object"
+      },
+      "OfficeSheetColumnSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "numberFormat": {
+            "description": "Restricted number-format characters; never executable spreadsheet code.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/definitions/OfficeColumnType"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "title",
+          "type"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "columns": {
+        "items": {
+          "$ref": "#/definitions/OfficeSheetColumnSpec"
+        },
+        "type": "array"
+      },
+      "formulas": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeFormulaSpec"
+        },
+        "type": "array"
+      },
+      "name": {
+        "type": "string"
+      },
+      "rows": {
+        "description": "Flat scalar rows, each matching columns exactly. Date cells use Gregorian YYYY-MM-DD.",
+        "items": {
+          "items": true,
+          "type": "array"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "columns",
+      "name",
+      "rows"
+    ],
+    "title": "OfficeSheetSpec",
+    "type": "object"
+  },
+  "OfficeSlideChartSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeChartSeriesSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "values"
+        ],
+        "type": "object"
+      },
+      "OfficeChartType": {
+        "enum": [
+          "bar",
+          "line",
+          "pie"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "labels": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "series": {
+        "items": {
+          "$ref": "#/definitions/OfficeChartSeriesSpec"
+        },
+        "type": "array"
+      },
+      "type": {
+        "$ref": "#/definitions/OfficeChartType"
+      },
+      "unit": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "labels",
+      "series",
+      "type"
+    ],
+    "title": "OfficeSlideChartSpec",
+    "type": "object"
+  },
+  "OfficeSlideSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeChartSeriesSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "values": {
+            "items": {
+              "format": "double",
+              "type": "number"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "values"
+        ],
+        "type": "object"
+      },
+      "OfficeChartType": {
+        "enum": [
+          "bar",
+          "line",
+          "pie"
+        ],
+        "type": "string"
+      },
+      "OfficePngSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "alt": {
+            "description": "Required literal alternative text, up to 200 characters.",
+            "type": "string"
+          },
+          "data": {
+            "description": "Raw data:image/png;base64,... only; no local path, URL, SVG or active content.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "alt",
+          "data"
+        ],
+        "type": "object"
+      },
+      "OfficeSlideChartSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "labels": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/definitions/OfficeChartSeriesSpec"
+            },
+            "type": "array"
+          },
+          "type": {
+            "$ref": "#/definitions/OfficeChartType"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "labels",
+          "series",
+          "type"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "chart": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeSlideChartSpec"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "One editable chart. Cannot be combined with images on the same slide."
+      },
+      "images": {
+        "description": "At most 2 bounded PNGs. Images are displayed with preserved aspect ratio.",
+        "items": {
+          "$ref": "#/definitions/OfficePngSpec"
+        },
+        "type": "array"
+      },
+      "notes": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "paragraphs": {
+        "description": "At most 8 entries, 400 visible characters total (160 with chart/images).",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "paragraphs",
+      "title"
+    ],
+    "title": "OfficeSlideSpec",
+    "type": "object"
+  },
+  "OfficeTextTableSpec": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "headers": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "rows": {
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "headers",
+      "rows"
+    ],
+    "title": "OfficeTextTableSpec",
+    "type": "object"
+  }
+}

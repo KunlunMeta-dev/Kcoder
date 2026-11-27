@@ -1,0 +1,17 @@
+{
+  "ThreadOwnershipErrorDataV1": [
+    {
+      "decoded": {
+        "reason": "ownedElsewhere",
+        "threadId": "original_1",
+        "version": 1
+      },
+      "name": "original-thread",
+      "value": {
+        "reason": "ownedElsewhere",
+        "threadId": "original_1",
+        "version": 1
+      }
+    }
+  ]
+}

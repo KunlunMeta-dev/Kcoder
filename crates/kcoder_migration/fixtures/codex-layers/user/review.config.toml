@@ -1,0 +1,4 @@
+model = "profile-model"
+model_reasoning_effort = "high"
+[model_providers.office]
+base_url = "https://profile.invalid/v1"

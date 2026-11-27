@@ -1,0 +1,1156 @@
+{
+  "AsyncQuestionAccepted": [
+    {
+      "decoded": {
+        "accepted": true,
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        }
+      },
+      "name": "original-task-question",
+      "value": {
+        "accepted": true,
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        }
+      }
+    }
+  ],
+  "AsyncQuestionAnswerParams": [
+    {
+      "decoded": {
+        "answers": {
+          "item-1": {
+            "selectedOptionIds": [
+              "option-1"
+            ],
+            "text": "Engineers"
+          }
+        },
+        "expectedRevision": 1,
+        "questionId": "question-1",
+        "submissionId": "submission-1",
+        "threadId": "thread-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "answers": {
+          "item-1": {
+            "selectedOptionIds": [
+              "option-1"
+            ],
+            "text": "Engineers"
+          }
+        },
+        "expectedRevision": 1,
+        "questionId": "question-1",
+        "submissionId": "submission-1",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "AsyncQuestionAnswerReceipt": [
+    {
+      "decoded": {
+        "accepted": true,
+        "duplicate": false,
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        }
+      },
+      "name": "original-task-question",
+      "value": {
+        "accepted": true,
+        "duplicate": false,
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        }
+      }
+    }
+  ],
+  "AsyncQuestionAnswerRecord": [
+    {
+      "decoded": {
+        "acceptedAtMs": 2,
+        "answers": {
+          "item-1": {
+            "selectedOptionIds": [
+              "option-1"
+            ],
+            "text": "Engineers"
+          }
+        },
+        "submissionId": "submission-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "acceptedAtMs": 2,
+        "answers": {
+          "item-1": {
+            "selectedOptionIds": [
+              "option-1"
+            ],
+            "text": "Engineers"
+          }
+        },
+        "submissionId": "submission-1"
+      }
+    }
+  ],
+  "AsyncQuestionAnswerResult": [
+    {
+      "decoded": {
+        "accepted": true,
+        "duplicate": false,
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        },
+        "threadId": "thread-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "accepted": true,
+        "duplicate": false,
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        },
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "AsyncQuestionAnswerValue": [
+    {
+      "decoded": {
+        "selectedOptionIds": [
+          "option-1"
+        ],
+        "text": "Engineers"
+      },
+      "name": "original-task-question",
+      "value": {
+        "selectedOptionIds": [
+          "option-1"
+        ],
+        "text": "Engineers"
+      }
+    }
+  ],
+  "AsyncQuestionCancelParams": [
+    {
+      "decoded": {
+        "expectedRevision": 1,
+        "questionId": "question-1",
+        "threadId": "thread-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "expectedRevision": 1,
+        "questionId": "question-1",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "AsyncQuestionCancelResult": [
+    {
+      "decoded": {
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 2,
+          "sourceTurnId": "turn-1",
+          "status": "cancelled",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        },
+        "threadId": "thread-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 2,
+          "sourceTurnId": "turn-1",
+          "status": "cancelled",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        },
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "AsyncQuestionChangedNotification": [
+    {
+      "decoded": {
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        },
+        "threadId": "thread-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "question": {
+          "createdAtMs": 1,
+          "questionId": "question-1",
+          "questions": [
+            {
+              "header": "Audience",
+              "id": "item-1",
+              "multiSelect": false,
+              "options": [
+                {
+                  "description": "Technical audience",
+                  "id": "option-1",
+                  "label": "Engineers"
+                }
+              ],
+              "question": "Who is the report for?"
+            }
+          ],
+          "requestId": "request-1",
+          "revision": 1,
+          "sourceTurnId": "turn-1",
+          "status": "pending",
+          "threadId": "thread-1",
+          "toolCallId": "call-1"
+        },
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "AsyncQuestionItem": [
+    {
+      "decoded": {
+        "header": "Audience",
+        "id": "item-1",
+        "multiSelect": false,
+        "options": [
+          {
+            "description": "Technical audience",
+            "id": "option-1",
+            "label": "Engineers"
+          }
+        ],
+        "question": "Who is the report for?"
+      },
+      "name": "original-task-question",
+      "value": {
+        "header": "Audience",
+        "id": "item-1",
+        "multiSelect": false,
+        "options": [
+          {
+            "description": "Technical audience",
+            "id": "option-1",
+            "label": "Engineers"
+          }
+        ],
+        "question": "Who is the report for?"
+      }
+    }
+  ],
+  "AsyncQuestionItemDraft": [
+    {
+      "decoded": {
+        "header": "Audience",
+        "multiSelect": false,
+        "options": [
+          {
+            "description": "Technical audience",
+            "label": "Engineers"
+          }
+        ],
+        "question": "Who is the report for?"
+      },
+      "name": "original-task-question",
+      "value": {
+        "header": "Audience",
+        "multiSelect": false,
+        "options": [
+          {
+            "description": "Technical audience",
+            "label": "Engineers"
+          }
+        ],
+        "question": "Who is the report for?"
+      }
+    }
+  ],
+  "AsyncQuestionListParams": [
+    {
+      "decoded": {
+        "threadId": "thread-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "AsyncQuestionListResult": [
+    {
+      "decoded": {
+        "questions": [
+          {
+            "createdAtMs": 1,
+            "questionId": "question-1",
+            "questions": [
+              {
+                "header": "Audience",
+                "id": "item-1",
+                "multiSelect": false,
+                "options": [
+                  {
+                    "description": "Technical audience",
+                    "id": "option-1",
+                    "label": "Engineers"
+                  }
+                ],
+                "question": "Who is the report for?"
+              }
+            ],
+            "requestId": "request-1",
+            "revision": 1,
+            "sourceTurnId": "turn-1",
+            "status": "pending",
+            "threadId": "thread-1",
+            "toolCallId": "call-1"
+          }
+        ],
+        "threadId": "thread-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "questions": [
+          {
+            "createdAtMs": 1,
+            "questionId": "question-1",
+            "questions": [
+              {
+                "header": "Audience",
+                "id": "item-1",
+                "multiSelect": false,
+                "options": [
+                  {
+                    "description": "Technical audience",
+                    "id": "option-1",
+                    "label": "Engineers"
+                  }
+                ],
+                "question": "Who is the report for?"
+              }
+            ],
+            "requestId": "request-1",
+            "revision": 1,
+            "sourceTurnId": "turn-1",
+            "status": "pending",
+            "threadId": "thread-1",
+            "toolCallId": "call-1"
+          }
+        ],
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "AsyncQuestionOption": [
+    {
+      "decoded": {
+        "description": "Technical audience",
+        "id": "option-1",
+        "label": "Engineers"
+      },
+      "name": "original-task-question",
+      "value": {
+        "description": "Technical audience",
+        "id": "option-1",
+        "label": "Engineers"
+      }
+    }
+  ],
+  "AsyncQuestionOptionDraft": [
+    {
+      "decoded": {
+        "description": "Technical audience",
+        "label": "Engineers"
+      },
+      "name": "original-task-question",
+      "value": {
+        "description": "Technical audience",
+        "label": "Engineers"
+      }
+    }
+  ],
+  "AsyncQuestionRecord": [
+    {
+      "decoded": {
+        "createdAtMs": 1,
+        "questionId": "question-1",
+        "questions": [
+          {
+            "header": "Audience",
+            "id": "item-1",
+            "multiSelect": false,
+            "options": [
+              {
+                "description": "Technical audience",
+                "id": "option-1",
+                "label": "Engineers"
+              }
+            ],
+            "question": "Who is the report for?"
+          }
+        ],
+        "requestId": "request-1",
+        "revision": 1,
+        "sourceTurnId": "turn-1",
+        "status": "pending",
+        "threadId": "thread-1",
+        "toolCallId": "call-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "createdAtMs": 1,
+        "questionId": "question-1",
+        "questions": [
+          {
+            "header": "Audience",
+            "id": "item-1",
+            "multiSelect": false,
+            "options": [
+              {
+                "description": "Technical audience",
+                "id": "option-1",
+                "label": "Engineers"
+              }
+            ],
+            "question": "Who is the report for?"
+          }
+        ],
+        "requestId": "request-1",
+        "revision": 1,
+        "sourceTurnId": "turn-1",
+        "status": "pending",
+        "threadId": "thread-1",
+        "toolCallId": "call-1"
+      }
+    }
+  ],
+  "AsyncQuestionRequest": [
+    {
+      "decoded": {
+        "questions": [
+          {
+            "header": "Audience",
+            "multiSelect": false,
+            "options": [
+              {
+                "description": "Technical audience",
+                "label": "Engineers"
+              }
+            ],
+            "question": "Who is the report for?"
+          }
+        ],
+        "sourceTurnId": "turn-1",
+        "toolCallId": "call-1"
+      },
+      "name": "original-task-question",
+      "value": {
+        "questions": [
+          {
+            "header": "Audience",
+            "multiSelect": false,
+            "options": [
+              {
+                "description": "Technical audience",
+                "label": "Engineers"
+              }
+            ],
+            "question": "Who is the report for?"
+          }
+        ],
+        "sourceTurnId": "turn-1",
+        "toolCallId": "call-1"
+      }
+    }
+  ],
+  "AsyncQuestionStatus": [
+    {
+      "decoded": "pending",
+      "name": "original-task-question",
+      "value": "pending"
+    },
+    {
+      "decoded": "answer_saved",
+      "name": "answer_saved",
+      "value": "answer_saved"
+    },
+    {
+      "decoded": "queued",
+      "name": "queued",
+      "value": "queued"
+    },
+    {
+      "decoded": "context_applied",
+      "name": "context_applied",
+      "value": "context_applied"
+    },
+    {
+      "decoded": "delivery_failed",
+      "name": "delivery_failed",
+      "value": "delivery_failed"
+    },
+    {
+      "decoded": "delivery_unknown",
+      "name": "delivery_unknown",
+      "value": "delivery_unknown"
+    },
+    {
+      "decoded": "cancelled",
+      "name": "cancelled",
+      "value": "cancelled"
+    },
+    {
+      "decoded": "stale",
+      "name": "stale",
+      "value": "stale"
+    }
+  ],
+  "TaskInteractionAnswerV1": [
+    {
+      "decoded": {
+        "answers": [
+          "Continue"
+        ]
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "answers": [
+          "Continue"
+        ]
+      }
+    }
+  ],
+  "TaskInteractionApprovalKindV1": [
+    {
+      "decoded": "tool",
+      "name": "valid-exact-native-selector-0",
+      "value": "tool"
+    }
+  ],
+  "TaskInteractionApprovalV1": [
+    {
+      "decoded": {
+        "input": "{}",
+        "kind": "tool",
+        "reason": "Write the owned file",
+        "subject": "FileWrite"
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "input": "{}",
+        "kind": "tool",
+        "reason": "Write the owned file",
+        "subject": "FileWrite"
+      }
+    }
+  ],
+  "TaskInteractionItemV1": [
+    {
+      "decoded": {
+        "presentation": {
+          "approval": null,
+          "questions": [
+            {
+              "header": "Original question",
+              "id": "question",
+              "isOther": false,
+              "options": [
+                {
+                  "description": "Use the original task",
+                  "label": "Continue"
+                }
+              ],
+              "question": "Choose an option"
+            }
+          ]
+        },
+        "reference": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001",
+            "requestId": 2000001,
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn"
+          }
+        },
+        "state": "pending"
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "presentation": {
+          "approval": null,
+          "questions": [
+            {
+              "header": "Original question",
+              "id": "question",
+              "isOther": false,
+              "options": [
+                {
+                  "description": "Use the original task",
+                  "label": "Continue"
+                }
+              ],
+              "question": "Choose an option"
+            }
+          ]
+        },
+        "reference": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001",
+            "requestId": 2000001,
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn"
+          }
+        },
+        "state": "pending"
+      }
+    }
+  ],
+  "TaskInteractionObservationStateV1": [
+    {
+      "decoded": "unknown",
+      "name": "valid-exact-native-selector-0",
+      "value": "unknown"
+    }
+  ],
+  "TaskInteractionOptionV1": [
+    {
+      "decoded": {
+        "description": "Use the original task",
+        "label": "Continue"
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "description": "Use the original task",
+        "label": "Continue"
+      }
+    }
+  ],
+  "TaskInteractionPresentationV1": [
+    {
+      "decoded": {
+        "approval": null,
+        "questions": [
+          {
+            "header": "Original question",
+            "id": "question",
+            "isOther": false,
+            "options": [
+              {
+                "description": "Use the original task",
+                "label": "Continue"
+              }
+            ],
+            "question": "Choose an option"
+          }
+        ]
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "approval": null,
+        "questions": [
+          {
+            "header": "Original question",
+            "id": "question",
+            "isOther": false,
+            "options": [
+              {
+                "description": "Use the original task",
+                "label": "Continue"
+              }
+            ],
+            "question": "Choose an option"
+          }
+        ]
+      }
+    }
+  ],
+  "TaskInteractionQuestionV1": [
+    {
+      "decoded": {
+        "header": "Original question",
+        "id": "question",
+        "isOther": false,
+        "options": [
+          {
+            "description": "Use the original task",
+            "label": "Continue"
+          }
+        ],
+        "question": "Choose an option"
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "header": "Original question",
+        "id": "question",
+        "isOther": false,
+        "options": [
+          {
+            "description": "Use the original task",
+            "label": "Continue"
+          }
+        ],
+        "question": "Choose an option"
+      }
+    },
+    {
+      "decoded": {
+        "header": "Choice",
+        "id": "q",
+        "isOther": false,
+        "multiSelect": true,
+        "options": [
+          {
+            "description": "First",
+            "label": "A"
+          },
+          {
+            "description": "Second",
+            "label": "B"
+          }
+        ],
+        "question": "Select materials"
+      },
+      "name": "valid-multiselect-compatible-0",
+      "value": {
+        "header": "Choice",
+        "id": "q",
+        "isOther": false,
+        "multiSelect": true,
+        "options": [
+          {
+            "description": "First",
+            "label": "A"
+          },
+          {
+            "description": "Second",
+            "label": "B"
+          }
+        ],
+        "question": "Select materials"
+      }
+    }
+  ],
+  "TaskInteractionReferenceV1": [
+    {
+      "decoded": {
+        "attemptId": "actual-attempt",
+        "selector": {
+          "appServerEpoch": "native-epoch",
+          "kind": "question",
+          "questionId": "question-2000001",
+          "requestId": 2000001,
+          "serverId": "native-server",
+          "threadId": "thread",
+          "turnId": "turn"
+        }
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "attemptId": "actual-attempt",
+        "selector": {
+          "appServerEpoch": "native-epoch",
+          "kind": "question",
+          "questionId": "question-2000001",
+          "requestId": 2000001,
+          "serverId": "native-server",
+          "threadId": "thread",
+          "turnId": "turn"
+        }
+      }
+    }
+  ],
+  "TaskInteractionRespondParamsV1": [
+    {
+      "decoded": {
+        "answers": {
+          "question": {
+            "answers": [
+              "Continue"
+            ]
+          }
+        },
+        "reference": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001",
+            "requestId": 2000001,
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn"
+          }
+        }
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "answers": {
+          "question": {
+            "answers": [
+              "Continue"
+            ]
+          }
+        },
+        "reference": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001",
+            "requestId": 2000001,
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn"
+          }
+        }
+      }
+    }
+  ],
+  "TaskInteractionRespondResultV1": [
+    {
+      "decoded": {
+        "reference": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001",
+            "requestId": 2000001,
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn"
+          }
+        },
+        "state": "response_pending"
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "reference": {
+          "attemptId": "actual-attempt",
+          "selector": {
+            "appServerEpoch": "native-epoch",
+            "kind": "question",
+            "questionId": "question-2000001",
+            "requestId": 2000001,
+            "serverId": "native-server",
+            "threadId": "thread",
+            "turnId": "turn"
+          }
+        },
+        "state": "response_pending"
+      }
+    }
+  ],
+  "TaskInteractionSnapshotV1": [
+    {
+      "decoded": {
+        "items": [
+          {
+            "presentation": {
+              "approval": null,
+              "questions": [
+                {
+                  "header": "Original question",
+                  "id": "question",
+                  "isOther": false,
+                  "options": [
+                    {
+                      "description": "Use the original task",
+                      "label": "Continue"
+                    }
+                  ],
+                  "question": "Choose an option"
+                }
+              ]
+            },
+            "reference": {
+              "attemptId": "actual-attempt",
+              "selector": {
+                "appServerEpoch": "native-epoch",
+                "kind": "question",
+                "questionId": "question-2000001",
+                "requestId": 2000001,
+                "serverId": "native-server",
+                "threadId": "thread",
+                "turnId": "turn"
+              }
+            },
+            "state": "pending"
+          }
+        ],
+        "observationState": "observed",
+        "schemaVersion": 1,
+        "threadId": "thread"
+      },
+      "name": "valid-exact-native-selector-0",
+      "value": {
+        "items": [
+          {
+            "presentation": {
+              "approval": null,
+              "questions": [
+                {
+                  "header": "Original question",
+                  "id": "question",
+                  "isOther": false,
+                  "options": [
+                    {
+                      "description": "Use the original task",
+                      "label": "Continue"
+                    }
+                  ],
+                  "question": "Choose an option"
+                }
+              ]
+            },
+            "reference": {
+              "attemptId": "actual-attempt",
+              "selector": {
+                "appServerEpoch": "native-epoch",
+                "kind": "question",
+                "questionId": "question-2000001",
+                "requestId": 2000001,
+                "serverId": "native-server",
+                "threadId": "thread",
+                "turnId": "turn"
+              }
+            },
+            "state": "pending"
+          }
+        ],
+        "observationState": "observed",
+        "schemaVersion": 1,
+        "threadId": "thread"
+      }
+    },
+    {
+      "decoded": {
+        "items": [],
+        "observationState": "unknown",
+        "originalViewRequired": true,
+        "schemaVersion": 1,
+        "threadId": "thread"
+      },
+      "name": "valid-multiselect-compatible-0",
+      "value": {
+        "items": [],
+        "observationState": "unknown",
+        "originalViewRequired": true,
+        "schemaVersion": 1,
+        "threadId": "thread"
+      }
+    }
+  ],
+  "TaskInteractionStateV1": [
+    {
+      "decoded": "response_pending",
+      "name": "valid-exact-native-selector-0",
+      "value": "response_pending"
+    }
+  ]
+}

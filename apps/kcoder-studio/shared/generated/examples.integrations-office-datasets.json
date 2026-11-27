@@ -1,0 +1,214 @@
+{
+  "OfficeAggregate": [
+    {
+      "decoded": {
+        "column": "amount",
+        "function": "sum",
+        "key": "total"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "column": "amount",
+        "function": "sum",
+        "key": "total"
+      }
+    }
+  ],
+  "OfficeAggregateFunction": [
+    {
+      "decoded": "sum",
+      "name": "bounded-office-contract",
+      "value": "sum"
+    }
+  ],
+  "OfficeAggregateResult": [
+    {
+      "decoded": {
+        "key": "total",
+        "nonNullCount": 2,
+        "value": "0.3"
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "key": "total",
+        "nonNullCount": 2,
+        "value": "0.3"
+      }
+    }
+  ],
+  "OfficeDataset": [
+    {
+      "decoded": {
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "id": "dataset-case",
+        "owner": {
+          "accountId": "account-case",
+          "organizationId": null,
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "schemaVersion": 1,
+        "sourceRefs": []
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "id": "dataset-case",
+        "owner": {
+          "accountId": "account-case",
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "schemaVersion": 1,
+        "sourceRefs": []
+      }
+    }
+  ],
+  "OfficeDatasetPage": [
+    {
+      "decoded": {
+        "aggregates": [],
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "dataset": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "matchedRows": 2,
+        "nextCursor": null,
+        "numberText": [
+          [
+            null,
+            "1234.56"
+          ]
+        ],
+        "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "sourceRefs": [],
+        "totalRows": 2
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "aggregates": [],
+        "columns": [
+          {
+            "key": "amount",
+            "kind": "number",
+            "title": "金额",
+            "unit": "元"
+          }
+        ],
+        "dataset": {
+          "id": "artifact-case",
+          "revision": 1
+        },
+        "matchedRows": 2,
+        "nextCursor": null,
+        "numberText": [
+          [
+            null,
+            "1234.56"
+          ]
+        ],
+        "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "rows": [
+          [
+            1234.56
+          ],
+          [
+            null
+          ]
+        ],
+        "sourceRefs": [],
+        "totalRows": 2
+      }
+    }
+  ],
+  "OfficeDatasetPageParams": [
+    {
+      "decoded": {
+        "query": {
+          "aggregates": [],
+          "columns": [],
+          "filters": [],
+          "limit": 10,
+          "sort": []
+        },
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "query": {
+          "limit": 10
+        },
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeDatasetQuery": [
+    {
+      "decoded": {
+        "aggregates": [],
+        "columns": [],
+        "filters": [],
+        "limit": 10,
+        "sort": []
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "limit": 10
+      }
+    }
+  ]
+}

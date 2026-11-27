@@ -1,0 +1,199 @@
+{
+  "MigrationBatchControlCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "admissionSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "commandId": {
+        "type": "string"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "planId": {
+        "type": "string"
+      },
+      "runRequestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "admissionSequence",
+      "commandId",
+      "jobId",
+      "planId",
+      "runRequestId"
+    ],
+    "title": "MigrationBatchControlCancelParams",
+    "type": "object"
+  },
+  "MigrationBatchControlReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "commandId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationBatchControlReadParams",
+    "type": "object"
+  },
+  "MigrationBatchControlResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationBatchCancellationReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "admissionSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "commandId": {
+            "type": "string"
+          },
+          "planId": {
+            "type": "string"
+          },
+          "runRequestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedSequence",
+          "admissionSequence",
+          "commandId",
+          "planId",
+          "runRequestId"
+        ],
+        "type": "object"
+      },
+      "MigrationBatchControlGeneration": {
+        "additionalProperties": false,
+        "properties": {
+          "admissionSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mode": {
+            "$ref": "#/definitions/MigrationBatchControlMode"
+          },
+          "planId": {
+            "type": "string"
+          },
+          "runRequestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "admissionSequence",
+          "mode",
+          "planId",
+          "runRequestId"
+        ],
+        "type": "object"
+      },
+      "MigrationBatchControlMode": {
+        "enum": [
+          "apply",
+          "resume",
+          "rollback"
+        ],
+        "type": "string"
+      },
+      "MigrationBatchControlPhase": {
+        "enum": [
+          "unadmitted",
+          "tracked",
+          "legacy_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A receipt proves requested cancellation only, never that a worker has stopped.",
+    "properties": {
+      "cancelRequested": {
+        "type": "boolean"
+      },
+      "currentSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "generation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationBatchControlGeneration"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "lastCancellation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationBatchCancellationReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "phase": {
+        "$ref": "#/definitions/MigrationBatchControlPhase"
+      },
+      "planId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "requestedReceipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/MigrationBatchCancellationReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "cancelRequested",
+      "currentSequence",
+      "generation",
+      "jobId",
+      "lastCancellation",
+      "phase",
+      "planId",
+      "requestedReceipt"
+    ],
+    "title": "MigrationBatchControlResult",
+    "type": "object"
+  }
+}

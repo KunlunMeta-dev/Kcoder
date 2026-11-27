@@ -1,0 +1,82 @@
+{
+  "skill_name": "lark-base",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "这个多维表格链接 https://example.feishu.cn/base/BscAbc123?table=tblXyz&view=vewQq 里，帮我列出『状态』是『进行中』且金额 ≥ 100 的记录。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Resolve the URL with +url-resolve, then read with +record-list and a --filter-json tuple condition.",
+      "expectations": [
+        "Resolves the URL with base +url-resolve first",
+        "Uses +record-list with --filter-json conditions for 状态 and 金额",
+        "Projects only the needed fields with --field-id and writes NDJSON output"
+      ],
+      "assertions": [
+        {
+          "contains": "+url-resolve"
+        },
+        {
+          "contains": "--filter-json"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Create a new Base called \"Hiring Pipeline\" with a table \"Candidates\" that has Name (text), Stage (single select: Applied, Interview, Offer) and Applied On (date). List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Create the Base, first table and fields in one +base-create call.",
+      "expectations": [
+        "Uses one base +base-create call with --name, --table-name and --fields",
+        "Defines the single-select options and the date field in the fields array"
+      ],
+      "assertions": [
+        {
+          "contains": "+base-create"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "在多维表格 BscProj001 的『任务』表里新增三个字段：负责人（人员）、截止日期（日期）、优先级（单选：高/中/低）。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Locate the table with +table-list and add the fields in one +field-create --json call with an array.",
+      "expectations": [
+        "Finds the table with +table-list",
+        "Adds all three fields with a single +field-create --json array",
+        "Uses --as user"
+      ],
+      "assertions": [
+        {
+          "contains": "+field-create"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "List the records in table tblOrders of Base BscShop42 created in February 2024. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Use --filter-json with a date range expressed as > the last millisecond of January 31 and < March 1, since dates do not support >=.",
+      "expectations": [
+        "Uses +record-list with --filter-json on the date field",
+        "Expresses the inclusive lower bound with > ExactDate of the previous day's last millisecond, not >=",
+        "Uses < ExactDate(2024-03-01 00:00:00) as the upper bound"
+      ],
+      "assertions": [
+        {
+          "contains": "ExactDate"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "我记得有个叫『客户回访』的多维表格，帮我找到它然后看看里面有哪些表。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Resolve the Base by title with +title-resolve, then list its tables with +table-list.",
+      "expectations": [
+        "Uses base +title-resolve with the keyword 客户回访",
+        "Asks the user to choose when several Bases match instead of guessing",
+        "Lists tables with +table-list"
+      ],
+      "assertions": [
+        {
+          "contains": "+title-resolve"
+        }
+      ]
+    }
+  ]
+}

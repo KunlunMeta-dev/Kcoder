@@ -1,0 +1,62 @@
+{
+  "AttachmentDraftRetainParams": [
+    {
+      "decoded": {
+        "ownerScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "paths": [
+          "/staged/a.txt"
+        ],
+        "recoverOnly": false,
+        "threadId": "thread-a"
+      },
+      "name": "initial_seal",
+      "value": {
+        "ownerScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "paths": [
+          "/staged/a.txt"
+        ],
+        "threadId": "thread-a"
+      }
+    },
+    {
+      "decoded": {
+        "ownerScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "paths": [
+          "/session/draft-attachments/d-a/content/a.txt"
+        ],
+        "recoverOnly": true,
+        "threadId": "thread-a"
+      },
+      "name": "recovery_only",
+      "value": {
+        "ownerScope": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "paths": [
+          "/session/draft-attachments/d-a/content/a.txt"
+        ],
+        "recoverOnly": true,
+        "threadId": "thread-a"
+      }
+    }
+  ],
+  "AttachmentDraftRetainResult": [
+    {
+      "decoded": {
+        "drafts": [
+          {
+            "path": "/session/draft-attachments/d-a/content/a.txt",
+            "sourcePath": "/staged/a.txt"
+          }
+        ]
+      },
+      "name": "sealed_mapping",
+      "value": {
+        "drafts": [
+          {
+            "path": "/session/draft-attachments/d-a/content/a.txt",
+            "sourcePath": "/staged/a.txt"
+          }
+        ]
+      }
+    }
+  ]
+}

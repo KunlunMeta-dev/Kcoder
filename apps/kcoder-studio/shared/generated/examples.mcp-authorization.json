@@ -1,0 +1,263 @@
+{
+  "McpProviderRevocationParams": [
+    {
+      "decoded": {
+        "action": "prepare",
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      },
+      "name": "prepare",
+      "value": {
+        "action": "prepare",
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      }
+    },
+    {
+      "decoded": {
+        "action": "commit",
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      },
+      "name": "commit",
+      "value": {
+        "action": "commit",
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      }
+    },
+    {
+      "decoded": {
+        "action": "read",
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      },
+      "name": "read",
+      "value": {
+        "action": "read",
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      }
+    },
+    {
+      "decoded": {
+        "action": "cancel",
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      },
+      "name": "cancel",
+      "value": {
+        "action": "cancel",
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "requestId": "original-revocation",
+        "server": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      }
+    }
+  ],
+  "McpProviderRevocationPhase": [
+    {
+      "decoded": "prepared",
+      "name": "prepared",
+      "value": "prepared"
+    },
+    {
+      "decoded": "accepted",
+      "name": "accepted",
+      "value": "accepted"
+    },
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    },
+    {
+      "decoded": "unsupported",
+      "name": "unsupported",
+      "value": "unsupported"
+    },
+    {
+      "decoded": "rejected",
+      "name": "rejected",
+      "value": "rejected"
+    }
+  ],
+  "McpProviderRevocationReason": [
+    {
+      "decoded": "awaitingConfirmation",
+      "name": "awaitingConfirmation",
+      "value": "awaitingConfirmation"
+    },
+    {
+      "decoded": "providerAccepted",
+      "name": "providerAccepted",
+      "value": "providerAccepted"
+    },
+    {
+      "decoded": "outcomeUnconfirmed",
+      "name": "outcomeUnconfirmed",
+      "value": "outcomeUnconfirmed"
+    },
+    {
+      "decoded": "endpointNotAdvertised",
+      "name": "endpointNotAdvertised",
+      "value": "endpointNotAdvertised"
+    },
+    {
+      "decoded": "authenticationUnsupported",
+      "name": "authenticationUnsupported",
+      "value": "authenticationUnsupported"
+    },
+    {
+      "decoded": "tokenTypeUnsupported",
+      "name": "tokenTypeUnsupported",
+      "value": "tokenTypeUnsupported"
+    },
+    {
+      "decoded": "authorizationUnavailable",
+      "name": "authorizationUnavailable",
+      "value": "authorizationUnavailable"
+    },
+    {
+      "decoded": "sourceChanged",
+      "name": "sourceChanged",
+      "value": "sourceChanged"
+    },
+    {
+      "decoded": "credentialsChanged",
+      "name": "credentialsChanged",
+      "value": "credentialsChanged"
+    },
+    {
+      "decoded": "providerRejected",
+      "name": "providerRejected",
+      "value": "providerRejected"
+    },
+    {
+      "decoded": "intentExpired",
+      "name": "intentExpired",
+      "value": "intentExpired"
+    },
+    {
+      "decoded": "preparationCancelled",
+      "name": "preparationCancelled",
+      "value": "preparationCancelled"
+    },
+    {
+      "decoded": "originalReceiptUnavailable",
+      "name": "originalReceiptUnavailable",
+      "value": "originalReceiptUnavailable"
+    }
+  ],
+  "McpProviderRevocationReceipt": [
+    {
+      "decoded": {
+        "currentSourceMatches": true,
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "localCredentialsRemoved": false,
+        "phase": "prepared",
+        "reason": "awaitingConfirmation",
+        "requestId": "original-revocation",
+        "sourceState": "matches"
+      },
+      "name": "original_prepared",
+      "value": {
+        "currentSourceMatches": true,
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "localCredentialsRemoved": false,
+        "phase": "prepared",
+        "reason": "awaitingConfirmation",
+        "requestId": "original-revocation",
+        "sourceState": "matches"
+      }
+    },
+    {
+      "decoded": {
+        "currentSourceMatches": true,
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "localCredentialsRemoved": false,
+        "phase": "unknown",
+        "reason": "outcomeUnconfirmed",
+        "requestId": "original-revocation",
+        "sourceState": "matches"
+      },
+      "name": "unknown_without_replay",
+      "value": {
+        "currentSourceMatches": true,
+        "intentRef": {
+          "id": "native-original-intent",
+          "revision": "native-only-revision"
+        },
+        "localCredentialsRemoved": false,
+        "phase": "unknown",
+        "reason": "outcomeUnconfirmed",
+        "requestId": "original-revocation",
+        "sourceState": "matches"
+      }
+    }
+  ],
+  "McpProviderRevocationSourceState": [
+    {
+      "decoded": "matches",
+      "name": "matches",
+      "value": "matches"
+    },
+    {
+      "decoded": "changed",
+      "name": "changed",
+      "value": "changed"
+    },
+    {
+      "decoded": "unavailable",
+      "name": "unavailable",
+      "value": "unavailable"
+    }
+  ]
+}

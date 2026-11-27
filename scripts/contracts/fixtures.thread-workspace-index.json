@@ -1,0 +1,190 @@
+{
+  "ThreadWorkspaceLookupParams": {
+    "valid": [
+      {
+        "name": "old-thread",
+        "value": {
+          "threadId": "old_1"
+        }
+      },
+      {
+        "name": "opaque-page",
+        "value": {
+          "threadId": "old_1",
+          "cursor": "opaque-page",
+          "limit": 64
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "path",
+        "value": {
+          "threadId": "../outside"
+        }
+      },
+      {
+        "name": "zero",
+        "value": {
+          "threadId": "old_1",
+          "limit": 0
+        }
+      },
+      {
+        "name": "too-many",
+        "value": {
+          "threadId": "old_1",
+          "limit": 65
+        }
+      },
+      {
+        "name": "empty-cursor",
+        "value": {
+          "threadId": "old_1",
+          "cursor": ""
+        }
+      },
+      {
+        "name": "newline-cursor",
+        "value": {
+          "threadId": "old_1",
+          "cursor": "a\nb"
+        }
+      },
+      {
+        "name": "request-profile",
+        "value": {
+          "threadId": "old_1",
+          "profile": "/other"
+        }
+      },
+      {
+        "name": "non-opaque-unicode",
+        "value": {
+          "threadId": "old_1",
+          "cursor": "私有游标"
+        }
+      }
+    ]
+  },
+  "ThreadWorkspaceHintV1": {
+    "valid": [
+      {
+        "name": "unix",
+        "value": {
+          "workspacePath": "/owned/old-workspace"
+        }
+      },
+      {
+        "name": "windows",
+        "value": {
+          "workspacePath": "C:\\Users\\ordinary\\workspace"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "empty",
+        "value": {
+          "workspacePath": ""
+        }
+      },
+      {
+        "name": "control",
+        "value": {
+          "workspacePath": "/owned/\nworkspace"
+        }
+      },
+      {
+        "name": "unknown",
+        "value": {
+          "workspacePath": "/owned",
+          "grant": true
+        }
+      }
+    ]
+  },
+  "ThreadWorkspaceLookupCompleteness": {
+    "valid": [
+      {
+        "name": "complete",
+        "value": "complete"
+      },
+      {
+        "name": "partial",
+        "value": "partial"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown",
+        "value": "unknown"
+      },
+      {
+        "name": "case",
+        "value": "Complete"
+      }
+    ]
+  },
+  "ThreadWorkspaceLookupResult": {
+    "valid": [
+      {
+        "name": "empty",
+        "value": {
+          "threadId": "old_1",
+          "candidates": [],
+          "completeness": "complete",
+          "issueCount": 0,
+          "scannedProjects": 0
+        }
+      },
+      {
+        "name": "partial-page",
+        "value": {
+          "threadId": "old_1",
+          "candidates": [
+            {
+              "workspacePath": "/owned/old"
+            }
+          ],
+          "completeness": "partial",
+          "issueCount": 1,
+          "scannedProjects": 64,
+          "nextCursor": "page-2"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-issues",
+        "value": {
+          "threadId": "old_1",
+          "candidates": [],
+          "completeness": "complete",
+          "scannedProjects": 0
+        }
+      },
+      {
+        "name": "negative-issues",
+        "value": {
+          "threadId": "old_1",
+          "candidates": [],
+          "completeness": "complete",
+          "issueCount": -1,
+          "scannedProjects": 0
+        }
+      },
+      {
+        "name": "extra",
+        "value": {
+          "threadId": "old_1",
+          "candidates": [],
+          "completeness": "complete",
+          "issueCount": 0,
+          "scannedProjects": 0,
+          "authorized": true
+        }
+      }
+    ]
+  }
+}

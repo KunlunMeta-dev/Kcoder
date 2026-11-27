@@ -1,0 +1,31 @@
+[package]
+name = "kcoder_native_receipts"
+description = "Native operation, policy and lease storage and original receipt reads."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow = { workspace = true }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_integration_storage = { path = "../../../kcoder_state/internal/integration_storage" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_native_delegation = { path = "../../../kcoder_permissions/internal/native_delegation" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lib]
+path = "../../src/internal/native_receipts/lib.rs"

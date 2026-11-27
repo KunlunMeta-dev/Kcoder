@@ -1,0 +1,1063 @@
+{
+  "ConnectivityChatKind": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "private",
+      "group",
+      "channel"
+    ],
+    "title": "ConnectivityChatKind",
+    "type": "string"
+  },
+  "ConnectivityChatObservationState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "observed",
+      "stale"
+    ],
+    "title": "ConnectivityChatObservationState",
+    "type": "string"
+  },
+  "ConnectivityChatTaskBinding": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "ConnectivityChatTaskBindingState": {
+        "enum": [
+          "active",
+          "unbound"
+        ],
+        "type": "string"
+      },
+      "ConnectivityConnectionLocator": {
+        "additionalProperties": false,
+        "description": "The original connection namespace remains the owner of credentials and Inbox.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "namespaceId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          }
+        },
+        "required": [
+          "connectionId",
+          "namespaceId",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ConnectivityExternalChatRange": {
+        "additionalProperties": false,
+        "description": "Operator identity belongs to each message and is not a conversation boundary.",
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "chatKind": {
+            "$ref": "#/definitions/ConnectivityChatKind"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/definitions/MessagingPlatform"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chatId",
+          "chatKind",
+          "connectionId",
+          "platform",
+          "tenantId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ConnectivityTaskLocator": {
+        "additionalProperties": false,
+        "description": "This refers to an original recoverable task, without copying its history.",
+        "properties": {
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A target-side relationship projection. Execution and delivery reauthorize it.",
+    "properties": {
+      "boundAfterSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "changedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "changedBy": {
+        "type": "string"
+      },
+      "connection": {
+        "$ref": "#/definitions/ConnectivityConnectionLocator"
+      },
+      "generation": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "range": {
+        "$ref": "#/definitions/ConnectivityExternalChatRange"
+      },
+      "revision": {
+        "type": "string"
+      },
+      "sourceRevision": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "#/definitions/ConnectivityChatTaskBindingState"
+      },
+      "task": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ConnectivityTaskLocator"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "boundAfterSequence",
+      "changedAtMs",
+      "changedBy",
+      "connection",
+      "generation",
+      "id",
+      "operationId",
+      "range",
+      "revision",
+      "sourceRevision",
+      "state"
+    ],
+    "title": "ConnectivityChatTaskBinding",
+    "type": "object"
+  },
+  "ConnectivityChatTaskBindingReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "ConnectivityChatTaskBinding": {
+        "additionalProperties": false,
+        "description": "A target-side relationship projection. Execution and delivery reauthorize it.",
+        "properties": {
+          "boundAfterSequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "changedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "changedBy": {
+            "type": "string"
+          },
+          "connection": {
+            "$ref": "#/definitions/ConnectivityConnectionLocator"
+          },
+          "generation": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/definitions/ConnectivityExternalChatRange"
+          },
+          "revision": {
+            "type": "string"
+          },
+          "sourceRevision": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/definitions/ConnectivityChatTaskBindingState"
+          },
+          "task": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ConnectivityTaskLocator"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "boundAfterSequence",
+          "changedAtMs",
+          "changedBy",
+          "connection",
+          "generation",
+          "id",
+          "operationId",
+          "range",
+          "revision",
+          "sourceRevision",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ConnectivityChatTaskBindingState": {
+        "enum": [
+          "active",
+          "unbound"
+        ],
+        "type": "string"
+      },
+      "ConnectivityConnectionLocator": {
+        "additionalProperties": false,
+        "description": "The original connection namespace remains the owner of credentials and Inbox.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "namespaceId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          }
+        },
+        "required": [
+          "connectionId",
+          "namespaceId",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ConnectivityExternalChatRange": {
+        "additionalProperties": false,
+        "description": "Operator identity belongs to each message and is not a conversation boundary.",
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "chatKind": {
+            "$ref": "#/definitions/ConnectivityChatKind"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/definitions/MessagingPlatform"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chatId",
+          "chatKind",
+          "connectionId",
+          "platform",
+          "tenantId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ConnectivityTaskLocator": {
+        "additionalProperties": false,
+        "description": "This refers to an original recoverable task, without copying its history.",
+        "properties": {
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Stable original mutation receipt; archiving a previous task is a separate fact.",
+    "properties": {
+      "binding": {
+        "$ref": "#/definitions/ConnectivityChatTaskBinding"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "previousTask": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ConnectivityTaskLocator"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "binding",
+      "operationId"
+    ],
+    "title": "ConnectivityChatTaskBindingReceipt",
+    "type": "object"
+  },
+  "ConnectivityChatTaskBindingState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "active",
+      "unbound"
+    ],
+    "title": "ConnectivityChatTaskBindingState",
+    "type": "string"
+  },
+  "ConnectivityExternalChatObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "ConnectivityChatObservationState": {
+        "enum": [
+          "observed",
+          "stale"
+        ],
+        "type": "string"
+      },
+      "ConnectivityExternalChatRange": {
+        "additionalProperties": false,
+        "description": "Operator identity belongs to each message and is not a conversation boundary.",
+        "properties": {
+          "chatId": {
+            "type": "string"
+          },
+          "chatKind": {
+            "$ref": "#/definitions/ConnectivityChatKind"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/definitions/MessagingPlatform"
+          },
+          "tenantId": {
+            "type": "string"
+          },
+          "topicId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "format": "uint8",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "chatId",
+          "chatKind",
+          "connectionId",
+          "platform",
+          "tenantId",
+          "version"
+        ],
+        "type": "object"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Target-side metadata projection without message bodies or credentials.",
+    "properties": {
+      "botId": {
+        "type": "string"
+      },
+      "firstObservedAt": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "id": {
+        "type": "string"
+      },
+      "lastObservedAt": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "lastOperatorId": {
+        "type": "string"
+      },
+      "observationState": {
+        "$ref": "#/definitions/ConnectivityChatObservationState"
+      },
+      "range": {
+        "$ref": "#/definitions/ConnectivityExternalChatRange"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "botId",
+      "firstObservedAt",
+      "id",
+      "lastObservedAt",
+      "lastOperatorId",
+      "observationState",
+      "range",
+      "revision"
+    ],
+    "title": "ConnectivityExternalChatObservation",
+    "type": "object"
+  },
+  "ConnectivityExternalChatRange": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityChatKind": {
+        "enum": [
+          "private",
+          "group",
+          "channel"
+        ],
+        "type": "string"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Operator identity belongs to each message and is not a conversation boundary.",
+    "properties": {
+      "chatId": {
+        "type": "string"
+      },
+      "chatKind": {
+        "$ref": "#/definitions/ConnectivityChatKind"
+      },
+      "connectionId": {
+        "type": "string"
+      },
+      "platform": {
+        "$ref": "#/definitions/MessagingPlatform"
+      },
+      "tenantId": {
+        "type": "string"
+      },
+      "topicId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "version": {
+        "format": "uint8",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "chatId",
+      "chatKind",
+      "connectionId",
+      "platform",
+      "tenantId",
+      "version"
+    ],
+    "title": "ConnectivityExternalChatRange",
+    "type": "object"
+  },
+  "ConnectivityTaskBindingMutation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "The task belongs to the actual current Native workspace, never a supplied path.",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "bindTask"
+            ],
+            "type": "string"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "expectedBindingRevision": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          },
+          "externalChatRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "connectionId",
+          "expectedBindingRevision",
+          "externalChatRef",
+          "taskThreadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "switchTask"
+            ],
+            "type": "string"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "expectedBindingRevision": {
+            "type": "string"
+          },
+          "externalChatRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "connectionId",
+          "expectedBindingRevision",
+          "externalChatRef",
+          "taskThreadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "prepareTaskRuntime"
+            ],
+            "type": "string"
+          },
+          "bindingRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "bindingRef",
+          "connectionId",
+          "taskThreadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "unbindTask"
+            ],
+            "type": "string"
+          },
+          "bindingRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "connectionId": {
+            "type": "string"
+          },
+          "taskThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "bindingRef",
+          "connectionId",
+          "taskThreadId"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "ConnectivityTaskBindingMutation"
+  },
+  "ConnectivityTaskBindingQuery": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "taskThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "taskThreadId"
+    ],
+    "title": "ConnectivityTaskBindingQuery",
+    "type": "object"
+  },
+  "ConnectivityTaskBindingSummaryQuery": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Bounded read-only projection for tasks already visible in the current workspace.",
+    "properties": {
+      "taskThreadIds": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "taskThreadIds"
+    ],
+    "title": "ConnectivityTaskBindingSummaryQuery",
+    "type": "object"
+  },
+  "ConnectivityTaskLocator": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "This refers to an original recoverable task, without copying its history.",
+    "properties": {
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "scope",
+      "threadId"
+    ],
+    "title": "ConnectivityTaskLocator",
+    "type": "object"
+  },
+  "ConnectivityTaskRuntimeOwner": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ConnectivityTaskLocator": {
+        "additionalProperties": false,
+        "description": "This refers to an original recoverable task, without copying its history.",
+        "properties": {
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "scope",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "ConnectivityTaskRuntimePhase": {
+        "description": "Current original runtime ownership, independent of execution authorization.",
+        "enum": [
+          "unowned",
+          "prepared",
+          "resident"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "phase": {
+        "$ref": "#/definitions/ConnectivityTaskRuntimePhase"
+      },
+      "sourceOperationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "task": {
+        "$ref": "#/definitions/ConnectivityTaskLocator"
+      }
+    },
+    "required": [
+      "phase",
+      "task"
+    ],
+    "title": "ConnectivityTaskRuntimeOwner",
+    "type": "object"
+  },
+  "ConnectivityTaskRuntimePhase": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Current original runtime ownership, independent of execution authorization.",
+    "enum": [
+      "unowned",
+      "prepared",
+      "resident"
+    ],
+    "title": "ConnectivityTaskRuntimePhase",
+    "type": "string"
+  }
+}

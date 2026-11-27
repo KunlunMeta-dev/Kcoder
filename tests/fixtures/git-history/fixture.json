@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "name": "git-history",
+  "version": "1",
+  "description": "描述确定性提交序列的无 .git 测试模板"
+}

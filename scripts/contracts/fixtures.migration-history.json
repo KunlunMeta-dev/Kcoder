@@ -1,0 +1,1064 @@
+{
+  "MigrationHistoryDiscoverParams": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "source": "codex"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "source": "codex",
+          "path": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationHistorySourcesParams": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "catalogId": "catalog"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "catalogId": "catalog",
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "MigrationHistorySourcesResult": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "catalogId": "catalog",
+          "items": [],
+          "totalItems": 0,
+          "nextCursor": null,
+          "discoveryComplete": true,
+          "problems": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "catalogId": "catalog",
+          "items": "not-array",
+          "totalItems": 0,
+          "nextCursor": null,
+          "discoveryComplete": true,
+          "problems": []
+        }
+      }
+    ]
+  },
+  "MigrationHistoryCreateParams": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "catalogId": "catalog",
+          "sourceHandle": "selection",
+          "requestId": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "catalogId": "catalog",
+          "sourceHandle": "selection",
+          "requestId": "id",
+          "path": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryRunParams": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "jobId": "job",
+          "expectedSequence": 0,
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryPhase": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": "capturing"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": "executing_imported_tools"
+      }
+    ]
+  },
+  "MigrationHistoryProgressUnit": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": "bytes"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": "percent"
+      }
+    ]
+  },
+  "MigrationHistoryProgress": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "phase": "normalizing",
+          "processed": 4,
+          "total": 12,
+          "unit": "records"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "phase": "capturing",
+          "processed": -1,
+          "total": 12,
+          "unit": "bytes"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryJobResult": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "job": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "sequence": 0,
+            "source": "codex",
+            "stage": "capturing",
+            "archiveId": null,
+            "archived": false,
+            "normalization": null,
+            "failureCode": null,
+            "cancelRequested": false
+          },
+          "workerRunning": false,
+          "progress": null,
+          "workerError": null
+        }
+      },
+      {
+        "name": "legacy_captured_archive",
+        "value": {
+          "job": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "sequence": 0,
+            "source": "codex",
+            "stage": "planned",
+            "archiveId": "archive-selected",
+            "archived": false,
+            "normalization": null,
+            "failureCode": null,
+            "cancelRequested": false
+          },
+          "workerRunning": false,
+          "progress": null,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "job": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "sequence": 0,
+            "source": "codex",
+            "stage": "completed",
+            "archiveId": null,
+            "archived": false,
+            "normalization": null,
+            "failureCode": null,
+            "cancelRequested": false
+          },
+          "workerRunning": false,
+          "progress": null,
+          "workerError": null
+        }
+      }
+    ]
+  },
+  "MigrationHistoryJobsResult": {
+    "valid": [
+      {
+        "name": "account_owned_archive",
+        "value": {
+          "jobs": [
+            {
+              "job": {
+                "jobId": "11111111-1111-4111-8111-111111111111",
+                "sequence": 0,
+                "source": "codex",
+                "stage": "capturing",
+                "archiveId": null,
+                "archived": false,
+                "normalization": null,
+                "failureCode": null,
+                "cancelRequested": false
+              },
+              "workerRunning": false,
+              "progress": null,
+              "workerError": null
+            }
+          ],
+          "nextCursor": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_wrong_shape",
+        "value": {
+          "jobs": [
+            {
+              "job": {
+                "jobId": "11111111-1111-4111-8111-111111111111",
+                "sequence": 0,
+                "source": "codex",
+                "stage": "capturing",
+                "archiveId": null,
+                "archived": false,
+                "normalization": null,
+                "failureCode": null,
+                "cancelRequested": false
+              },
+              "workerRunning": false,
+              "progress": null,
+              "workerError": null
+            }
+          ],
+          "nextCursor": 12
+        }
+      }
+    ]
+  },
+  "MigrationContinuationCreateParams": {
+    "valid": [
+      {
+        "name": "account_owned_idle_continuation",
+        "value": {
+          "requestId": "11111111-1111-4111-8111-111111111111",
+          "sourceJobId": "22222222-2222-4222-8222-222222222222",
+          "viewId": "view",
+          "policy": {
+            "maxContextBytes": 4194304,
+            "maxEntries": 2048,
+            "maxAttachments": 256,
+            "maxAttachmentBytes": 536870912
+          },
+          "options": {
+            "model": null,
+            "settingsTemplate": null,
+            "studioWorkMode": "kcoder"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_client_path",
+        "value": {
+          "requestId": "11111111-1111-4111-8111-111111111111",
+          "sourceJobId": "22222222-2222-4222-8222-222222222222",
+          "viewId": "view",
+          "policy": {
+            "maxContextBytes": 4194304,
+            "maxEntries": 2048,
+            "maxAttachments": 256,
+            "maxAttachmentBytes": 536870912
+          },
+          "options": {
+            "model": null,
+            "settingsTemplate": null,
+            "studioWorkMode": "kcoder"
+          },
+          "path": "/other/account"
+        }
+      }
+    ]
+  },
+  "MigrationContinuationReadParams": {
+    "valid": [
+      {
+        "name": "account_owned_idle_continuation",
+        "value": {
+          "jobId": "11111111-1111-4111-8111-111111111111"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_client_path",
+        "value": {
+          "jobId": "11111111-1111-4111-8111-111111111111",
+          "path": "/other/account"
+        }
+      }
+    ]
+  },
+  "MigrationContinuationRunParams": {
+    "valid": [
+      {
+        "name": "account_owned_idle_continuation",
+        "value": {
+          "jobId": "11111111-1111-4111-8111-111111111111",
+          "expectedSequence": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_client_path",
+        "value": {
+          "jobId": "11111111-1111-4111-8111-111111111111",
+          "expectedSequence": 0,
+          "path": "/other/account"
+        }
+      }
+    ]
+  },
+  "MigrationContinuationStateResult": {
+    "valid": [
+      {
+        "name": "account_owned_idle_continuation",
+        "value": {
+          "job": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "sourceJobId": "22222222-2222-4222-8222-222222222222",
+            "viewId": "view",
+            "policy": {
+              "maxContextBytes": 4194304,
+              "maxEntries": 2048,
+              "maxAttachments": 256,
+              "maxAttachmentBytes": 536870912
+            },
+            "options": {
+              "model": null,
+              "settingsTemplate": null,
+              "studioWorkMode": "kcoder"
+            },
+            "sequence": 0,
+            "stage": "planned",
+            "threadId": null,
+            "compilation": null,
+            "projection": null,
+            "processedBytes": 0,
+            "failureCode": null,
+            "cancelRequested": false,
+            "cancelRevision": 0
+          },
+          "workerRunning": false,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_client_path",
+        "value": {
+          "job": {
+            "jobId": "11111111-1111-4111-8111-111111111111",
+            "sourceJobId": "22222222-2222-4222-8222-222222222222",
+            "viewId": "view",
+            "policy": {
+              "maxContextBytes": 4194304,
+              "maxEntries": 2048,
+              "maxAttachments": 256,
+              "maxAttachmentBytes": 536870912
+            },
+            "options": {
+              "model": null,
+              "settingsTemplate": null,
+              "studioWorkMode": "kcoder"
+            },
+            "sequence": 0,
+            "stage": "planned",
+            "threadId": null,
+            "compilation": null,
+            "projection": null,
+            "processedBytes": 0,
+            "failureCode": null,
+            "cancelRequested": false,
+            "cancelRevision": 0
+          },
+          "workerRunning": false,
+          "workerError": null,
+          "path": "/other/account"
+        }
+      }
+    ]
+  },
+  "MigrationContinuationSourceParams": {
+    "valid": [
+      {
+        "name": "native_thread_only",
+        "value": {
+          "threadId": "Ab123"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_client_source_path",
+        "value": {
+          "threadId": "Ab123",
+          "path": "/other"
+        }
+      }
+    ]
+  },
+  "MigrationContinuationSourceResult": {
+    "valid": [
+      {
+        "name": "ordinary_thread",
+        "value": {
+          "source": null
+        }
+      },
+      {
+        "name": "durable_source",
+        "value": {
+          "source": {
+            "operationId": "op",
+            "sourceJobId": "source",
+            "viewId": "view"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_private_fields",
+        "value": {
+          "source": {
+            "operationId": "op",
+            "sourceJobId": "source",
+            "viewId": "view",
+            "path": "/private"
+          }
+        }
+      }
+    ]
+  },
+  "MigrationHistorySearchParams": {
+    "valid": [
+      {
+        "name": "decoded_body_search",
+        "value": {
+          "jobId": "job",
+          "viewId": null,
+          "query": "内容",
+          "caseSensitive": false,
+          "cursor": null,
+          "limit": 10
+        }
+      },
+      {
+        "name": "omitted_case_mode_defaults_to_insensitive",
+        "value": {
+          "jobId": "job",
+          "query": "needle"
+        }
+      },
+      {
+        "name": "selected_branch_sealed_page",
+        "value": {
+          "jobId": "job",
+          "viewId": "selected-branch",
+          "query": "内容😀",
+          "caseSensitive": true,
+          "cursor": "sealed-next",
+          "limit": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_raw_offsets",
+        "value": {
+          "jobId": "job",
+          "query": "needle",
+          "offset": 4
+        }
+      },
+      {
+        "name": "rejects_path",
+        "value": {
+          "jobId": "job",
+          "query": "needle",
+          "path": "/other"
+        }
+      },
+      {
+        "name": "rejects_numeric_cursor",
+        "value": {
+          "jobId": "job",
+          "query": "needle",
+          "cursor": 8
+        }
+      },
+      {
+        "name": "rejects_non_boolean_case_mode",
+        "value": {
+          "jobId": "job",
+          "query": "needle",
+          "caseSensitive": "false"
+        }
+      },
+      {
+        "name": "rejects_limit_outside_wire_u8",
+        "value": {
+          "jobId": "job",
+          "query": "needle",
+          "limit": 256
+        }
+      }
+    ]
+  },
+  "MigrationHistorySearchResult": {
+    "valid": [
+      {
+        "name": "bounded_scan_continues",
+        "value": {
+          "items": [],
+          "nextCursor": "sealed",
+          "scannedRecords": 0,
+          "totalRecords": 1,
+          "processedBytes": 1000,
+          "unsupportedBlocks": 0,
+          "excludedBlocks": 0
+        }
+      },
+      {
+        "name": "finished_empty",
+        "value": {
+          "items": [],
+          "nextCursor": null,
+          "scannedRecords": 3,
+          "totalRecords": 3,
+          "processedBytes": 1000,
+          "unsupportedBlocks": 0,
+          "excludedBlocks": 0
+        }
+      },
+      {
+        "name": "selected_text_and_tool_result_matches",
+        "value": {
+          "items": [
+            {
+              "position": 2,
+              "record": 17,
+              "block": {
+                "index": 3,
+                "kind": "tool_result",
+                "preview": "旧工具结果：成功（仅为记录）",
+                "sourceBytes": 80000,
+                "decodedBytes": 79900,
+                "bodyAvailable": true,
+                "callId": "historical-call",
+                "name": null,
+                "namespace": null,
+                "sourceType": null,
+                "outcome": "recorded_result"
+              },
+              "role": "tool",
+              "before": "旧工具结果：",
+              "matched": "成功",
+              "after": "（仅为记录，未重新执行）",
+              "bodyCursor": "sealed-tool-body"
+            },
+            {
+              "position": 4,
+              "record": 19,
+              "block": {
+                "index": 1,
+                "kind": "text",
+                "preview": "检索内容😀",
+                "sourceBytes": 128,
+                "decodedBytes": 96,
+                "bodyAvailable": true,
+                "callId": null,
+                "name": null,
+                "namespace": null,
+                "sourceType": null,
+                "outcome": null
+              },
+              "role": "user",
+              "before": "检索",
+              "matched": "内容😀",
+              "after": "的后文",
+              "bodyCursor": "sealed-text-body"
+            }
+          ],
+          "nextCursor": "sealed-next",
+          "scannedRecords": 5,
+          "totalRecords": 20,
+          "processedBytes": 81920,
+          "unsupportedBlocks": 1,
+          "excludedBlocks": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private_offsets_not_public",
+        "value": {
+          "items": [],
+          "nextCursor": null,
+          "scannedRecords": 3,
+          "totalRecords": 3,
+          "processedBytes": 1000,
+          "unsupportedBlocks": 0,
+          "excludedBlocks": 0,
+          "offset": 6
+        }
+      },
+      {
+        "name": "rejects_hit_raw_offset",
+        "value": {
+          "items": [
+            {
+              "position": 2,
+              "record": 17,
+              "block": {
+                "index": 3,
+                "kind": "tool_result",
+                "sourceBytes": 80000,
+                "bodyAvailable": true
+              },
+              "role": "tool",
+              "before": "旧结果：",
+              "matched": "成功",
+              "after": "",
+              "bodyCursor": "sealed-body",
+              "byteOffset": 4096
+            }
+          ],
+          "nextCursor": null,
+          "scannedRecords": 3,
+          "totalRecords": 3,
+          "processedBytes": 1000,
+          "unsupportedBlocks": 0,
+          "excludedBlocks": 0
+        }
+      },
+      {
+        "name": "rejects_hit_without_sealed_body_cursor",
+        "value": {
+          "items": [
+            {
+              "position": 2,
+              "record": 17,
+              "block": {
+                "index": 3,
+                "kind": "tool_result",
+                "sourceBytes": 80000,
+                "bodyAvailable": true
+              },
+              "role": "tool",
+              "before": "旧结果：",
+              "matched": "成功",
+              "after": ""
+            }
+          ],
+          "nextCursor": null,
+          "scannedRecords": 3,
+          "totalRecords": 3,
+          "processedBytes": 1000,
+          "unsupportedBlocks": 0,
+          "excludedBlocks": 0
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoLookupParams": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "continuationJobId": "00000000-0000-4000-8000-000000000002"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "continuationJobId": "00000000-0000-4000-8000-000000000002",
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoPreviewParams": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "continuationJobId": "00000000-0000-4000-8000-000000000002"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "continuationJobId": "00000000-0000-4000-8000-000000000002",
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoLookupResult": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "existingJob": null
+        }
+      },
+      {
+        "name": "restore_authoritative_operation",
+        "value": {
+          "existingJob": {
+            "jobId": "00000000-0000-4000-8000-000000000001",
+            "continuationJobId": "00000000-0000-4000-8000-000000000002",
+            "sessionId": "Ab123",
+            "sequence": 3,
+            "stage": "checking",
+            "checkedBytes": 1024,
+            "cancelRequested": false,
+            "cancelRevision": 0,
+            "failureCode": null,
+            "archivesRetained": true,
+            "attachmentsRetained": true
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "existingJob": null,
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoPreviewResult": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "continuationJobId": "00000000-0000-4000-8000-000000000002",
+          "sessionId": "Ab123",
+          "canUndo": true,
+          "reasonCode": null,
+          "existingJob": null,
+          "archivesRetained": true,
+          "attachmentsRetained": true
+        }
+      },
+      {
+        "name": "existing_operation_requires_reconciliation",
+        "value": {
+          "continuationJobId": "00000000-0000-4000-8000-000000000002",
+          "sessionId": "Ab123",
+          "canUndo": false,
+          "reasonCode": "historical_undo_outcome_unknown",
+          "existingJob": {
+            "jobId": "00000000-0000-4000-8000-000000000001",
+            "continuationJobId": "00000000-0000-4000-8000-000000000002",
+            "sessionId": "Ab123",
+            "sequence": 3,
+            "stage": "outcome_unknown",
+            "checkedBytes": 1024,
+            "cancelRequested": false,
+            "cancelRevision": 0,
+            "failureCode": null,
+            "archivesRetained": true,
+            "attachmentsRetained": true
+          },
+          "archivesRetained": true,
+          "attachmentsRetained": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "continuationJobId": "00000000-0000-4000-8000-000000000002",
+          "sessionId": "Ab123",
+          "canUndo": true,
+          "reasonCode": null,
+          "existingJob": null,
+          "archivesRetained": true,
+          "attachmentsRetained": true,
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoCreateParams": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "requestId": "00000000-0000-4000-8000-000000000001",
+          "continuationJobId": "00000000-0000-4000-8000-000000000002",
+          "expectedContinuationSequence": 4
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "requestId": "00000000-0000-4000-8000-000000000001",
+          "continuationJobId": "00000000-0000-4000-8000-000000000002",
+          "expectedContinuationSequence": 4,
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoReadParams": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "jobId": "00000000-0000-4000-8000-000000000001"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "jobId": "00000000-0000-4000-8000-000000000001",
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoRunParams": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "jobId": "00000000-0000-4000-8000-000000000001",
+          "expectedSequence": 3
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "jobId": "00000000-0000-4000-8000-000000000001",
+          "expectedSequence": 3,
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryUndoStateResult": {
+    "valid": [
+      {
+        "name": "owned_continuation_undo",
+        "value": {
+          "job": {
+            "jobId": "00000000-0000-4000-8000-000000000001",
+            "continuationJobId": "00000000-0000-4000-8000-000000000002",
+            "sessionId": "Ab123",
+            "sequence": 3,
+            "stage": "checking",
+            "checkedBytes": 1024,
+            "cancelRequested": false,
+            "cancelRevision": 0,
+            "failureCode": null,
+            "archivesRetained": true,
+            "attachmentsRetained": true
+          },
+          "workerRunning": true,
+          "workerError": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_private_proof",
+        "value": {
+          "job": {
+            "jobId": "00000000-0000-4000-8000-000000000001",
+            "continuationJobId": "00000000-0000-4000-8000-000000000002",
+            "sessionId": "Ab123",
+            "sequence": 3,
+            "stage": "checking",
+            "checkedBytes": 1024,
+            "cancelRequested": false,
+            "cancelRevision": 0,
+            "failureCode": null,
+            "archivesRetained": true,
+            "attachmentsRetained": true
+          },
+          "workerRunning": true,
+          "workerError": null,
+          "sealSha256": "not-public"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryReinterpretPreviewParams": {
+    "valid": [
+      {
+        "name": "owned_job_only",
+        "value": {
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "cannot_supply_path",
+        "value": {
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675",
+          "path": "/other/account"
+        }
+      },
+      {
+        "name": "requires_source_job",
+        "value": {}
+      }
+    ]
+  },
+  "MigrationHistoryReinterpretCreateParams": {
+    "valid": [
+      {
+        "name": "separate_canonical_identity",
+        "value": {
+          "requestId": "da0825d9-ae04-40da-b110-73d08f6a3116",
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675",
+          "expectedSourceSequence": 9
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "rejects_parser_authority",
+        "value": {
+          "requestId": "da0825d9-ae04-40da-b110-73d08f6a3116",
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675",
+          "expectedSourceSequence": 9,
+          "parserRevision": "forged"
+        }
+      },
+      {
+        "name": "requires_confirmed_sequence",
+        "value": {
+          "requestId": "da0825d9-ae04-40da-b110-73d08f6a3116",
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675"
+        }
+      }
+    ]
+  },
+  "MigrationHistoryReinterpretPreviewResult": {
+    "valid": [
+      {
+        "name": "current_parser_available",
+        "value": {
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675",
+          "sourceSequence": 9,
+          "sourceRevision": "foreign-records/3",
+          "parserRevision": "dense-exact-path/1",
+          "canCreate": true,
+          "reasonCode": null
+        }
+      },
+      {
+        "name": "blocked_without_changes",
+        "value": {
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675",
+          "sourceSequence": 9,
+          "sourceRevision": "foreign-records/3",
+          "parserRevision": "dense-exact-path/1",
+          "canCreate": false,
+          "reasonCode": "history_job_busy"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "does_not_expose_private_path",
+        "value": {
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675",
+          "sourceSequence": 9,
+          "sourceRevision": "foreign-records/3",
+          "parserRevision": "dense-exact-path/1",
+          "canCreate": true,
+          "reasonCode": null,
+          "path": "/profile/migrations/history/source.bin"
+        }
+      },
+      {
+        "name": "requires_boolean_gate",
+        "value": {
+          "sourceJobId": "e5c76262-667d-454a-9445-8c17c8865675",
+          "sourceSequence": 9,
+          "sourceRevision": "foreign-records/3",
+          "parserRevision": "dense-exact-path/1",
+          "canCreate": "yes",
+          "reasonCode": null
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,3 @@
+model = "nearest-model"
+model_reasoning_effort = "low"
+profile = "ignored-project-profile"

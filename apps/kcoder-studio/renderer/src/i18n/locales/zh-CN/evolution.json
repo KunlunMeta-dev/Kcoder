@@ -1,0 +1,339 @@
+{
+  "page": {
+    "title": "自进化",
+    "description": "让 KCoder 在此运行目标上从反馈中学习，改进技能、偏好和项目知识。学到的修改会经过评测，并且可以回滚。",
+    "target": "运行目标",
+    "hostUnsupported": "自进化设置需要通过 KCoder Gateway 目标使用。",
+    "targetsLoadFailed": "无法加载运行目标，请稍后重试。",
+    "loading": "加载中…",
+    "currentTarget": "当前运行目标：{{name}}",
+    "unsupportedTitle": "该目标的版本不支持",
+    "unsupported": "请升级此目标上的 KCoder 以使用自进化。",
+    "probeFailed": "无法确认此目标是否支持自进化。",
+    "projectScopeIssue": {
+      "data_root_inside_project": "进化数据目录位于项目内，已跳过项目范围的学习。",
+      "unavailable": "项目存储不可用，已跳过项目范围的学习。"
+    }
+  },
+  "actions": {
+    "retry": "重试",
+    "refresh": "刷新",
+    "edit": "编辑",
+    "save": "保存",
+    "cancel": "取消",
+    "dismiss": "关闭"
+  },
+  "notice": {
+    "load_failed": "无法加载自进化设置。",
+    "conflict": "这些设置已在别处修改。请刷新查看当前值后再修改。",
+    "unconfirmed": "无法确认修改是否已保存。请刷新查看当前值。",
+    "save_failed": "修改未保存，请重试。",
+    "saving": "保存中…",
+    "saved": "已保存",
+    "promoted": "技能 {{name}} 学到了 1 条新经验。",
+    "promotionUndone": "{{name}} 的新经验已回滚。",
+    "promotionUndoFailed": "无法回滚 {{name}} 的新经验。",
+    "view": "查看",
+    "undo": "撤销"
+  },
+  "disabledReason": {
+    "training_mode": "训练模式下自进化已暂停，设置不可修改。",
+    "project_disabled": "当前项目的设置已关闭自进化，无法在这里修改。",
+    "model_unavailable": "所选模型不可用，自进化已暂停模型调用。请重新选择模型。",
+    "usage_limit": "本月用量已达上限。下月或提高上限后继续学习。"
+  },
+  "master": {
+    "label": "开启自进化",
+    "description": "关闭后，所有对象停止采集、归纳和灰度，候选版本立即切回稳定版；已有数据保留。"
+  },
+  "mode": {
+    "label": "运行方式",
+    "options": {
+      "observe": "只记录反馈",
+      "propose": "学习并提出修改（需要我确认）",
+      "auto": "学习并自动应用"
+    },
+    "descriptions": {
+      "observe": "只采集反馈和统计，不提出修改。",
+      "propose": "提出的修改等你确认后再生效。",
+      "auto": "修改通过评测后自动生效。"
+    },
+    "autoWarning": "自动应用仍然要经过评测和灰度，随时可以回滚。"
+  },
+  "targets": {
+    "title": "学习对象",
+    "types": {
+      "skill": "技能",
+      "preference": "用户偏好",
+      "project_knowledge": "项目知识",
+      "tool_usage": "工具使用经验",
+      "workflow_template": "工作流与子代理模板"
+    },
+    "comingSoon": "即将支持",
+    "counts": "已学条目：{{learned}} · 待处理提案：{{pending}}",
+    "notImplemented": "此目标暂不支持这一类型。",
+    "showObjects": "查看对象",
+    "hideObjects": "收起对象",
+    "allowFileEdits": "允许直接修改我创建的技能",
+    "allowFileEditsDescription": "只对你或智能体创建的技能生效；其他技能始终通过叠加层学习。",
+    "scopeLabel": "学习范围",
+    "scope": {
+      "all": "全部对象",
+      "selected": "只有我选择的"
+    },
+    "sourceFilter": "来源",
+    "allSources": "全部来源",
+    "loadFailed": "无法加载对象列表。",
+    "empty": "还没有被使用过的对象。",
+    "evolutionMode": {
+      "overlay": "叠加层",
+      "skill_file": "技能文件"
+    },
+    "channelCandidate": "候选版 · {{traffic}}% 流量",
+    "channelStable": "稳定版",
+    "scoreLine": "得分 {{score}} · {{count}} 次观察",
+    "pendingProposals": "{{count}} 个待处理提案",
+    "itemToggle": "从 {{name}} 学习",
+    "loading": "正在加载对象…",
+    "loadMore": "加载更多"
+  },
+  "signals": {
+    "title": "反馈采集",
+    "artifact_edits": {
+      "label": "产出修改",
+      "description": "从你对技能产出的文件和文档的修改中学习。"
+    },
+    "procedure_results": {
+      "label": "命令与任务结果",
+      "description": "从命令、测试和任务的结果中学习。"
+    },
+    "chat_corrections": {
+      "label": "对话中的纠正",
+      "description": "在你纠正或调整回复时学习。"
+    },
+    "rating_ui": {
+      "label": "显示评分控件",
+      "description": "在使用了技能的回复下方显示点赞和点踩。"
+    }
+  },
+  "preferences": {
+    "title": "个人偏好",
+    "description": "查看、编辑或清除学到的个人偏好。",
+    "show": "查看偏好",
+    "hide": "收起偏好",
+    "onlyYou": "偏好只对你本人生效。",
+    "notice": {
+      "load_failed": "无法加载偏好。",
+      "conflict": "偏好已在别处修改。请刷新后再编辑。",
+      "unconfirmed": "无法确认修改结果。请刷新查看。",
+      "save_failed": "偏好未保存。"
+    },
+    "loading": "正在加载偏好…",
+    "empty": "还没有学到偏好。",
+    "meta": "证据 {{count}} 条 · 更新于 {{date}}",
+    "delete": "清除"
+  },
+  "model": {
+    "label": "自进化使用的模型",
+    "description": "从此目标上已配置的模型中选择，不需要额外配置服务商或密钥。",
+    "catalogFailed": "无法加载已配置的模型。",
+    "unavailable": "所选模型不可用。自进化的模型调用已暂停，请重新选择模型。",
+    "followSession": "跟随当前会话模型",
+    "optionUnavailable": "{{label}}（不可用）"
+  },
+  "usage": {
+    "title": "用量",
+    "frequency": "归纳频率",
+    "frequencyDescription": "累计多少次使用后进行一次归纳。",
+    "frequencies": {
+      "low": "低",
+      "standard": "标准",
+      "high": "高",
+      "custom": "自定义（{{count}} 次使用）"
+    },
+    "thisMonth": "本月",
+    "tokens": "输入 {{input}} token · 输出 {{output}} token",
+    "cost": "费用估计 {{cost}}",
+    "costUnknown": "暂无费用估计",
+    "unavailable": "用量暂不可用。",
+    "loading": "正在加载用量…"
+  },
+  "data": {
+    "title": "数据与隐私",
+    "ttl": "证据保留天数",
+    "ttlDescription": "超过期限的证据会自动删除。",
+    "days": "{{count}} 天",
+    "clear": "清空本地进化数据",
+    "clearDescription": "删除此目标上记录的证据、统计、提案和叠加层。会先取消正在运行的学习任务。",
+    "outcome": {
+      "cleared": "本地进化数据已清空。",
+      "failed": "本地进化数据未清空。",
+      "unconfirmed": "无法确认数据是否已清空。重试前请先检查。"
+    },
+    "clearAction": "清空数据…",
+    "confirmTitle": "清空本地进化数据？",
+    "confirmAgainTitle": "再次确认",
+    "confirmBody": "选择要删除的内容。学到的叠加层会恢复为原始版本。",
+    "confirmAgainBody": "此操作无法撤销。确定现在清空此目标上的「{{scope}}」吗？",
+    "continue": "继续",
+    "confirmAction": "清空数据",
+    "scopeLabel": "清空范围",
+    "scopes": {
+      "all": "全部本地进化数据",
+      "project": "仅当前项目",
+      "user": "仅个人数据"
+    },
+    "scopeDescriptions": {
+      "all": "项目和个人的证据、统计、提案与叠加层。",
+      "project": "当前工作区的证据和学到的项目知识。",
+      "user": "你的偏好，以及用户级的证据、统计和叠加层。"
+    },
+    "scopeProjectUnavailable": "在此目标上打开工作区后，才能只清空该项目的数据。"
+  },
+  "advanced": {
+    "title": "高级",
+    "description": "了解评测和灰度机制后再修改这些参数。",
+    "fields": {
+      "candidate_traffic": "候选流量",
+      "promote_threshold": "转正阈值",
+      "rollback_threshold": "回滚阈值",
+      "monthly_max_tokens": "月度 token 上限",
+      "win_rate": "评测胜率",
+      "max_diversity_drop": "最大多样性下降"
+    },
+    "hints": {
+      "candidate_traffic": "使用候选版的会话比例，大于 0 且不超过 1。",
+      "promote_threshold": "候选版更好的置信度达到此值后转正，大于 0 且不超过 1。",
+      "rollback_threshold": "置信度低于此值时回滚候选版，需低于转正阈值。",
+      "monthly_max_tokens": "留空表示不限。",
+      "win_rate": "候选版在评测中需要胜出的比例，0.5 到 1。",
+      "max_diversity_drop": "相比稳定版允许的产出多样性最大降幅，0 到 0.5。"
+    },
+    "errors": {
+      "range_fraction": "请输入 0 到 1 之间的数。",
+      "range_traffic": "请输入大于 0 且不超过 1 的数。",
+      "rollback_not_below": "必须低于转正阈值。",
+      "positive_integer": "请输入正整数，或留空。",
+      "range_win_rate": "请输入 0.5 到 1 之间的数。",
+      "range_diversity_drop": "请输入 0 到 0.5 之间的数。"
+    },
+    "unlimited": "不限",
+    "stageModels": "按环节选择模型",
+    "stages": {
+      "classifier": "信号分类",
+      "distill": "归纳",
+      "eval": "评测"
+    },
+    "sameAsMain": "同上",
+    "restoreDefaults": "恢复默认值"
+  },
+  "costDialog": {
+    "title": "开启自进化？",
+    "body": "信号分类、归纳和评测会额外调用所选模型并消耗 token。默认不限用量，你可以在“高级”中设置月度上限。",
+    "confirm": "开启"
+  },
+  "rating": {
+    "up": "有帮助",
+    "down": "没帮助",
+    "prompt": "评价这次技能产出",
+    "addReason": "补充原因",
+    "reasonSaved": "原因已记录",
+    "failed": "评分未记录。",
+    "failedNoUsage": "这一轮没有可评分的技能使用记录，评分未记录。",
+    "failedDisabled": "自进化已关闭，评分未记录。",
+    "failedNotFound": "找不到这轮对话或子代理，评分未记录。",
+    "failedUnconfirmed": "评分结果未确认，请稍后再试。",
+    "reasonLabel": "原因（选填）",
+    "reasonPlaceholder": "哪里好，或者哪里不对？",
+    "sendReason": "发送"
+  },
+  "detail": {
+    "title": "进化",
+    "loading": "正在加载进化数据…",
+    "empty": "此对象还没有进化数据。",
+    "loadFailed": "无法加载进化数据。",
+    "notice": {
+      "saved": "已保存",
+      "unsupported": "此目标不支持该操作。",
+      "conflict": "此对象已在别处修改。请刷新后重试。",
+      "rejected": "内容未通过检查。",
+      "too_large": "内容过大。",
+      "not_found": "对象或提案已不存在。",
+      "invalid_transition": "提案当前状态下不能执行此操作。",
+      "disabled": "自进化已关闭。",
+      "unconfirmed": "无法确认结果。请刷新查看。",
+      "invalid": "目标返回了无效的响应。",
+      "unavailable": "操作失败，请重试。",
+      "decided": {
+        "approve": "已批准，提案将先评测再小流量灰度。",
+        "promote": "已转正为稳定版。",
+        "reject": "已拒绝提案。",
+        "rollback": "已回滚到上一个稳定版。",
+        "pin_stable": "已固定稳定版并停止灰度。"
+      },
+      "distill": {
+        "queued": "归纳任务已排队，完成后新提案会出现在这里。",
+        "disabled": "自进化或此对象的学习已关闭。",
+        "unknown_target": "目标已找不到此对象。",
+        "model_unavailable": "自进化所选模型不可用，请在设置中重新选择。"
+      }
+    },
+    "rejectReason": "原因：{{reason}}",
+    "stableScore": "稳定版 {{score}} · {{count}} 次观察",
+    "candidateScore": "候选版 {{score}} · {{count}} 次观察 · {{traffic}}% 流量",
+    "pinned": "已固定",
+    "needsRevalidation": "需要重新验证",
+    "disable": "关闭进化",
+    "enable": "开启进化",
+    "overlay": "叠加层",
+    "lessons": "经验",
+    "checklist": "检查清单",
+    "examples": "示例：{{count}} 个",
+    "patterns": "学到的规律",
+    "noPatterns": "还没有规律。",
+    "evidence": "使用 {{usages}} 次 · 会话 {{sessions}} 个 · 用户 {{users}} 位 · 反例 {{counter}} 条",
+    "proposals": "提案",
+    "noProposals": "没有提案。",
+    "actor": {
+      "auto": "自动",
+      "user": "你"
+    },
+    "evaluation": "胜率 {{winRate}} · 平局 {{ties}} · 硬性检查退化 {{regressions}}",
+    "evaluationRunning": "评测中：当前胜率 {{winRate}} · 平局 {{ties}} · 硬性检查退化 {{regressions}}",
+    "diff": "查看修改",
+    "decision": {
+      "approve": "批准评测与灰度",
+      "promote": "转正",
+      "reject": "拒绝",
+      "rollback": "回滚",
+      "pin_stable": "固定稳定版"
+    },
+    "decisionHint": {
+      "approve": "先进行离线评测，通过后开始小流量灰度；此时还不会成为稳定版。",
+      "promote": "将这个灰度版本设为所有人使用的稳定版。",
+      "reject": "放弃这个提案。",
+      "rollback": "恢复到上一个稳定版。",
+      "pin_stable": "保留当前稳定版并停止灰度。"
+    },
+    "distill": "整理反馈",
+    "distillHint": "立即根据目前收集到的反馈为此对象进行一次归纳。",
+    "unknownValue": "未知",
+    "diversityDelta": "多样性 {{delta}}",
+    "patternScope": {
+      "target_overlay": "适用于此对象",
+      "user_preference": "个人偏好",
+      "insufficient": "证据不足"
+    },
+    "state": {
+      "draft": "草稿",
+      "evaluated": "已评测",
+      "canary": "灰度中",
+      "promoted": "已转正",
+      "rolled_back": "已回滚",
+      "rejected": "已拒绝"
+    },
+    "modelHint": "请在自进化设置中选择模型，或打开一个会话，让自进化跟随该会话的模型。",
+    "openSettings": "打开自进化设置",
+    "decisionWarning": "注意：{{notice}}"
+  }
+}

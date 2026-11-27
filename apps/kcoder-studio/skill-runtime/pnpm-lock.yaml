@@ -1,0 +1,208 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@playwright/mcp':
+        specifier: 0.0.84
+        version: 0.0.84
+      docx:
+        specifier: 9.16.0
+        version: 9.16.0
+      pptxgenjs:
+        specifier: 4.0.1
+        version: 4.0.1
+
+packages:
+
+  '@playwright/mcp@0.0.84':
+    resolution: {integrity: sha512-weqLrA7/D8MJzNV9/t3Hnjp100tS2sxFXKeb2gH6Nhktqmdfvx5qRA9AZ5Mhjnre1jY0wltsrRK5VZS5NBgcvw==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  '@types/node@22.20.5':
+    resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
+
+  '@types/node@26.6.6':
+    resolution: {integrity: sha512-MzQj+8Kx3XI40OmUAE6Qoh58ZMNstNNMwn2nfd3qWsfe7nDNSqJNzes4njhz6AHwrSHOffSLwXU6yb474Q4aog==}
+
+  core-util-is@1.0.3:
+    resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
+
+  docx@9.16.0:
+    resolution: {integrity: sha512-fvAuqxV0705bEQ9OGPLt6onJqufGJTMS+b7PtRxNktea+iPWYgc1zO+OQBMW9ZmRLj9THTnOeiAoxTDz2ub0Fw==}
+    engines: {node: '>=16'}
+
+  fflate@0.8.3:
+    resolution: {integrity: sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA==}
+
+  https@1.0.0:
+    resolution: {integrity: sha512-4EC57ddXrkaF0x83Oj8sM6SLQHAWXw90Skqu2M4AEWENZ3F02dFJE/GARA8igO79tcgYqGrD7ae4f5L3um2lgg==}
+
+  image-size@1.2.1:
+    resolution: {integrity: sha512-rH+46sQJ2dlwfjfhCyNx5thzrv+dtmBIhPHk0zgRUukHzZ/kRueTJXoYYsclBaKcSMBWuGbOFXtioLpzTb5euw==}
+    engines: {node: '>=16.x'}
+    hasBin: true
+
+  immediate@3.0.6:
+    resolution: {integrity: sha512-XXOFtyqDjNDAQxVfYxuF7g9Il/IbWmmlQg2MYKOH8ExIT1qg6xc4zyS3HaEEATgs1btfzxq15ciUiY7gjSXRGQ==}
+
+  inherits@2.0.4:
+    resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
+
+  isarray@1.0.0:
+    resolution: {integrity: sha512-VLghIWNM6ELQzo7zwmcg0NmTVyWKYjvIeM83yjp0wRDTmUnrM678fQbcKBo6n2CJEF0szoG//ytg+TKla89ALQ==}
+
+  jszip@3.10.2:
+    resolution: {integrity: sha512-3l+rb15IOWtUhU0H5MFqES/T6Kh7abYwjosBey/vD6hDt8zoEffkSC5Ws5SGtgVw3gBx2NEbhTeSW1+kWkpyTQ==}
+
+  lie@3.3.0:
+    resolution: {integrity: sha512-UaiMJzeWRlEujzAuw5LokY1L5ecNQYZKfmyZ9L7wDHb/p5etKaxXhohBcrw0EYby+G/NA52vRSN4N39dxHAIwQ==}
+
+  nanoid@6.0.2:
+    resolution: {integrity: sha512-hIvVOb9Qr1p/9CNNLOe0OlWvgx/ziTsVwKN/GDSsuArN2K0wDiafP3s0SWmsm7o2BdnyS8Z9Z64NFBUbn6ziBg==}
+    engines: {node: ^22 || ^24 || >=26}
+    hasBin: true
+
+  pako@1.0.11:
+    resolution: {integrity: sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==}
+
+  playwright-core@1.65.0-alpha-2026-10-30:
+    resolution: {integrity: sha512-LPMw8B/HRQKMcJeXTqWSrkB/AfCKKmbDQMbu0p7zg8MgibOWaKMjZWR/StAtrQkOxvOmZEju1o1TnPgdoOCwrg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  playwright@1.65.0-alpha-2026-10-30:
+    resolution: {integrity: sha512-dmAJMVHKzHvMQjn+XDcaq/pxaZ0W6n8i78rwTM+VGRtQ3WBF5ZiSdB1yL/cyoYUGUMwg3jxN65KqC9cERaCbIg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  pptxgenjs@4.0.1:
+    resolution: {integrity: sha512-TeJISr8wouAuXw4C1F/mC33xbZs/FuEG6nH9FG1Zj+nuPcGMP5YRHl6X+j3HSUnS1f3at6k75ZZXPMZlA5Lj9A==}
+
+  process-nextick-args@2.0.1:
+    resolution: {integrity: sha512-3ouUOpQhtgrbOa17J7+uxOTpITYWaGP7/AhoR3+A+/1e9skrzelGi/dXzEYyvbxubEF6Wn2ypscTKiKJFFn1ag==}
+
+  queue@6.0.2:
+    resolution: {integrity: sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==}
+
+  readable-stream@2.3.8:
+    resolution: {integrity: sha512-8p0AUk4XODgIewSi0l8Epjs+EVnWiK7NoDIEGU0HhE7+ZyY8D1IMY7odu5lRrFXGg71L15KG8QrPmum45RTtdA==}
+
+  safe-buffer@5.1.2:
+    resolution: {integrity: sha512-Gd2UZBJDkXlY7GbJxfsE8/nvKkUEU1G38c1siN6QP6a9PT9MmHB8GnpscSmMJSoF8LOIrt8ud/wPtojys4G6+g==}
+
+  setimmediate@1.0.5:
+    resolution: {integrity: sha512-MATJdZp8sLqDl/68LfQmbP8zKPLQNV6BIZoIgrscFDQ+RsvK/BxeDQOgyxKKoh0y/8h3BqVFnCqQ/gd+reiIXA==}
+
+  string_decoder@1.1.1:
+    resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
+
+  undici-types@6.21.0:
+    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+
+  undici-types@8.9.0:
+    resolution: {integrity: sha512-KTDyRTYX8sWmKXAikPHHSyc63CRPETMctyjKFupcC6OBLXT3xsN0e9aF7m+mIXutFWpUXuedtowG7iLOzp0kQg==}
+
+  util-deprecate@1.0.2:
+    resolution: {integrity: sha512-EPD5q1uXyFxJpCrLnCc1nHnq3gOa6DZBocAIiI2TaSCA7VCJ1UJDMagCzIkXNsUYfD1daK//LTEQ8xiIbrHtcw==}
+
+snapshots:
+
+  '@playwright/mcp@0.0.84':
+    dependencies:
+      playwright: 1.65.0-alpha-2026-10-30
+      playwright-core: 1.65.0-alpha-2026-10-30
+
+  '@types/node@22.20.5':
+    dependencies:
+      undici-types: 6.21.0
+
+  '@types/node@26.6.6':
+    dependencies:
+      undici-types: 8.9.0
+
+  core-util-is@1.0.3: {}
+
+  docx@9.16.0:
+    dependencies:
+      '@types/node': 26.6.6
+      fflate: 0.8.3
+      nanoid: 6.0.2
+
+  fflate@0.8.3: {}
+
+  https@1.0.0: {}
+
+  image-size@1.2.1:
+    dependencies:
+      queue: 6.0.2
+
+  immediate@3.0.6: {}
+
+  inherits@2.0.4: {}
+
+  isarray@1.0.0: {}
+
+  jszip@3.10.2:
+    dependencies:
+      lie: 3.3.0
+      pako: 1.0.11
+      readable-stream: 2.3.8
+      setimmediate: 1.0.5
+
+  lie@3.3.0:
+    dependencies:
+      immediate: 3.0.6
+
+  nanoid@6.0.2: {}
+
+  pako@1.0.11: {}
+
+  playwright-core@1.65.0-alpha-2026-10-30: {}
+
+  playwright@1.65.0-alpha-2026-10-30:
+    dependencies:
+      playwright-core: 1.65.0-alpha-2026-10-30
+
+  pptxgenjs@4.0.1:
+    dependencies:
+      '@types/node': 22.20.5
+      https: 1.0.0
+      image-size: 1.2.1
+      jszip: 3.10.2
+
+  process-nextick-args@2.0.1: {}
+
+  queue@6.0.2:
+    dependencies:
+      inherits: 2.0.4
+
+  readable-stream@2.3.8:
+    dependencies:
+      core-util-is: 1.0.3
+      inherits: 2.0.4
+      isarray: 1.0.0
+      process-nextick-args: 2.0.1
+      safe-buffer: 5.1.2
+      string_decoder: 1.1.1
+      util-deprecate: 1.0.2
+
+  safe-buffer@5.1.2: {}
+
+  setimmediate@1.0.5: {}
+
+  string_decoder@1.1.1:
+    dependencies:
+      safe-buffer: 5.1.2
+
+  undici-types@6.21.0: {}
+
+  undici-types@8.9.0: {}
+
+  util-deprecate@1.0.2: {}

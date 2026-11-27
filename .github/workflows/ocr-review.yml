@@ -1,0 +1,287 @@
+# This repository maintains its own credential redaction and failure checks.
+# The ocr-bot distribution marker is intentionally absent to prevent overwrites.
+#
+# OpenCodeReview - Push 自动评审 workflow（分发到每个仓库使用）
+#
+# 触发时机：任何分支的 push（不含 tag），或在 Actions 页面手动触发
+# Manual dispatch reviews one HEAD commit. Each push can incur model review costs,
+# including feature/WIP branches; the CLI may issue several model requests.
+#
+# 需要的 secrets（由中央仓库的 distribute workflow 自动写入每个仓库）：
+#   OCR_LLM_URL        - LLM API 端点（如 https://api.openai.com/v1/chat/completions）
+#   OCR_LLM_AUTH_TOKEN - LLM API 的认证 token
+# 可选的 secrets：
+#   OCR_LLM_MODEL      - 模型名（默认 gpt-4o）
+#   OCR_LLM_USE_ANTHROPIC - 使用 Anthropic 原生协议时设为 'true'（默认 false，OpenAI 兼容协议）
+#
+# 评审结果会以 commit comment 的形式回贴到本次 push 的最后一个提交上，
+# 同时写入 Actions 运行摘要（Step Summary）。
+
+name: OpenCodeReview Push Review
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches: ["**"] # 所有分支的 push 都触发评审（不含 tag）
+  workflow_dispatch:
+
+permissions:
+  contents: write # 需要写权限以在提交上创建 commit comment
+
+env:
+  # 固定 CLI 版本，保证可复现并降低供应链风险；升级时改这里
+  OCR_CLI_VERSION: '1.7.5'
+  OCR_NO_UPDATE: '1'
+
+jobs:
+  code-review:
+    if: github.event_name != 'push' || github.event.deleted != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 75 # 外部 LLM 在环路里，大 diff 评审可能超过 15 分钟；75 分钟防挂死
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # 需要完整历史以计算 --from 到 --to 的 diff
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install OpenCodeReview
+        shell: bash
+        run: |
+          npm install -g --ignore-scripts --include=optional "@alibaba-group/open-code-review@${OCR_CLI_VERSION}"
+          ocr version
+
+      - name: Validate required secrets
+        shell: bash
+        env:
+          OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
+          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+        run: |
+          # 提前给出人类可读的错误，而不是让 ocr 报一串 LLM 调用失败
+          missing=0
+          [ -n "$OCR_LLM_URL" ] || { echo "::error::缺少必填 secret OCR_LLM_URL"; missing=1; }
+          [ -n "$OCR_LLM_AUTH_TOKEN" ] || { echo "::error::缺少必填 secret OCR_LLM_AUTH_TOKEN"; missing=1; }
+          [ "$missing" = "0" ] || exit 1
+
+      - name: Configure OCR
+        shell: bash
+        env:
+          OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
+          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_MODEL: ${{ secrets.OCR_LLM_MODEL }}
+          OCR_LLM_USE_ANTHROPIC: ${{ secrets.OCR_LLM_USE_ANTHROPIC }}
+        run: |
+          # secrets 一律通过 env 传入，不在 run 里做表达式直接插值
+          ocr config set llm.url "$OCR_LLM_URL" > /tmp/ocr-config.log 2>&1
+          ocr config set llm.auth_token "$OCR_LLM_AUTH_TOKEN" >> /tmp/ocr-config.log 2>&1
+          # MODEL 可选：为空时不写入，避免覆盖为非法空值
+          # （用完整 if 而不是 A && B || C：后者会吞掉 config set 本身的失败）
+          if [ -n "$OCR_LLM_MODEL" ]; then
+            ocr config set llm.model "$OCR_LLM_MODEL" >> /tmp/ocr-config.log 2>&1
+          else
+            echo "::warning::未设置 OCR_LLM_MODEL，将使用 ocr 默认模型"
+          fi
+          # llm.use_anthropic 默认是 true，OpenAI 兼容协议必须显式设为 false
+          ocr config set llm.use_anthropic "${OCR_LLM_USE_ANTHROPIC:-false}" >> /tmp/ocr-config.log 2>&1
+          # 不设置 extra_body，保持模型默认行为（MiniMax-M3 默认开启思考模式）
+
+      - name: Run OpenCodeReview
+        id: review
+        shell: bash
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after || github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+        run: |
+          BEFORE="$BEFORE_SHA"
+          AFTER="$AFTER_SHA"
+
+          # Skip deleted refs before invoking OCR or attempting a commit comment.
+          if [[ "$AFTER" =~ ^0+$ ]]; then
+            printf 'mode=skipped\nskipped=true\nocr_rc=0\n' >> "$GITHUB_OUTPUT"
+            echo 'Deleted branch: no review target.'
+            exit 0
+          fi
+          MODE=unavailable
+          BASE=''
+          if [[ "$AFTER" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]] && git cat-file -e "$AFTER^{commit}" 2>/dev/null; then
+            if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+              MODE=single
+            else
+              # OCR range mode compares merge-base(from,to) to to, not two arbitrary snapshots.
+              if [[ "$BEFORE" =~ ^([0-9a-fA-F]{40}|[0-9a-fA-F]{64})$ ]] && ! [[ "$BEFORE" =~ ^0+$ ]] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+                BASE="$(git merge-base "$BEFORE" "$AFTER" 2>/dev/null || true)"
+              fi
+              if [ -z "$BASE" ] && [ -n "$DEFAULT_BRANCH" ]; then
+                BASE="$(git merge-base "refs/remotes/origin/$DEFAULT_BRANCH" "$AFTER" 2>/dev/null || true)"
+              fi
+              if [ -n "$BASE" ] && [ "$BASE" != "$AFTER" ]; then
+                MODE=range
+              elif [ "$(git rev-list --parents -n 1 "$AFTER" | wc -w)" -eq 1 ]; then
+                # git show includes a root commit's complete initial tree.
+                MODE=single
+              elif [[ "$BEFORE" =~ ^0+$ ]] && [ "$BASE" = "$AFTER" ] && [ "$SOURCE_BRANCH" != "$DEFAULT_BRANCH" ]; then
+                printf 'mode=skipped\nskipped=true\nocr_rc=0\n' >> "$GITHUB_OUTPUT"
+                echo 'New branch has no changes beyond the existing default branch.'
+                exit 0
+              fi
+            fi
+          fi
+          echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+          # Missing shared history cannot silently reduce a multi-commit review to HEAD.
+          if [ "$MODE" = unavailable ]; then
+            printf '{"status":"failed","comments":[],"message":"OCR_REVIEW_BASE_UNAVAILABLE"}\n' > /tmp/ocr-result.json
+            echo 'ocr_rc=1' >> "$GITHUB_OUTPUT"
+            echo '::error::Cannot establish the complete OCR review range.'
+            exit 0
+          fi
+          set +e
+          if [ "$MODE" = single ]; then
+            echo "评审单个提交: $AFTER"
+            ocr review --commit "$AFTER" --format json \
+              > /tmp/ocr-result.json 2>/tmp/ocr-stderr.log
+          else
+            echo "评审范围: $BASE..$AFTER"
+            ocr review --from "$BASE" --to "$AFTER" --format json \
+              > /tmp/ocr-result.json 2>/tmp/ocr-stderr.log
+          fi
+          OCR_RC=$?
+          set -e
+          echo "ocr_rc=$OCR_RC" >> "$GITHUB_OUTPUT"
+
+          # Provider diagnostics may contain sensitive request or response data.
+          # Keep them on the ephemeral runner instead of publishing raw logs.
+          echo "OCR completed with exit code $OCR_RC; the result is handled by the next step."
+
+      - name: Post review result as commit comment
+        if: always() && steps.review.outputs.skipped != 'true'
+        uses: actions/github-script@v7
+        env:
+          REVIEW_MODE: ${{ steps.review.outputs.mode }}
+          OCR_RC: ${{ steps.review.outputs.ocr_rc }}
+          OCR_LLM_AUTH_TOKEN: ${{ secrets.OCR_LLM_AUTH_TOKEN }}
+          OCR_LLM_URL: ${{ secrets.OCR_LLM_URL }}
+        with:
+          script: |
+            const fs = require('fs');
+            const reviewMode = process.env.REVIEW_MODE || 'unknown';
+            const rawRc = process.env.OCR_RC || '';
+            const ocrRc = /^\d+$/.test(rawRc) ? Number(rawRc) : -1;
+            const secretValues = [process.env.OCR_LLM_AUTH_TOKEN, process.env.OCR_LLM_URL].filter(Boolean);
+            const variants = [...new Set(secretValues.flatMap(secret => [secret, encodeURIComponent(secret),
+              JSON.stringify(secret).slice(1, -1), Buffer.from(secret).toString('base64')]))].sort((a, b) => b.length - a.length);
+            const redact = value => variants.reduce((text, secret) => text.split(secret).join('[REDACTED]'), String(value));
+
+            let result;
+            try {
+              result = JSON.parse(fs.readFileSync('/tmp/ocr-result.json', 'utf8'));
+              const record = value => value && typeof value === 'object' && !Array.isArray(value);
+              const statuses = new Set(['success', 'skipped', 'completed_with_errors', 'completed_with_warnings', 'failed', 'partial']);
+              const validComment = c => record(c) && typeof c.path === 'string' && typeof c.content === 'string' &&
+                ['severity', 'category', 'suggestion_code'].every(key => c[key] === undefined || typeof c[key] === 'string') &&
+                ['start_line', 'end_line'].every(key => c[key] === undefined || Number.isSafeInteger(c[key]) && c[key] >= 0);
+              if (!record(result) || !statuses.has(result.status) || !Object.hasOwn(result, 'comments') ||
+                  result.comments !== null && (!Array.isArray(result.comments) || !result.comments.every(validComment)) ||
+                  result.warnings != null && !Array.isArray(result.warnings) ||
+                  result.message !== undefined && typeof result.message !== 'string') throw new Error('OCR_RESULT_INVALID');
+            } catch (e) {
+              result = { comments: [], warnings: [], message: null, parseError: e.message };
+            }
+
+            const comments = result.comments || [];
+            const warnings = result.warnings || [];
+            const incomplete = warnings.length > 0 ||
+              ['completed_with_errors', 'completed_with_warnings', 'failed', 'partial'].includes(result.status);
+
+            const esc = (s) => redact(s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;').replace(/`/g, '&#96;').replace(/[\\[\]()*_~!#]/g, '\\$&')
+              .replace(/\|/g, '\\|').replace(/@/g, '&#64;')
+              .replace(/[\u0000-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]+/g, ' ');
+            const quote = s => redact(s).split(/\r\n?|\n/).map(line => `> ${esc(line)}`).join('\n');
+            const sevEmoji = { critical: '🔴', high: '🟠', medium: '🟡', low: '🔵' };
+
+            let body = `## 🤖 OpenCodeReview 自动评审\n\n`;
+            body += `提交: \`${context.sha.slice(0, 7)}\``;
+            body += ` | 模式: ${reviewMode}`;
+            body += ` | [运行详情](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})\n\n`;
+
+            if (ocrRc !== 0) {
+              // ocr 本身执行失败（CLI 缺失、网络、鉴权、上游 5xx 等），必须显式报错，不能显示 LGTM
+              body += `❌ **评审执行失败**（ocr 退出码 ${ocrRc}），这不是"未发现问题"。\n`;
+            } else if (result.parseError) {
+              body += `⚠️ 评审输出解析失败。\n`;
+            } else if (incomplete && comments.length === 0) {
+              body += `⚠️ 评审未完整完成，不能认定没有问题。\n`;
+            } else if (result.status === 'skipped') {
+              body += `ℹ️ 未执行评审：没有支持的文件变更。\n`;
+            } else if (comments.length === 0) {
+              body += `✅ ${esc(result.message || '未发现问题，LGTM。')}\n`;
+            } else {
+              body += `共发现 **${comments.length}** 个问题：\n\n`;
+              body += `| 严重度 | 类别 | 文件 | 行 | 说明 |\n|---|---|---|---|---|\n`;
+              for (const c of comments) {
+                const sev = (c.severity || '').toLowerCase();
+                const emoji = sevEmoji[sev] || '⚪';
+                const lines = (c.start_line >= 1)
+                  ? (c.end_line > c.start_line ? `L${c.start_line}-${c.end_line}` : `L${c.start_line}`)
+                  : '-';
+                body += `| ${emoji} ${esc(c.severity || '-')} | ${esc(c.category || '-')} | \`${esc(c.path || '-')}\` | ${lines} | ${esc(redact(c.content || '').split('\n')[0].slice(0, 120))} |\n`;
+              }
+              body += `\n<details><summary>查看完整评审意见</summary>\n\n`;
+              for (const c of comments) {
+                body += `### 📄 \`${esc(c.path || '-')}\``;
+                if (c.start_line >= 1) body += ` (L${c.start_line}${c.end_line > c.start_line ? '-' + c.end_line : ''})`;
+                body += `\n\n**[${esc(c.severity || '-')}] [${esc(c.category || '-')}]**\n\n${quote(c.content || '')}\n\n`;
+                if (c.suggestion_code) {
+                  body += redact(c.suggestion_code).split(/\r\n?|\n/).map(line => '    ' + line
+                    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/g, '')).join('\n') + '\n\n';
+                }
+              }
+              body += `</details>\n`;
+            }
+
+            if (warnings.length > 0) {
+              body += `\n**警告 (${warnings.length}):**\n`;
+              body += '- 部分评审未完成，请检查本次运行的状态。\n';
+            }
+
+            // Rebuild a short, structurally complete list instead of slicing a
+            // Markdown fence, details element, or Unicode surrogate pair.
+            if (body.length > 64000) {
+              body = '## 🤖 OpenCodeReview 自动评审\n\n⚠️ 意见过长，仅展示部分摘要。\n\n';
+              for (const c of comments) {
+                const excerpt = [...redact(c.content || '').split('\n')[0]].slice(0, 300).join('');
+                const line = `- **${esc(c.severity || '-')}** \`${esc(c.path || '-')}\`: ${esc(excerpt)}\n`;
+                if (body.length + line.length > 63000) break;
+                body += line;
+              }
+            }
+            body = redact(body);
+
+            // 写入 Step Summary（不依赖 API，必然可见）
+            await core.summary.addRaw(body).write();
+
+            // 回贴为 commit comment；失败不影响 Summary，只告警
+            try {
+              await github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body,
+              });
+              core.info(`已在提交 ${context.sha} 上发布评审结果（${comments.length} 个问题）`);
+            } catch (e) {
+              core.warning('发布 commit comment 失败（结果已写入 Step Summary）。');
+            }
+            if (ocrRc !== 0 || result.parseError || incomplete) {
+              core.setFailed('OpenCodeReview did not complete successfully.');
+            }

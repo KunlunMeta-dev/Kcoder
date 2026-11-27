@@ -1,0 +1,173 @@
+{
+  "tabs": {
+    "all": "All",
+    "conflicts": "Conflicts"
+  },
+  "kind": {
+    "skill": "Skill",
+    "mcp_server": "MCP server",
+    "hook": "Hook",
+    "plugin": "Plugin",
+    "binary": "Command-line tool"
+  },
+  "kindFilter": {
+    "label": "Type",
+    "all": "All types"
+  },
+  "onlyOverrides": "Only duplicates and overrides",
+  "layer": {
+    "builtin": "Built-in",
+    "bundled": "Bundled",
+    "project": "Project",
+    "external": "External directory",
+    "plugin": "Plugin {{name}}",
+    "pluginUnnamed": "Plugin",
+    "user": "User",
+    "runtime": "Runtime"
+  },
+  "state": {
+    "effective": "In use",
+    "shadowed": "Overridden",
+    "inactive": "Not in use",
+    "notFound": "Not found",
+    "disabledBy": {
+      "name": "Turned off",
+      "plugin": "Plugin turned off",
+      "policy": "Off by policy",
+      "trust": "Project not trusted"
+    }
+  },
+  "relation": {
+    "shadowedBy": "Overridden by {{source}}",
+    "shadows": "Overrides {{sources}}",
+    "preferred": "Plugin version selected"
+  },
+  "skillBadge": {
+    "shadowsCopy": "Overrides the {{source}} copy",
+    "preferred": "Plugin version selected"
+  },
+  "intro": "Every skill, MCP server, Hook, plugin and command-line tool this target resolves, including copies that are overridden. Same-name skills: built-in copies win over plugin copies unless you select the plugin version; project, external-directory and user skills always win.",
+  "appliesToNewConversations": "Changes apply to new conversations. Running conversations keep the skills they started with.",
+  "loading": "Loading extensions…",
+  "empty": "No extensions found on this target.",
+  "noMatches": "No matching items.",
+  "unsupported": "This target does not report duplicates and overrides yet. Upgrade KCoder on the target to use the All and Conflicts views.",
+  "notice": {
+    "saved": "Saved. Applies to new conversations.",
+    "preference_conflict": "The skill preference was changed elsewhere. The latest state has been loaded; review it and choose again.",
+    "skill_switch_conflict": "This plugin's skill setting was changed elsewhere. The latest state has been loaded; review it and choose again.",
+    "unconfirmed": "The save could not be confirmed. The latest state has been loaded; check it before trying again.",
+    "invalid": "The target rejected this preference.",
+    "unavailable": "Extension information could not be loaded from this target. Try refreshing.",
+    "scope_changed": "The target or account changed. Refresh to load the current target.",
+    "unsupported": "This target does not support this action. Upgrade KCoder on the target."
+  },
+  "dismiss": "Dismiss",
+  "details": "Details",
+  "detail": {
+    "path": "Path",
+    "description": "Description",
+    "repository": "Upstream repository",
+    "ref": "Upstream ref",
+    "upstreamVersion": "Upstream version",
+    "version": "Version",
+    "marketplace": "Marketplace",
+    "role": "Detail",
+    "count": "Components",
+    "bundled": "Origin",
+    "bundledYes": "Shipped with KCoder Studio",
+    "bundledNo": "Installed on the system",
+    "effectiveCopy": "In use",
+    "shadowedCopies": "Overridden copies",
+    "sameUpstream": "Same upstream",
+    "differentUpstream": "Upstream differs or is not declared",
+    "provided": "Provided by the plugin",
+    "missing": "Not provided by the plugin",
+    "fromPlugin": "In use from the plugin",
+    "resolvedVersion": "Version on PATH",
+    "bundledVersion": "Bundled version",
+    "unknownPath": "Path not reported"
+  },
+  "actions": {
+    "usePlugin": "Use plugin version",
+    "usePluginNamed": "Use {{plugin}} version",
+    "useBuiltin": "Use built-in version",
+    "useDefault": "Restore default order",
+    "preferPlugin": "Prefer this plugin's skills",
+    "stopPreferPlugin": "Stop preferring this plugin's skills",
+    "saving": "Saving…"
+  },
+  "preferenceBlocked": "Project, external-directory and user skills always win over plugin copies; this cannot be changed here.",
+  "preferredByPlugin": "Selected because all skills of {{plugin}} are preferred.",
+  "pluginSkillSwitchLimit": "This target can only turn off a plugin's skills together with the whole plugin. Upgrade KCoder on the target to turn off only the skills, or turn off the plugin under Plugins.",
+  "pluginSkills": {
+    "toggle": "Enable this plugin's skills",
+    "toggleNamed": "Enable the skills of {{plugin}}",
+    "help": "Turning this off removes only this plugin's skill copies. Other copies of the same skills, and the plugin's MCP servers and Hooks, stay as they are.",
+    "helpOff": "This plugin's skills are off. Same-name skills from other sources are used instead; the plugin's MCP servers and Hooks are unaffected."
+  },
+  "binaries": {
+    "title": "Command-line tools",
+    "description": "Looks for lark-cli, node and playwright-mcp on the target's PATH and runs a short version check. Only runs when you ask.",
+    "check": "Check command-line tools",
+    "recheck": "Check again",
+    "checking": "Checking…",
+    "checked": "Showing the result of the last check."
+  },
+  "conflicts": {
+    "none": "No duplicates or overrides found.",
+    "reason": {
+      "same_name": "Same name",
+      "mixed_family": "Mixed family",
+      "multiple_binaries": "Several copies on PATH",
+      "version_mismatch": "Version differs"
+    },
+    "summary": {
+      "same_name_one": "{{name}}: {{effective}} is in use; {{count}} other copy is overridden.",
+      "same_name_other": "{{name}}: {{effective}} is in use; {{count}} other copies are overridden.",
+      "mixed_family": "{{name}}-* mixes sources: {{plugin}} provides {{provided}}, of which {{fromPlugin}} are in use; {{missing}} come only from the built-in set.",
+      "multiple_binaries_one": "{{name}}: {{effective}} is used; {{count}} other copy on PATH is ignored.",
+      "multiple_binaries_other": "{{name}}: {{effective}} is used; {{count}} other copies on PATH are ignored.",
+      "version_mismatch": "{{name}} {{resolved}} on PATH differs from the bundled {{bundled}}; skills may expect different commands."
+    },
+    "unknownSource": "an unknown source"
+  },
+  "hookIssues": {
+    "title": "Hook configuration problems",
+    "summary_one": "{{count}} Hook configuration problem found.",
+    "summary_other": "{{count}} Hook configuration problems found.",
+    "view": "View",
+    "error": "Error",
+    "warning": "Warning",
+    "errorHelp": "A rule with an error blocks its event until the configuration is fixed. Start a new conversation after fixing it.",
+    "file": "File",
+    "location": "Location",
+    "event": "Event"
+  },
+  "preview": {
+    "title": "Overlap with installed extensions",
+    "checking": "Checking overlap with installed extensions…",
+    "installs_one": "Installs {{count}} skill",
+    "installs_other": "Installs {{count}} skills",
+    "provides_one": "Provides {{count}} skill",
+    "provides_other": "Provides {{count}} skills",
+    "shadowedByBuiltin": "{{count}} will be overridden by built-in {{names}}",
+    "shadowedByExisting": "{{count}} will be overridden by existing copies ({{names}})",
+    "sameUpstreamAll": "same upstream",
+    "sameUpstreamSome": "{{count}} from the same upstream",
+    "note": " ({{text}})",
+    "separator": "; ",
+    "shadows": "{{count}} will replace existing copies",
+    "mcpCoexists": "{{count}} MCP server names also exist elsewhere; both stay available",
+    "mixedFamily": "Partial {{name}}-* set: provides {{provided}}, missing {{missing}}.",
+    "declaredOnly": "Based on the skill directories declared by the marketplace entry.",
+    "installed": "{{name}} installed.",
+    "manage": "Review in Conflicts",
+    "outcome": {
+      "none": "No overlap",
+      "coexists": "Both stay available",
+      "shadowed_by_existing": "Overridden by {{source}}",
+      "shadows_existing": "Replaces {{source}}"
+    }
+  }
+}

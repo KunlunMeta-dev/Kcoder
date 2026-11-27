@@ -1,0 +1,36 @@
+[package]
+name = "kcoder-office-load-boundary-probe"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+kcoder_engine = { path = "../../../../kcoder_engine" }
+kcoder_types = { path = "../../../../kcoder_types" }
+kcoder_process_supervisor = { path = "../../../../kcoder_process_supervisor" }
+anyhow = "=1.0.102"
+async-trait = "=0.1.89"
+base64 = "=0.22.1"
+serde_json = "=1.0.154"
+sha2 = "=0.10.9"
+libc = "=0.2.186"
+tokio = { version = "=1.52.3", features = ["full"] }
+tokio-util = { version = "=0.7.18", features = ["rt"] }
+
+[dev-dependencies]
+kcoder_state = { path = "../../../../kcoder_state" }
+kcoder_test_harness = { path = "../../../../../tests/harness" }
+tempfile = "=3.27.0"
+
+[patch.crates-io]
+genai = { path = "../../../../../third_party/genai" }
+
+# Match workspace test profiles to reuse the same production dependency artifacts.
+[profile.dev]
+debug = 1
+
+[profile.test]
+debug = 1
+incremental = false

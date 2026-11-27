@@ -1,0 +1,1364 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "name": "legacy-cli",
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            ".config",
+            "kcoder"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            ".config",
+            "kcoder",
+            "tmp"
+          ]
+        },
+        "temporaryRoot": {
+          "path": [
+            "$home",
+            ".config",
+            "kcoder",
+            "tmp"
+          ]
+        },
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            ".config",
+            "kcoder-studio"
+          ]
+        },
+        "desktopRoot": {
+          "path": [
+            "$home",
+            "platform",
+            "kcoder-studio"
+          ]
+        },
+        "layout": "legacy",
+        "externallyConfigured": false,
+        "selectionRevision": null
+      }
+    },
+    {
+      "name": "legacy-desktop",
+      "consumer": "desktop",
+      "expected": {
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "platform",
+            "kcoder-studio"
+          ]
+        },
+        "layout": "legacy"
+      }
+    },
+    {
+      "name": "unified",
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "op-1"
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "temporaryRoot": {
+          "path": [
+            "$home",
+            "Cache",
+            "tmp"
+          ]
+        },
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "Data",
+            "studio",
+            "gateway"
+          ]
+        },
+        "desktopRoot": {
+          "path": [
+            "$home",
+            "Data",
+            "studio",
+            "desktop"
+          ]
+        },
+        "selectionRevision": 3,
+        "operationId": "op-1",
+        "layout": "unified",
+        "externallyConfigured": false,
+        "sources": {
+          "dataRoot": "selection",
+          "cacheRoot": "selection",
+          "gatewayRoot": "selection",
+          "desktopRoot": "selection"
+        }
+      }
+    },
+    {
+      "name": "config-wins-home-and-ignores-personal-record",
+      "env": {
+        "KCODER_CONFIG_DIR": {
+          "path": [
+            "$home",
+            "Isolated"
+          ]
+        },
+        "KCODER_HOME": {
+          "path": [
+            "$home",
+            "Ignored"
+          ]
+        }
+      },
+      "record": {
+        "version": 9,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Isolated"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Isolated",
+            "tmp"
+          ]
+        },
+        "selectionRevision": null,
+        "layout": "custom"
+      }
+    },
+    {
+      "name": "home-isolates-cache",
+      "env": {
+        "KCODER_HOME": {
+          "path": [
+            "$home",
+            "隔离 Home"
+          ]
+        }
+      },
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "隔离 Home"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "隔离 Home",
+            "tmp"
+          ]
+        },
+        "selectionRevision": null,
+        "layout": "custom"
+      }
+    },
+    {
+      "name": "cache-only-retains-data-selection",
+      "env": {
+        "KCODER_CACHE_DIR": {
+          "path": [
+            "$home",
+            "OtherCache"
+          ]
+        }
+      },
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "OtherCache"
+          ]
+        },
+        "temporaryRoot": {
+          "path": [
+            "$home",
+            "OtherCache",
+            "tmp"
+          ]
+        },
+        "layout": "custom"
+      }
+    },
+    {
+      "name": "gateway-only-retains-data-selection",
+      "env": {
+        "KCODER_STUDIO_DATA_DIR": {
+          "path": [
+            "$home",
+            "Gateway"
+          ]
+        }
+      },
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "Gateway"
+          ]
+        },
+        "desktopRoot": {
+          "path": [
+            "$home",
+            "Data",
+            "studio",
+            "desktop"
+          ]
+        },
+        "layout": "custom"
+      }
+    },
+    {
+      "name": "catalog-parent",
+      "env": {
+        "KCODER_STUDIO_SERVERS_STORE": {
+          "path": [
+            "$home",
+            "Catalog",
+            "servers.json"
+          ]
+        }
+      },
+      "expected": {
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "Catalog"
+          ]
+        }
+      }
+    },
+    {
+      "name": "data-override-wins-catalog",
+      "env": {
+        "KCODER_STUDIO_SERVERS_STORE": {
+          "path": [
+            "$home",
+            "Catalog",
+            "servers.json"
+          ]
+        },
+        "KCODER_STUDIO_DATA_DIR": {
+          "path": [
+            "$home",
+            "Gateway"
+          ]
+        }
+      },
+      "expected": {
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "Gateway"
+          ]
+        }
+      }
+    },
+    {
+      "name": "desktop-override-with-selection",
+      "consumer": "desktop",
+      "env": {
+        "KCODER_STUDIO_DESKTOP_USER_DATA_DIR": {
+          "path": [
+            "$home",
+            "Desktop"
+          ]
+        }
+      },
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "desktopRoot": {
+          "path": [
+            "$home",
+            "Desktop"
+          ]
+        },
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "Data",
+            "studio",
+            "gateway"
+          ]
+        }
+      }
+    },
+    {
+      "name": "development-ignores-personal",
+      "development": true,
+      "record": {
+        "version": 9,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            ".config",
+            "kcoder-dev"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            ".config",
+            "kcoder-dev",
+            "tmp"
+          ]
+        },
+        "layout": "custom"
+      }
+    },
+    {
+      "name": "relative-override-rejected",
+      "env": {
+        "KCODER_HOME": "relative"
+      },
+      "error": "STORAGE_PATH_INVALID"
+    },
+    {
+      "name": "overlap-record-rejected",
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Data",
+            "tmp"
+          ]
+        }
+      },
+      "error": "STORAGE_ROOTS_OVERLAP"
+    },
+    {
+      "name": "component-prefix-is-not-containment",
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Database"
+          ]
+        }
+      },
+      "expected": {
+        "layout": "unified",
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Database"
+          ]
+        }
+      }
+    },
+    {
+      "name": "future-version",
+      "record": {
+        "version": 2,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "error": "STORAGE_RECORD_VERSION_UNSUPPORTED"
+    },
+    {
+      "name": "zero-revision",
+      "record": {
+        "version": 1,
+        "revision": 0,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "unsafe-revision",
+      "record": {
+        "version": 1,
+        "revision": 9007199254740992,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "unknown-record-fields",
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "secret": "not-a-real-credential"
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "invalid-operation-id",
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "has whitespace"
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "unicode-and-spaces",
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "中文 资料"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "缓存 位置"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "中文 资料"
+          ]
+        },
+        "temporaryRoot": {
+          "path": [
+            "$home",
+            "缓存 位置",
+            "tmp"
+          ]
+        }
+      }
+    },
+    {
+      "name": "windows-case-overlap",
+      "platforms": [
+        "win32"
+      ],
+      "record": {
+        "version": 1,
+        "revision": 3,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "data",
+            "tmp"
+          ]
+        }
+      },
+      "error": "STORAGE_ROOTS_OVERLAP"
+    },
+    {
+      "name": "windows-environment-case",
+      "platforms": [
+        "win32"
+      ],
+      "env": {
+        "kcoder_config_dir": {
+          "path": [
+            "$home",
+            "Private"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Private"
+          ]
+        },
+        "layout": "custom"
+      }
+    },
+    {
+      "name": "integral-json-numbers",
+      "record": {
+        "version": 1.0,
+        "revision": 2.0,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "selectionRevision": 2
+      }
+    },
+    {
+      "name": "fractional-json-revision",
+      "record": {
+        "version": 1,
+        "revision": 1.5,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "explicit-path-trailing-separator",
+      "env": {
+        "KCODER_HOME": {
+          "path": [
+            "$home",
+            "Data",
+            ""
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        }
+      }
+    },
+    {
+      "name": "largest-safe-integral-json-revision",
+      "record": {
+        "version": 1.0,
+        "revision": 9007199254740991.0,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        }
+      },
+      "expected": {
+        "selectionRevision": 9007199254740991
+      }
+    },
+    {
+      "name": "invalid-operation-directory-1",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "."
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "invalid-operation-directory-2",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": ".."
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "windows-case-conflict-First",
+      "platforms": [
+        "win32"
+      ],
+      "env": {
+        "kcoder_home": {
+          "path": [
+            "$home",
+            "Second"
+          ]
+        },
+        "KCODER_HOME": {
+          "path": [
+            "$home",
+            "First"
+          ]
+        }
+      },
+      "error": "STORAGE_ENV_CONFLICT"
+    },
+    {
+      "name": "windows-case-conflict-empty",
+      "platforms": [
+        "win32"
+      ],
+      "env": {
+        "kcoder_home": {
+          "path": [
+            "$home",
+            "Second"
+          ]
+        },
+        "KCODER_HOME": ""
+      },
+      "error": "STORAGE_ENV_CONFLICT"
+    },
+    {
+      "name": "windows-equal-case-aliases",
+      "platforms": [
+        "win32"
+      ],
+      "env": {
+        "kcoder_home": {
+          "path": [
+            "$home",
+            "Isolated"
+          ]
+        },
+        "KCODER_HOME": {
+          "path": [
+            "$home",
+            "Isolated"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Isolated"
+          ]
+        },
+        "externallyConfigured": true
+      }
+    },
+    {
+      "name": "portable-operation-id-op.",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "op."
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "portable-operation-id-...",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "..."
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "portable-operation-id-NUL",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "NUL"
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "portable-operation-id-con.txt",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "con.txt"
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "portable-operation-id-COM1",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "COM1"
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "portable-operation-id-lPt9.x",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "lPt9.x"
+      },
+      "error": "STORAGE_RECORD_INVALID"
+    },
+    {
+      "name": "portable-operation-id-COM10",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "COM10"
+      },
+      "expected": {
+        "operationId": "COM10"
+      }
+    },
+    {
+      "name": "portable-operation-id-console",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": "console"
+      },
+      "expected": {
+        "operationId": "console"
+      }
+    },
+    {
+      "name": "portable-operation-id-.my-op",
+      "record": {
+        "version": 1,
+        "revision": 1,
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Cache"
+          ]
+        },
+        "operationId": ".my-op"
+      },
+      "expected": {
+        "operationId": ".my-op"
+      }
+    }
+  ],
+  "startupContexts": [
+    {
+      "name": "selected-derived-home-retains-managed-source",
+      "context": {
+        "version": 1,
+        "home": {
+          "path": [
+            "$home"
+          ]
+        },
+        "platformConfig": {
+          "path": [
+            "$home",
+            "platform"
+          ]
+        },
+        "overrides": {},
+        "record": {
+          "version": 1,
+          "revision": 7,
+          "dataRoot": {
+            "path": [
+              "$home",
+              "Data"
+            ]
+          },
+          "cacheRoot": {
+            "path": [
+              "$home",
+              "Cache"
+            ]
+          }
+        },
+        "consumer": "desktop",
+        "development": false
+      },
+      "env": {
+        "KCODER_HOME": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Data"
+          ]
+        },
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "Data",
+            "studio",
+            "gateway"
+          ]
+        },
+        "layout": "unified",
+        "externallyConfigured": false,
+        "selectionRevision": 7
+      }
+    },
+    {
+      "name": "legacy-desktop-origin-survives-native-consumer",
+      "context": {
+        "version": 1,
+        "home": {
+          "path": [
+            "$home"
+          ]
+        },
+        "platformConfig": {
+          "path": [
+            "$home",
+            "platform"
+          ]
+        },
+        "overrides": {},
+        "record": null,
+        "consumer": "desktop",
+        "development": false
+      },
+      "expected": {
+        "gatewayRoot": {
+          "path": [
+            "$home",
+            "platform",
+            "kcoder-studio"
+          ]
+        },
+        "layout": "legacy",
+        "externallyConfigured": false
+      }
+    },
+    {
+      "name": "explicit-isolation-keeps-original-source",
+      "context": {
+        "version": 1,
+        "home": {
+          "path": [
+            "$home"
+          ]
+        },
+        "platformConfig": {
+          "path": [
+            "$home",
+            "platform"
+          ]
+        },
+        "overrides": {
+          "KCODER_HOME": {
+            "path": [
+              "$home",
+              "Owned"
+            ]
+          }
+        },
+        "record": null,
+        "consumer": "desktop",
+        "development": false
+      },
+      "env": {
+        "KCODER_HOME": {
+          "path": [
+            "$home",
+            "Owned"
+          ]
+        }
+      },
+      "expected": {
+        "dataRoot": {
+          "path": [
+            "$home",
+            "Owned"
+          ]
+        },
+        "cacheRoot": {
+          "path": [
+            "$home",
+            "Owned",
+            "tmp"
+          ]
+        },
+        "layout": "custom",
+        "externallyConfigured": true,
+        "selectionRevision": null
+      }
+    },
+    {
+      "name": "changed-child-home-is-rejected",
+      "context": {
+        "version": 1,
+        "home": {
+          "path": [
+            "$home"
+          ]
+        },
+        "platformConfig": {
+          "path": [
+            "$home",
+            "platform"
+          ]
+        },
+        "overrides": {},
+        "record": {
+          "version": 1,
+          "revision": 7,
+          "dataRoot": {
+            "path": [
+              "$home",
+              "Data"
+            ]
+          },
+          "cacheRoot": {
+            "path": [
+              "$home",
+              "Cache"
+            ]
+          }
+        },
+        "consumer": "desktop",
+        "development": false
+      },
+      "env": {
+        "KCODER_CONFIG_DIR": {
+          "path": [
+            "$home",
+            "Other"
+          ]
+        }
+      },
+      "error": "STORAGE_CONTEXT_CONFLICT"
+    },
+    {
+      "name": "future-startup-context-is-rejected",
+      "context": {
+        "version": 2,
+        "home": {
+          "path": [
+            "$home"
+          ]
+        },
+        "platformConfig": {
+          "path": [
+            "$home",
+            "platform"
+          ]
+        },
+        "overrides": {},
+        "record": null,
+        "consumer": "desktop",
+        "development": false
+      },
+      "error": "STORAGE_CONTEXT_VERSION_UNSUPPORTED"
+    },
+    {
+      "name": "context-carries-only-path-inputs",
+      "context": {
+        "version": 1,
+        "home": {
+          "path": [
+            "$home"
+          ]
+        },
+        "platformConfig": {
+          "path": [
+            "$home",
+            "platform"
+          ]
+        },
+        "overrides": {
+          "UNRECOGNIZED_KEY": "fixture-non-secret"
+        },
+        "record": null,
+        "consumer": "desktop",
+        "development": false
+      },
+      "error": "STORAGE_CONTEXT_INVALID"
+    },
+    {
+      "name": "explicit-isolation-cannot-carry-personal-selection",
+      "context": {
+        "version": 1,
+        "home": {
+          "path": [
+            "$home"
+          ]
+        },
+        "platformConfig": {
+          "path": [
+            "$home",
+            "platform"
+          ]
+        },
+        "overrides": {
+          "KCODER_HOME": {
+            "path": [
+              "$home",
+              "Owned"
+            ]
+          }
+        },
+        "record": {
+          "version": 1,
+          "revision": 7,
+          "dataRoot": {
+            "path": [
+              "$home",
+              "Data"
+            ]
+          },
+          "cacheRoot": {
+            "path": [
+              "$home",
+              "Cache"
+            ]
+          }
+        },
+        "consumer": "desktop",
+        "development": false
+      },
+      "error": "STORAGE_CONTEXT_INVALID"
+    }
+  ]
+}

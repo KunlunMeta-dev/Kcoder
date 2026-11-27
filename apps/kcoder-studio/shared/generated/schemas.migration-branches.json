@@ -1,0 +1,1144 @@
+{
+  "MigrationBranchBlocksParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "position": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId",
+      "position",
+      "viewId"
+    ],
+    "title": "MigrationBranchBlocksParams",
+    "type": "object"
+  },
+  "MigrationBranchCancelResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cancelRequested": {
+        "type": "boolean"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "cancelRequested",
+      "viewId"
+    ],
+    "title": "MigrationBranchCancelResult",
+    "type": "object"
+  },
+  "MigrationBranchOperationParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId",
+      "viewId"
+    ],
+    "title": "MigrationBranchOperationParams",
+    "type": "object"
+  },
+  "MigrationBranchPageParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId",
+      "viewId"
+    ],
+    "title": "MigrationBranchPageParams",
+    "type": "object"
+  },
+  "MigrationBranchPageResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalBranchDisplayItem": {
+        "additionalProperties": false,
+        "properties": {
+          "omittedBlocks": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "position": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "record": {
+            "$ref": "#/definitions/HistoricalDisplayRecord"
+          },
+          "replacementIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceSessionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "omittedBlocks",
+          "position",
+          "record",
+          "sourceIndex",
+          "sourceSessionId"
+        ],
+        "type": "object"
+      },
+      "HistoricalBranchProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "checks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceRecordsWithDiagnostics": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalBranchStage"
+          },
+          "structuralComplete": {
+            "description": "Structural reconstruction only; not approval or proof of safe continuation.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "totalItems": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": "string"
+          },
+          "writtenItems": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "checks",
+          "issues",
+          "sequence",
+          "source",
+          "sourceRecordsWithDiagnostics",
+          "stage",
+          "viewId",
+          "writtenItems"
+        ],
+        "type": "object"
+      },
+      "HistoricalBranchStage": {
+        "enum": [
+          "planned",
+          "reconstructing",
+          "saving",
+          "ready",
+          "cancelled",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "HistoricalDiagnostic": {
+        "additionalProperties": false,
+        "properties": {
+          "blocksContinuation": {
+            "type": "boolean"
+          },
+          "code": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "blocksContinuation",
+          "code"
+        ],
+        "type": "object"
+      },
+      "HistoricalDisplayBlock": {
+        "additionalProperties": false,
+        "properties": {
+          "bodyAvailable": {
+            "type": "boolean"
+          },
+          "callId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decodedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "index": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/definitions/HistoricalDisplayBlockKind"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "namespace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "preview": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sourceBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "bodyAvailable",
+          "index",
+          "kind",
+          "sourceBytes"
+        ],
+        "type": "object"
+      },
+      "HistoricalDisplayBlockKind": {
+        "enum": [
+          "text",
+          "thinking",
+          "tool_call",
+          "tool_result",
+          "attachment",
+          "opaque"
+        ],
+        "type": "string"
+      },
+      "HistoricalDisplayKind": {
+        "enum": [
+          "message",
+          "session",
+          "compaction",
+          "boundary",
+          "metadata",
+          "event",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "HistoricalDisplayRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "blocks": {
+            "items": {
+              "$ref": "#/definitions/HistoricalDisplayBlock"
+            },
+            "type": "array"
+          },
+          "compactSummary": {
+            "type": "boolean"
+          },
+          "diagnostics": {
+            "items": {
+              "$ref": "#/definitions/HistoricalDiagnostic"
+            },
+            "type": "array"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/definitions/HistoricalDisplayKind"
+          },
+          "nextBlockCursor": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "parentId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "record": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalRole"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sidechain": {
+            "type": "boolean"
+          },
+          "sourceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timestamp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "totalBlocks": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalDiagnostics": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "blocks",
+          "compactSummary",
+          "diagnostics",
+          "hidden",
+          "kind",
+          "record",
+          "sidechain",
+          "totalBlocks",
+          "totalDiagnostics"
+        ],
+        "type": "object"
+      },
+      "HistoricalRole": {
+        "enum": [
+          "user",
+          "assistant",
+          "system",
+          "developer",
+          "tool",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "HistoricalToolOutcome": {
+        "oneOf": [
+          {
+            "enum": [
+              "recorded_success",
+              "recorded_error",
+              "recorded_cancelled",
+              "outcome_unknown"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "A result exists, but the source did not record whether execution succeeded.",
+            "enum": [
+              "recorded_result"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/HistoricalBranchDisplayItem"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "progress": {
+        "$ref": "#/definitions/HistoricalBranchProgress"
+      },
+      "sourceSessionId": {
+        "type": "string"
+      },
+      "title": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items",
+      "progress",
+      "sourceSessionId"
+    ],
+    "title": "HistoricalBranchDisplayPage",
+    "type": "object"
+  },
+  "MigrationBranchPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      },
+      "reconstructReadable": {
+        "description": "Request a separately identified readable-history reconstruction.",
+        "type": "boolean"
+      },
+      "relatedJobIds": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationBranchPrepareParams",
+    "type": "object"
+  },
+  "MigrationBranchReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "jobId": {
+        "type": "string"
+      },
+      "viewId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "jobId"
+    ],
+    "title": "MigrationBranchReadParams",
+    "type": "object"
+  },
+  "MigrationBranchResumeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedSequence",
+      "jobId",
+      "viewId"
+    ],
+    "title": "MigrationBranchResumeParams",
+    "type": "object"
+  },
+  "MigrationBranchStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalBranchChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "relatedJobIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "viewId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "relatedJobIds",
+          "viewId"
+        ],
+        "type": "object"
+      },
+      "HistoricalBranchProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "checks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceRecordsWithDiagnostics": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalBranchStage"
+          },
+          "structuralComplete": {
+            "description": "Structural reconstruction only; not approval or proof of safe continuation.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "totalItems": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": "string"
+          },
+          "writtenItems": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "checks",
+          "issues",
+          "sequence",
+          "source",
+          "sourceRecordsWithDiagnostics",
+          "stage",
+          "viewId",
+          "writtenItems"
+        ],
+        "type": "object"
+      },
+      "HistoricalBranchStage": {
+        "enum": [
+          "planned",
+          "reconstructing",
+          "saving",
+          "ready",
+          "cancelled",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "choice": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/HistoricalBranchChoice"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "progress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/HistoricalBranchProgress"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "workerRunning": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "workerRunning"
+    ],
+    "title": "MigrationBranchStateResult",
+    "type": "object"
+  },
+  "MigrationBranchTextParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "blockIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "position": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "blockIndex",
+      "jobId",
+      "position",
+      "viewId"
+    ],
+    "title": "MigrationBranchTextParams",
+    "type": "object"
+  },
+  "MigrationBranchToolsPageParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "jobId": {
+        "type": "string"
+      },
+      "viewId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "jobId",
+      "viewId"
+    ],
+    "title": "MigrationBranchToolsPageParams",
+    "type": "object"
+  },
+  "MigrationBranchToolsPageResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalToolLink": {
+        "additionalProperties": false,
+        "properties": {
+          "call": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolLocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "callId": {
+            "type": "string"
+          },
+          "executionEvent": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolLocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "executionOutcome": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "namespace": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "$ref": "#/definitions/HistoricalToolOutcome"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolLocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "sourceTurnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/HistoricalToolLinkStatus"
+          }
+        },
+        "required": [
+          "callId",
+          "id",
+          "outcome",
+          "status"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolLinkProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "processedRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "recordedLinks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sealed": {
+            "type": "boolean"
+          },
+          "unresolvedLinks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "processedRecords",
+          "recordedLinks",
+          "sealed",
+          "unresolvedLinks"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolLinkStatus": {
+        "enum": [
+          "linked",
+          "missing_result",
+          "orphan_result",
+          "unmatched_execution_event",
+          "ambiguous",
+          "conflicting_outcome"
+        ],
+        "type": "string"
+      },
+      "HistoricalToolLocation": {
+        "additionalProperties": false,
+        "properties": {
+          "block": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "record": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "replacementIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceBlock": {
+            "description": "The physical content-block index, when rollback omitted preceding context blocks.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "record",
+          "sequence"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolOutcome": {
+        "oneOf": [
+          {
+            "enum": [
+              "recorded_success",
+              "recorded_error",
+              "recorded_cancelled",
+              "outcome_unknown"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "A result exists, but the source did not record whether execution succeeded.",
+            "enum": [
+              "recorded_result"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "links": {
+        "items": {
+          "$ref": "#/definitions/HistoricalToolLink"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "progress": {
+        "$ref": "#/definitions/HistoricalToolLinkProgress"
+      }
+    },
+    "required": [
+      "links",
+      "progress"
+    ],
+    "title": "HistoricalToolLinkPage",
+    "type": "object"
+  },
+  "MigrationBranchToolsStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "HistoricalBranchToolState": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "progress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolLinkProgress"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/HistoricalToolLinkRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "viewId": {
+            "type": "string"
+          },
+          "workerRunning": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "viewId",
+          "workerRunning"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolLinkProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "processedRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "recordedLinks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sealed": {
+            "type": "boolean"
+          },
+          "unresolvedLinks": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "processedRecords",
+          "recordedLinks",
+          "sealed",
+          "unresolvedLinks"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolLinkRun": {
+        "additionalProperties": false,
+        "properties": {
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stage": {
+            "$ref": "#/definitions/HistoricalToolLinkStage"
+          }
+        },
+        "required": [
+          "sequence",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "HistoricalToolLinkStage": {
+        "enum": [
+          "planned",
+          "correlating",
+          "ready",
+          "cancelled",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "state": {
+        "$ref": "#/definitions/HistoricalBranchToolState"
+      },
+      "workerError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "state"
+    ],
+    "title": "MigrationBranchToolsStateResult",
+    "type": "object"
+  }
+}

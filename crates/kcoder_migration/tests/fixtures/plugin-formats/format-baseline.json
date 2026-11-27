@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-17T04:16:23.551640+00:00",
+  "kind": "source-format-observation-not-vendor-runtime-certification",
+  "codex": {
+    "commit": "ce0323f2f2d3b25e82806cd555237da3db4e1897",
+    "sources": [
+      {
+        "url": "https://raw.githubusercontent.com/openai/codex/ce0323f2f2d3b25e82806cd555237da3db4e1897/codex-rs/core-plugin-common/src/installed.rs",
+        "sha256": "c82fba4fe5d96d4f54b7e9b068f410559d8b8478421dfe3c33cf76278f6991c0",
+        "bytes": 3223
+      },
+      {
+        "url": "https://raw.githubusercontent.com/openai/codex/ce0323f2f2d3b25e82806cd555237da3db4e1897/codex-rs/core-plugins/src/store.rs",
+        "sha256": "ee77430b5dfcf3aa4dea129c423e29a5685b975cad8eea6f54abcddd5ef4e609",
+        "bytes": 27942
+      },
+      {
+        "url": "https://raw.githubusercontent.com/openai/codex/ce0323f2f2d3b25e82806cd555237da3db4e1897/codex-rs/config/src/types.rs",
+        "sha256": "fa4079d7d864ad987b734843fa10b05825587bf61c38d9a5e304dc8c2edb4637",
+        "bytes": 48131
+      }
+    ],
+    "rules": [
+      "Config plugins map owns configured IDs and enabled flag; missing cache payload is not installed success",
+      "Active cache version prefers local, else semver comparison when both parse, otherwise lexical comparison",
+      "Cache path is plugins/cache/<marketplace>/<plugin>/<selected version>"
+    ]
+  },
+  "claude": {
+    "schema": "installed_plugins.json version 2 observed public installation entries",
+    "evidence": [
+      "https://github.com/anthropics/claude-code/issues/45997",
+      "https://github.com/anthropics/claude-code/issues/75392",
+      "https://code.claude.com/docs/en/plugins-reference"
+    ],
+    "rules": [
+      "Read an entry by explicit user/project scope instead of first-array-element",
+      "installPath must remain under selected source grant; manifest/version/payload are revalidated",
+      "gitCommitSha is advisory; actual captured files form the binding"
+    ],
+    "caveat": "Public issue reports describe private on-disk index; unsupported schemas remain pending. No real user installation is read."
+  }
+}

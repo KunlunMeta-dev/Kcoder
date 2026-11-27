@@ -1,0 +1,80 @@
+{
+  "skill_name": "pdf",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "把 q1.pdf、q2.pdf、q3.pdf 三个季度报告按顺序合并成 2025-q1-q3.pdf，用 Python 写。",
+      "expected_output": "A pypdf script that appends every page of the three files in order and writes the merged output.",
+      "expectations": [
+        "Uses pypdf PdfReader/PdfWriter (or an equivalent qpdf command) to merge",
+        "Keeps the order q1, q2, q3",
+        "Writes the result to 2025-q1-q3.pdf"
+      ],
+      "assertions": [
+        {
+          "contains": "pypdf"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Extract the tables from the financial statements in annual-report.pdf into Excel. What code would you use?",
+      "expected_output": "pdfplumber extract_tables per page, combined with pandas and written to an .xlsx file.",
+      "expectations": [
+        "Uses pdfplumber and page.extract_tables()",
+        "Builds DataFrames from the extracted rows and writes them to Excel",
+        "Mentions that scanned pages without a text layer need OCR first"
+      ],
+      "assertions": [
+        {
+          "contains": "extract_tables"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "用 reportlab 生成一页化学实验报告 PDF，正文里要写 H2O 和 CO2 的分子式（下标）以及 x² 这样的上标。",
+      "expected_output": "A reportlab Platypus script that uses <sub> and <super> tags inside Paragraph objects instead of Unicode subscript characters.",
+      "expectations": [
+        "Uses <sub> and <super> markup inside Paragraph objects",
+        "Does not use Unicode subscript or superscript characters such as ₂ or ² in the PDF text",
+        "Builds the document with SimpleDocTemplate (or canvas) and saves the PDF"
+      ],
+      "assertions": [
+        {
+          "contains": "<sub>"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "I have a 40-page scanned contract (images only). I need the text so I can search it. Plan the steps.",
+      "expected_output": "Convert pages to images and run OCR with pytesseract, because pdfplumber/pdftotext find no text layer.",
+      "expectations": [
+        "Recognizes that a scanned PDF has no text layer for pdftotext or pdfplumber",
+        "Converts pages to images (pdf2image) and OCRs them with pytesseract",
+        "Mentions installing pytesseract/pdf2image and the Tesseract engine if missing"
+      ],
+      "assertions": [
+        {
+          "contains": "pytesseract"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "给 draft.pdf 每一页加上『内部资料 请勿外传』的水印，输出 draft-watermarked.pdf。",
+      "expected_output": "Create or load a watermark page and merge it onto every page with pypdf, writing a new output file.",
+      "expectations": [
+        "Creates a watermark page (for example with reportlab) and merges it onto every page with pypdf merge_page",
+        "Writes to a new draft-watermarked.pdf instead of overwriting draft.pdf",
+        "Uses a font that can render the Chinese watermark text or notes that one must be registered"
+      ],
+      "assertions": [
+        {
+          "contains": "merge_page"
+        }
+      ]
+    }
+  ]
+}

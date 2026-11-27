@@ -1,0 +1,46 @@
+[package]
+name = "kcoder_migration"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_types = { path = "../kcoder_types" }
+kcoder_config = { path = "../kcoder_config" }
+kcoder_mcp_policy = { path = "../kcoder_mcp/internal/mcp_policy" }
+kcoder_skills = { path = "../kcoder_skills" }
+kcoder_state = { path = "../kcoder_state" }
+kcoder_plugins = { path = "../kcoder_plugins" }
+semver = "1"
+serde_yaml = { workspace = true }
+base64 = "0.22"
+anyhow = { workspace = true }
+image = { workspace = true }
+fs2 = "0.4"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+toml = "0.8.23"
+url = { workspace = true }
+jsonc-parser = { workspace = true }
+percent-encoding = "2"
+libc = { workspace = true }
+zeroize = "1"
+rustls = { version = "0.23.45", default-features = false, features = ["std", "aws_lc_rs"] }
+uuid = { workspace = true }
+chrono = { workspace = true }
+quick-xml = { version = "0.39.4", features = ["serialize"] }
+pulldown-cmark = { workspace = true }
+regex = { workspace = true }
+rusqlite = { workspace = true, features = ["limits", "hooks"] }
+sqlite-vfs = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Threading"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+zstd = { version = "0.13.3", default-features = false }

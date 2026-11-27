@@ -1,0 +1,554 @@
+import '@/i18n'
+import { openLocalWorkspace } from '@/lib/local-terminal'
+import { act, screen, waitFor } from '@testing-library/react'
+import { notifyAccountContextChange } from '@/kcoder/accountContextEvents'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { enableGateway, renderSidebar } from './sidebar/DesktopSidebar.test-support'
+const experimentalFeatures = vi.hoisted(() => ({ enabled: true }))
+vi.mock('@/features/experimental-features/useExperimentalFeaturesEnabled', () => ({
+  useExperimentalFeaturesEnabled: () => experimentalFeatures.enabled,
+}))
+vi.mock('@/lib/local-terminal', () => ({
+  openLocalWorkspace: vi.fn(),
+}))
+describe('DesktopSidebar account', () => {
+  beforeEach(() => {
+    experimentalFeatures.enabled = true
+    localStorage.clear()
+    enableGateway()
+    Element.prototype.scrollIntoView = vi.fn()
+    vi.mocked(openLocalWorkspace).mockReset()
+  })
+  afterEach(() => {
+    delete (window as Window & { kcoderDesktopHost?: unknown }).kcoderDesktopHost
+    vi.useRealTimers()
+    vi.unstubAllEnvs()
+  })
+  test('keeps the account settings trigger and notification bell inside the sidebar width', () => {
+    renderSidebar()
+
+    expect(screen.getByTestId('settings-button')).toHaveClass('h-[60px]', 'min-w-0', 'flex-1')
+    expect(screen.getByTestId('settings-button')).toHaveClass('pr-10')
+    expect(screen.getByTestId('settings-button')).not.toHaveClass('w-full', 'shrink-0')
+    expect(screen.getByTestId('settings-button')).toHaveTextContent('alice')
+    expect(screen.getByTestId('settings-button')).toHaveTextContent('alice@example.com')
+    expect(screen.getByTestId('sidebar-account-avatar').querySelector('svg')).toHaveClass(
+      'lucide-user-round'
+    )
+    expect(screen.getByTestId('sidebar-account-avatar')).not.toHaveTextContent('AL')
+    expect(screen.getByTestId('sidebar-global-im-notification-button')).toHaveClass(
+      'h-8',
+      'w-8',
+      'shrink-0'
+    )
+  })
+
+  test('keeps the account menu available before cloud login', async () => {
+    vi.stubEnv('VITE_WEGENT_BACKEND_URL', 'http://localhost:8000')
+    renderSidebar({}, { status: 'disconnected', isConnected: false, user: null })
+
+    const accountButton = screen.getByTestId('settings-button')
+    expect(accountButton).toHaveAccessibleName('账户与设置')
+    expect(accountButton).toHaveTextContent('旧版云账号')
+    expect(accountButton).toHaveTextContent('未登录')
+    expect(accountButton).not.toHaveTextContent('http://localhost:8000')
+    expect(accountButton).not.toHaveTextContent('alice@example.com')
+
+    await userEvent.click(accountButton)
+
+    expect(screen.getByTestId('settings-menu')).toBeInTheDocument()
+    expect(screen.getByTestId('settings-menu-button')).toHaveTextContent('设置')
+    expect(screen.getByTestId('login-menu-button')).toHaveTextContent('云登录不可用')
+    expect(screen.queryByTestId('cloud-connection-dialog')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByTestId('login-menu-button'))
+
+    expect(screen.getByTestId('cloud-connection-dialog')).toBeInTheDocument()
+    expect(screen.getByTestId('cloud-backend-url-input')).toHaveValue('http://localhost:8000')
+    expect(screen.queryByTestId('settings-menu')).not.toBeInTheDocument()
+  })
+
+  test('shows target account identity without probing or waiting for runtime health', async () => {
+    const marker = document.createElement('meta')
+    marker.name = 'kcoder-rpc-token'
+    marker.content = 'cookie'
+    document.head.append(marker)
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      const path = String(input)
+      if (path.endsWith('/api/servers')) return Response.json({ servers: [{
+        id: 'sidebar-directory-only', label: 'Owned target', transport: 'local',
+        security: { identity: { mode: 'kcoder-account' } },
+        accountIdentity: { principalId: 'owned-principal', username: 'owned-account' },
+      }] })
+      if (path.endsWith('/api/servers/status')) return new Promise<Response>(() => {})
+      if (path.endsWith('/api/kcoder-account')) return Response.json({ available: false, account: null })
+      throw new Error('Unexpected account display request')
+    })
+    try {
+      renderSidebar()
+      expect(await screen.findByText('owned-account')).toBeInTheDocument()
+      await userEvent.click(screen.getByTestId('settings-button'))
+      expect(screen.getByTestId('gateway-account-switch-sidebar-directory-only')).toHaveTextContent('Owned target')
+      expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/api/servers/status'))).toHaveLength(0)
+    } finally {
+      fetcher.mockRestore()
+      marker.remove()
+    }
+  })
+
+  test.each(['success', 'obsolete-401'] as const)('a late %s account read cannot replace the newer sidebar projection', async outcome => {
+    const marker = document.createElement('meta')
+    marker.name = 'kcoder-rpc-token'
+    marker.content = 'cookie'
+    document.head.append(marker)
+    const finish: Array<(response: Response) => void> = []
+    const payload = (username: string) => ({ servers: [{
+      id: 'sidebar-race', label: 'Owned target', transport: 'local',
+      security: { identity: { mode: 'kcoder-account' } },
+      accountIdentity: { principalId: username, username },
+    }] })
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (String(input).endsWith('/api/servers')) return new Promise<Response>(resolve => { finish.push(resolve) })
+      if (String(input).endsWith('/api/kcoder-account')) return Response.json({ available: false, account: null })
+      throw new Error('Unexpected sidebar account request')
+    })
+    const page = renderSidebar()
+    try {
+      await waitFor(() => expect(finish).toHaveLength(1))
+      await act(async () => {
+        notifyAccountContextChange('sidebar-race')
+        window.dispatchEvent(new Event('kcoder:servers-changed'))
+      })
+      await waitFor(() => expect(finish).toHaveLength(2))
+      await act(async () => { finish[1](Response.json(payload('current-account'))) })
+      expect(await screen.findByText('current-account')).toBeInTheDocument()
+      await act(async () => { finish[0](outcome === 'success'
+        ? Response.json(payload('old-account')) : Response.json({}, { status: 401 })) })
+      expect(screen.getByTestId('settings-button')).toHaveTextContent('current-account')
+      expect(screen.queryByText('old-account')).not.toBeInTheDocument()
+      expect(finish).toHaveLength(2)
+    } finally {
+      page.unmount()
+      await act(async () => { finish.forEach(resolve => resolve(Response.json({ servers: [] }))) })
+      fetcher.mockRestore()
+      marker.remove()
+    }
+  })
+
+  test('a sidebar configuration refresh waits for the original HTTP scope to retire', async () => {
+    const marker = document.createElement('meta')
+    marker.name = 'kcoder-rpc-token'
+    marker.content = 'cookie'
+    document.head.append(marker)
+    const finish: Array<(response: Response) => void> = []
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async input => {
+      if (String(input).endsWith('/api/servers')) return new Promise<Response>(resolve => { finish.push(resolve) })
+      if (String(input).endsWith('/api/kcoder-account')) return Response.json({ available: false, account: null })
+      throw new Error('Unexpected sidebar account request')
+    })
+    const page = renderSidebar()
+    try {
+      await waitFor(() => expect(finish).toHaveLength(1))
+      await act(async () => { window.dispatchEvent(new Event('kcoder:servers-changed')) })
+      await waitFor(() => expect(finish).toHaveLength(2))
+      expect(fetcher.mock.calls.filter(([url]) => String(url).endsWith('/api/servers/status'))).toHaveLength(0)
+    } finally {
+      page.unmount()
+      await act(async () => { finish.forEach(resolve => resolve(Response.json({ servers: [] }))) })
+      fetcher.mockRestore()
+      marker.remove()
+    }
+  })
+
+  test('signs in and out of KCoder through the existing account menu', async () => {
+    const user = userEvent.setup()
+    const meta = document.createElement('meta')
+    meta.name = 'kcoder-rpc-token'
+    meta.content = 'fixture'
+    document.head.append(meta)
+    let account: { id: string; username: string } | null = null
+    const portalUrl = 'https://relay.example/_relay/account/'
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, init) => {
+      if (String(url) === 'https://relay.example/_relay/account/studio-login') {
+        expect(init?.credentials).toBe('omit')
+        if (String(init?.body) === 'username=123&password=123') {
+          return Response.json({ error: 'REGISTRATION_PASSWORD_RESET_REQUIRED' }, { status: 403 })
+        }
+        expect(String(init?.body)).toBe('username=123&password=fixture-replacement-password')
+        return Response.json({ code: 'a'.repeat(43) })
+      }
+      expect(String(url)).toMatch(/\/api\/kcoder-account$/)
+      if (init?.method === 'POST') {
+        expect(JSON.parse(String(init.body))).toEqual({ invitation: 'a'.repeat(43) })
+        account = { id: 'fixture', username: 'kcoder-fixture' }
+      }
+      if (init?.method === 'DELETE') account = null
+      return Response.json({ available: true, portalUrl, account })
+    })
+    try {
+      const onLogout = vi.fn()
+      const first = renderSidebar({ onLogout })
+      const menu = screen.getByTestId('settings-button')
+      await user.click(menu)
+      expect(await screen.findByTestId('login-menu-button')).toHaveTextContent('登录 KCoder')
+      await user.click(screen.getByTestId('login-menu-button'))
+      await user.type(screen.getByLabelText('账号', { exact: true }), '123')
+      await user.type(screen.getByLabelText('密码', { exact: true }), '123')
+      await user.click(screen.getByRole('button', { name: '登录 KCoder' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent('请联系管理员获取重置邀请')
+      await user.clear(screen.getByLabelText('密码', { exact: true }))
+      await user.type(screen.getByLabelText('密码', { exact: true }), 'fixture-replacement-password')
+      await user.click(screen.getByRole('button', { name: '登录 KCoder' }))
+      expect(await screen.findByText('kcoder-fixture')).toBeInTheDocument()
+      first.unmount()
+      renderSidebar({ onLogout })
+      expect(await screen.findByText('kcoder-fixture')).toBeInTheDocument()
+      await user.click(screen.getByTestId('settings-button'))
+      await user.click(screen.getByTestId('logout-menu-button'))
+      await user.click(screen.getByRole('button', { name: '退出 KCoder 账号' }))
+      expect(screen.queryByText('kcoder-fixture')).not.toBeInTheDocument()
+      expect(onLogout).not.toHaveBeenCalled()
+    } finally {
+      fetcher.mockRestore()
+      meta.remove()
+    }
+  })
+
+  test('shows the cloud username and email after login', async () => {
+    vi.stubEnv('VITE_WEGENT_BACKEND_URL', 'http://localhost:8000')
+    const disconnect = vi.fn()
+    renderSidebar(
+      {},
+      {
+        status: 'connected',
+        isConnected: true,
+        backendUrl: 'http://localhost:8000',
+        user: { id: 7, user_name: 'cloud-user', email: 'cloud@example.com' },
+        disconnect,
+      }
+    )
+
+    const accountButton = screen.getByTestId('settings-button')
+    expect(accountButton).toHaveTextContent('cloud-user')
+    expect(accountButton).toHaveTextContent('cloud@example.com')
+    expect(accountButton).not.toHaveTextContent('alice@example.com')
+
+    await userEvent.click(accountButton)
+
+    expect(screen.getByTestId('settings-menu')).toBeInTheDocument()
+    expect(screen.getByTestId('logout-menu-button')).toHaveTextContent('退出登录')
+    expect(screen.queryByTestId('cloud-connection-dialog')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByTestId('logout-menu-button'))
+
+    expect(disconnect).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('settings-menu')).not.toBeInTheDocument()
+  })
+
+  test('shows an exposed update button in the account row when an app update is available', async () => {
+    const installUpdate = vi.fn().mockResolvedValue(undefined)
+    renderSidebar({}, undefined, {
+      availableUpdate: { currentVersion: '0.1.0', version: '0.1.1' },
+      status: 'available',
+      installUpdate,
+    })
+
+    const button = screen.getByTestId('sidebar-app-update-button')
+    const action = screen.getByTestId('sidebar-app-update-action')
+    expect(button).toHaveClass('h-8', 'w-8')
+    expect(button).toHaveAttribute('title', '更新到 0.1.1')
+    expect(action).not.toHaveClass('max-w-0', 'opacity-0', 'overflow-hidden')
+    expect(screen.getByTestId('settings-button')).toHaveClass('pr-[72px]')
+
+    await userEvent.click(button)
+
+    expect(installUpdate).toHaveBeenCalledTimes(1)
+  })
+
+  test('does not show an update icon without an available update', () => {
+    renderSidebar({}, undefined, {
+      availableUpdate: null,
+      status: 'error',
+      error: 'updater does not have any endpoints set',
+    })
+
+    expect(screen.queryByTestId('sidebar-app-update-button')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-app-update-action')).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings-button')).toHaveClass('pr-10')
+  })
+
+  test('shows download progress in the account-row update icon', () => {
+    renderSidebar({}, undefined, {
+      availableUpdate: { currentVersion: '0.1.0', version: '0.1.1' },
+      status: 'installing',
+      downloadProgress: { downloadedBytes: 40, totalBytes: 100 },
+    })
+
+    const progress = screen.getByTestId('sidebar-app-update-download-progress')
+    expect(progress).toHaveAttribute('aria-valuenow', '40')
+    expect(screen.getByTestId('sidebar-app-update-button')).toHaveAttribute(
+      'title',
+      '正在下载更新 40%'
+    )
+  })
+
+  test('opens away reminder controls from the account notification bell', async () => {
+    const user = userEvent.setup()
+    const onToggleGlobalImNotification = vi.fn()
+
+    renderSidebar({
+      imNotificationSettings: {
+        global: {
+          enabled: false,
+          sessionKey: 'session-telegram',
+          session: {
+            sessionKey: 'session-telegram',
+            channelType: 'telegram',
+            channelLabel: 'Telegram',
+            channelId: 9,
+            conversationId: 'telegram-1',
+            senderId: '100200300',
+            displayName: 'Alice',
+          },
+        },
+        runtimeTaskSubscriptions: [],
+      },
+      onToggleGlobalImNotification,
+    })
+
+    const toggle = screen.getByTestId('sidebar-global-im-notification-button')
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByTestId('sidebar-global-im-notification-muted-icon')).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('title', expect.stringContaining('Telegram'))
+
+    await user.click(toggle)
+    expect(screen.getByTestId('sidebar-global-im-notification-menu')).toHaveTextContent(
+      '离开电脑提醒'
+    )
+    expect(screen.getByTestId('sidebar-global-im-notification-menu')).toHaveTextContent(
+      'Telegram / Alice'
+    )
+    await user.click(screen.getByTestId('sidebar-global-im-notification-primary-button'))
+
+    expect(onToggleGlobalImNotification).toHaveBeenCalledTimes(1)
+  })
+
+  test('hides global IM notifications while experimental features are disabled', () => {
+    experimentalFeatures.enabled = false
+
+    renderSidebar({ onToggleGlobalImNotification: vi.fn() })
+
+    expect(screen.queryByTestId('sidebar-global-im-notification-button')).not.toBeInTheDocument()
+  })
+
+  test('anchors the away reminder menu to the full-width account area', async () => {
+    // Regression guard (POPOVER-CONTAINING-BLOCK-MISMATCH): the menu must portal
+    // into the full-width account/settings container (group/account), not remain
+    // a child of the narrow 32px icon-action group, otherwise `left-4 right-4`
+    // resolves against the icon group and the panel collapses to a sliver.
+    const user = userEvent.setup()
+
+    renderSidebar({
+      imNotificationSettings: {
+        global: {
+          enabled: false,
+          sessionKey: 'session-telegram',
+          session: {
+            sessionKey: 'session-telegram',
+            channelType: 'telegram',
+            channelLabel: 'Telegram',
+            channelId: 9,
+            conversationId: 'telegram-1',
+            senderId: '100200300',
+            displayName: 'Alice',
+          },
+        },
+        runtimeTaskSubscriptions: [],
+      },
+      onToggleGlobalImNotification: vi.fn(),
+    })
+
+    await user.click(screen.getByTestId('sidebar-global-im-notification-button'))
+
+    const menu = screen.getByTestId('sidebar-global-im-notification-menu')
+
+    // The menu DOM owner must be the account area, reachable through the
+    // group/account container — never the icon-action group wrapper.
+    const accountArea = menu.closest('.group\\/account')
+    expect(accountArea, 'menu must be portalled into the account area').not.toBeNull()
+
+    const iconGroup = screen.getByTestId('sidebar-global-im-notification-button').parentElement
+    expect(
+      iconGroup?.contains(menu),
+      'menu must NOT stay inside the narrow icon-action group'
+    ).toBe(false)
+
+    // jsdom does not compute CSS layout, so a numeric width floor is not
+    // enforceable here; the DOM-ownership assertions above are the durable
+    // guard against the containing-block regression.
+    expect(menu).toBeInTheDocument()
+  })
+
+  test('opens away reminder channel settings from the bell menu', async () => {
+    const user = userEvent.setup()
+    const onToggleGlobalImNotification = vi.fn()
+    const onOpenGlobalImNotificationSettings = vi.fn()
+
+    renderSidebar({
+      imNotificationSettings: {
+        global: {
+          enabled: true,
+          sessionKey: 'session-telegram',
+          session: {
+            sessionKey: 'session-telegram',
+            channelType: 'telegram',
+            channelLabel: 'Telegram',
+            channelId: 9,
+            conversationId: 'telegram-1',
+            senderId: '100200300',
+            displayName: 'Alice',
+          },
+        },
+        runtimeTaskSubscriptions: [],
+      },
+      onToggleGlobalImNotification,
+      onOpenGlobalImNotificationSettings,
+    })
+
+    await user.click(screen.getByTestId('sidebar-global-im-notification-button'))
+    expect(screen.getByTestId('sidebar-global-im-notification-on-icon')).toBeInTheDocument()
+    await user.click(screen.getByTestId('sidebar-global-im-notification-settings-button'))
+
+    expect(onOpenGlobalImNotificationSettings).toHaveBeenCalledTimes(1)
+    expect(onToggleGlobalImNotification).not.toHaveBeenCalled()
+  })
+
+  test('configures Gateway reminders without legacy cloud login', async () => {
+    const gatewayMarker = document.createElement('meta')
+    gatewayMarker.name = 'kcoder-rpc-token'
+    gatewayMarker.content = 'cookie'
+    document.head.append(gatewayMarker)
+    const onOpenGlobalImNotificationSettings = vi.fn()
+
+    try {
+      renderSidebar({ onOpenGlobalImNotificationSettings }, {
+        status: 'disconnected',
+        isConnected: false,
+      })
+      await userEvent.click(screen.getByTestId('sidebar-global-im-notification-button'))
+      const action = screen.getByTestId('sidebar-global-im-notification-primary-button')
+      expect(action).toHaveTextContent('选择 IM 会话')
+      await userEvent.click(action)
+
+      expect(onOpenGlobalImNotificationSettings).toHaveBeenCalledOnce()
+      expect(screen.queryByTestId('cloud-connection-dialog')).not.toBeInTheDocument()
+    } finally {
+      gatewayMarker.remove()
+    }
+  })
+
+  test('keeps the away reminder bell neutral when cloud is disconnected', async () => {
+    const user = userEvent.setup()
+
+    renderSidebar(
+      {
+        imNotificationSettings: {
+          global: {
+            enabled: false,
+            sessionKey: null,
+            session: null,
+          },
+          runtimeTaskSubscriptions: [],
+        },
+        onToggleGlobalImNotification: vi.fn(),
+      },
+      {
+        status: 'disconnected',
+        isConnected: false,
+        token: null,
+        user: null,
+        error: null,
+      }
+    )
+
+    const bell = screen.getByTestId('sidebar-global-im-notification-button')
+    expect(bell).toHaveAttribute('title', '登录云端后可开启离开电脑提醒')
+    expect(bell).not.toHaveClass('text-red-500')
+    expect(screen.getByTestId('sidebar-global-im-notification-muted-icon')).toBeInTheDocument()
+
+    await user.click(bell)
+
+    expect(screen.getByTestId('sidebar-global-im-notification-menu')).toHaveTextContent(
+      '登录云端后可开启离开电脑提醒'
+    )
+  })
+
+  test('shows the away reminder bell even when notification handlers are unavailable', async () => {
+    const user = userEvent.setup()
+
+    renderSidebar(
+      {
+        onToggleGlobalImNotification: undefined,
+        onOpenGlobalImNotificationSettings: undefined,
+      },
+      {
+        status: 'disconnected',
+        isConnected: false,
+        token: null,
+        user: null,
+        error: null,
+      }
+    )
+
+    const bell = screen.getByTestId('sidebar-global-im-notification-button')
+    expect(bell).toBeInTheDocument()
+    expect(bell).toHaveAttribute('title', '登录云端后可开启离开电脑提醒')
+    expect(bell).not.toHaveClass('text-red-500')
+    expect(screen.getByTestId('sidebar-global-im-notification-muted-icon')).toBeInTheDocument()
+
+    await user.click(bell)
+
+    expect(screen.getByTestId('sidebar-global-im-notification-menu')).toHaveTextContent(
+      '登录云端后可开启离开电脑提醒'
+    )
+  })
+
+  test('wraps cloud connection errors without turning the away reminder bell red', async () => {
+    const user = userEvent.setup()
+    const error = '读取云端用户失败 (http://localhost:8000/api/users/me): Cloud connection failed'
+
+    renderSidebar(
+      {
+        imNotificationSettings: {
+          global: {
+            enabled: false,
+            sessionKey: null,
+            session: null,
+          },
+          runtimeTaskSubscriptions: [],
+        },
+      },
+      {
+        status: 'error',
+        isConnected: false,
+        token: null,
+        user: null,
+        error,
+      }
+    )
+
+    const bell = screen.getByTestId('sidebar-global-im-notification-button')
+    expect(bell).toHaveAttribute('title', '登录云端后可开启离开电脑提醒')
+    expect(bell).not.toHaveClass('text-red-500')
+    expect(screen.getByTestId('sidebar-global-im-notification-muted-icon')).toBeInTheDocument()
+    expect(screen.queryByTestId('sidebar-global-im-notification-indicator')).not.toBeInTheDocument()
+
+    await user.click(bell)
+
+    const errorMessage = screen.getByTestId('sidebar-global-im-notification-error')
+    expect(errorMessage).toHaveTextContent(error)
+    expect(errorMessage).toHaveClass('break-words', '[overflow-wrap:anywhere]')
+  })
+})

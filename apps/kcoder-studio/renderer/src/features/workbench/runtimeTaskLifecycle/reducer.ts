@@ -1,0 +1,232 @@
+import type { RuntimeTaskLifecycleEvent, RuntimeTaskLifecycleState } from './types'
+import { runtimeTaskSnapshotWatermark } from './workListProjection'
+
+export function reduceRuntimeTaskLifecycle(
+  state: RuntimeTaskLifecycleState,
+  event: RuntimeTaskLifecycleEvent
+): RuntimeTaskLifecycleState {
+  switch (event.type) {
+    case 'background_reset':
+      return state.activeBackgroundAgents.size
+        ? { ...state, activeBackgroundAgents: new Set<string>() }
+        : state
+    case 'background_activity': {
+      const status = event.status.toLowerCase()
+      const active = ['pending', 'running', 'starting'].includes(status)
+      if (
+        !active &&
+        ![
+          'completed',
+          'done',
+          'failed',
+          'error',
+          'cancelled',
+          'canceled',
+          'interrupted',
+          'halted',
+          'paused',
+        ].includes(status)
+      )
+        return state
+      if (state.activeBackgroundAgents.has(event.agentId) === active) return state
+      const agents = new Set(state.activeBackgroundAgents)
+      if (active) agents.add(event.agentId)
+      else agents.delete(event.agentId)
+      return { ...state, activeBackgroundAgents: agents }
+    }
+    case 'executor_snapshot_received': {
+      const snapshotRunning = typeof event.task.running === 'boolean' ? event.task.running : null
+      const expectedRunning = state.expectedExecutorRunning
+      const watermark = runtimeTaskSnapshotWatermark(event.task)
+      const freshNewRun = expectedRunning === false && snapshotRunning === true &&
+        event.task.runSummary?.mainTurn === 'running' && state.expectedActivityWatermark !== null &&
+        watermark !== undefined && watermark >= state.expectedActivityWatermark
+      const shouldIgnoreStaleSnapshot =
+        // Optimistic list rows carry metadata, not newer execution evidence.
+        (event.task.optimistic === true && state.executionPhase !== 'unknown') ||
+        // An old completion cannot end a live turn or a pending send before its started event.
+        (snapshotRunning === false &&
+          (state.activeTurnId !== null || expectedRunning === true &&
+            state.expectedActivityWatermark !== null && watermark !== undefined && watermark < state.expectedActivityWatermark) &&
+          state.turnPhase !== 'idle' &&
+          ['done', 'complete', 'completed'].includes(event.task.status?.toLowerCase() ?? '')) ||
+        (snapshotRunning !== null &&
+          expectedRunning !== null &&
+          snapshotRunning !== expectedRunning &&
+          !freshNewRun &&
+          !isTerminalTaskStatus(event.task.status))
+      const executionPhase =
+        snapshotRunning === null
+          ? state.executionPhase
+          : shouldIgnoreStaleSnapshot
+            ? state.executionPhase
+            : snapshotRunning
+              ? 'running'
+              : 'idle'
+      const turnPhase =
+        snapshotRunning === false && !shouldIgnoreStaleSnapshot ? 'idle' : state.turnPhase
+
+      return {
+        ...state,
+        address: mergeAddress(state.address, event.address),
+        task: event.task,
+        executionPhase,
+        turnPhase,
+        goalStatus: event.task.goalStatus === undefined ? state.goalStatus : event.task.goalStatus,
+        continuable: event.task.continuable !== false,
+        expectedExecutorRunning:
+          !shouldIgnoreStaleSnapshot &&
+          snapshotRunning !== null &&
+          event.task.optimistic !== true &&
+          (snapshotRunning === expectedRunning || freshNewRun || isTerminalTaskStatus(event.task.status))
+            ? null
+            : expectedRunning,
+        expectedActivityWatermark: freshNewRun || snapshotRunning === false && !shouldIgnoreStaleSnapshot
+          ? null : state.expectedActivityWatermark,
+      }
+    }
+
+    case 'send_requested':
+      return {
+        ...state,
+        executionPhase: 'starting',
+        turnPhase: 'submitting',
+        activeTurnId: null,
+        expectedExecutorRunning: true,
+        expectedActivityWatermark: event.activityWatermark ?? null,
+        unread: false,
+      }
+
+    case 'send_accepted':
+      // A response can finish before its asynchronous send acknowledgement arrives.
+      // Only a new send_requested may reopen a turn already settled by the executor.
+      // Snapshot reconciliation may already have cleared expectedExecutorRunning.
+      // An acknowledgement confirms a pending turn; it never creates one.
+      if (state.turnPhase === 'idle') return state
+      return {
+        ...state,
+        executionPhase: 'running',
+        turnPhase: state.turnPhase === 'streaming' ? 'streaming' : 'awaiting',
+        expectedExecutorRunning: true,
+      }
+
+    case 'send_rejected': {
+      const executorAlreadyConfirmed =
+        state.executionPhase === 'running' || state.turnPhase === 'streaming'
+      return executorAlreadyConfirmed
+        ? state
+        : {
+            ...state,
+            executionPhase: 'idle',
+            turnPhase: 'idle',
+            expectedExecutorRunning: false,
+            expectedActivityWatermark: event.activityWatermark ?? null,
+          }
+    }
+
+    case 'stop_requested':
+      return {
+        ...state,
+        executionPhase: state.executionPhase === 'idle' ? 'idle' : 'stopping',
+      }
+
+    case 'stop_rejected':
+      return {
+        ...state,
+        executionPhase: state.executionPhase === 'stopping' ? 'running' : state.executionPhase,
+      }
+
+    case 'executor_started':
+      return {
+        ...state,
+        executionPhase: 'running',
+        expectedExecutorRunning: true,
+        unread: false,
+      }
+
+    case 'executor_settled':
+      return {
+        ...state,
+        executionPhase: 'idle',
+        turnPhase: 'idle',
+        expectedExecutorRunning: false,
+        expectedActivityWatermark: event.activityWatermark ?? null,
+      }
+
+    case 'turn_started':
+      if (
+        state.activeTurnId === (event.turnId ?? null) &&
+        state.executionPhase === 'running' &&
+        state.turnPhase === 'streaming'
+      )
+        return state
+      return {
+        ...state,
+        executionPhase: 'running',
+        turnPhase: 'streaming',
+        activeTurnId: event.turnId ?? null,
+        expectedExecutorRunning: true,
+        unread: false,
+      }
+
+    case 'turn_settled':
+      if (event.turnId && state.activeTurnId && event.turnId !== state.activeTurnId) return state
+      if (event.turnId && state.activeTurnId === null && state.turnPhase === 'submitting')
+        return state
+      return {
+        ...state,
+        executionPhase: state.goalStatus === 'active' ? state.executionPhase : 'idle',
+        turnPhase: 'idle',
+        activeTurnId: null,
+        expectedExecutorRunning:
+          state.goalStatus === 'active' ? state.expectedExecutorRunning : false,
+        expectedActivityWatermark:
+          state.goalStatus === 'active' ? state.expectedActivityWatermark : event.activityWatermark ?? null,
+      }
+
+    case 'turn_recovered':
+      return event.streaming
+        ? {
+            ...state,
+            executionPhase: 'running',
+            turnPhase: 'streaming',
+            expectedExecutorRunning: true,
+          }
+        : state
+
+    case 'goal_status_received':
+      return {
+        ...state,
+        goalStatus: event.goalStatus,
+      }
+
+    case 'marked_read':
+      return state.unread ? { ...state, unread: false } : state
+
+    case 'marked_unread':
+      return state.unread ? state : { ...state, unread: true }
+  }
+}
+
+function isTerminalTaskStatus(status: string | null | undefined): boolean {
+  const normalized = status?.replace(/[_-]/g, '').trim().toLowerCase()
+  return Boolean(
+    normalized &&
+    ['done', 'complete', 'completed', 'failed', 'error', 'cancelled', 'canceled'].includes(
+      normalized
+    )
+  )
+}
+
+function mergeAddress(
+  current: RuntimeTaskLifecycleState['address'],
+  incoming: RuntimeTaskLifecycleState['address']
+): RuntimeTaskLifecycleState['address'] {
+  return {
+    ...current,
+    ...incoming,
+    threadId: incoming.threadId ?? current.threadId,
+    workspacePath: incoming.workspacePath ?? current.workspacePath,
+    runtimeHandle: incoming.runtimeHandle ?? current.runtimeHandle,
+  }
+}

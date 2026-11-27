@@ -1,0 +1,50 @@
+{
+  "version": "business-template-corpus-v1",
+  "pages": [
+    {
+      "id": "worklog",
+      "title": "Synthetic work log W43",
+      "markdown": "# Synthetic work log\nReporting period: 2026-W43.\n| Task | Owner | Status | Units | Evidence |\n|---|---|---|---:|---|\n| T-101 | Mira | completed | 12 | verified batch B-101 |\n| T-102 | Noah | completed | 8 | verified batch B-102 |\n| T-103 | Mira | pending | 5 | waiting for source approval |\nRisk: approval for T-103 is still missing. Next step: request that approval; no completion date has been agreed.\n"
+    },
+    {
+      "id": "report-baseline",
+      "title": "Synthetic report baseline",
+      "markdown": "# Baseline report\nVersion label: BASE-1. Date: 2026-10-20.\n| Record | Amount | Currency |\n|---|---:|---|\n| R-1 | 100 | CNY |\n| R-2 | 200 | CNY |\n| R-4 | 20 | CNY |\nDeclared total: 320 CNY.\n"
+    },
+    {
+      "id": "report-current",
+      "title": "Synthetic report current",
+      "markdown": "# Current report\nVersion label: CURRENT-2. Date: 2026-10-23.\n| Record | Amount | Currency |\n|---|---:|---|\n| R-1 | 100 | CNY |\n| R-2 | 180 | CNY |\n| R-2 | 180 | CNY |\n| R-3 | missing | CNY |\n| R-4 | 20 | USD |\nDeclared total: 500 CNY. No exchange rate or reconciliation approval is supplied.\n"
+    },
+    {
+      "id": "deadlines",
+      "title": "Synthetic deadline register",
+      "markdown": "# Deadline register\nAs-of date: 2026-10-24.\n| Item | Owner | Due date | Status |\n|---|---|---|---|\n| D-1 | Mira | 2026-10-22 | open |\n| D-2 | Noah | 2026-10-26 | open |\n| D-3 | Inez | 2026-10-20 | completed |\nNo revised deadlines or authority to send notifications are supplied.\n"
+    },
+    {
+      "id": "policy-baseline",
+      "title": "Synthetic policy approved baseline",
+      "markdown": "# Policy P-ALPHA baseline\nDocument version: 1. Status: approved. Effective date: 2026-01-01.\nMeal expense cap: 80 CNY per person. Required approvers: 1.\nThis is the documented approved policy at the supplied as-of date 2026-10-24.\n"
+    },
+    {
+      "id": "policy-current",
+      "title": "Synthetic policy proposed revision",
+      "markdown": "# Policy P-ALPHA proposed revision\nDocument version: 2. Status: draft; final approval is not supplied. Proposed effective date: 2026-11-01.\nProposed meal expense cap: 100 CNY per person. Proposed required approvers: 2.\nAffected task: expense review T-EXP. Current applicability is unresolved; publication alone is not policy approval.\n"
+    },
+    {
+      "id": "material-a",
+      "title": "Synthetic material M-001",
+      "markdown": "# Approved onboarding note\nAuthor: Mira. Document date: 2026-10-21. Category: onboarding.\nTopic: use the approved source register to find the fixed document revision.\n"
+    },
+    {
+      "id": "material-a-duplicate",
+      "title": "Synthetic material M-002",
+      "markdown": "# Approved onboarding note\nAuthor: Mira. Document date: 2026-10-21. Category: onboarding.\nTopic: use the approved source register to find the fixed document revision.\n"
+    },
+    {
+      "id": "material-missing",
+      "title": "Synthetic material M-003",
+      "markdown": "# Unclassified workshop note\nDocument identifier: M-003. Author: not supplied. Document date: not supplied.\nTopic: a workshop may be useful, but its owner, date and approval are not established.\n"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+[package]
+name = "kcoder_app_protocol"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+json-schema = [
+    "dep:schemars",
+    "kcoder_channel_protocol/json-schema",
+    "kcoder_integration_protocol/json-schema",
+    "kcoder_types/json-schema",
+]
+
+[dependencies]
+kcoder_channel_protocol = { path = "internal/channel_protocol" }
+kcoder_integration_protocol = { path = "internal/integration_protocol" }
+kcoder_types = { path = "../kcoder_types" }
+schemars = { version = "0.8", optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["raw_value"] }
+thiserror = { workspace = true }
+
+[build-dependencies]
+sha2 = { workspace = true }
+
+[[example]]
+name = "export_contracts"
+required-features = ["json-schema"]

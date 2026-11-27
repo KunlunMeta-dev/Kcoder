@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "partition": "persist:kcoder-studio-desktop",
+  "partitionName": "kcoder-studio-desktop",
+  "windowsDesktopRootMaxUtf16": 180,
+  "profileCacheRelative": "Partitions/kcoder-studio-desktop/Cache",
+  "httpCacheRelative": "browser-cache/desktop/kcoder-studio-desktop/http",
+  "codeCacheRelative": "browser-cache/desktop/kcoder-studio-desktop/code",
+  "sourceKinds": ["directory", "directoryLink"]
+}

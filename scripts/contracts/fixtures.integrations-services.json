@@ -1,0 +1,511 @@
+{
+  "NativeCodeServiceMethod": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": "integrations/services/code/read"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": "caller-defined-unregistered-value"
+      }
+    ]
+  },
+  "NativeCodeServicePurpose": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": "native_saved_code_service"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": "caller-defined-unregistered-value"
+      }
+    ]
+  },
+  "NativeCodeWorkflowSelection": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "definitionId": "saved-code-fixture",
+          "version": 1,
+          "args": {
+            "value": 6
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "definitionId": "saved-code-fixture",
+          "version": 1,
+          "args": {
+            "value": 6
+          },
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeServicePreparePayload": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "purpose": "native_saved_code_service",
+          "explicitBackgroundConsent": true,
+          "expiresInMs": 60000,
+          "codeWorkflow": {
+            "definitionId": "saved-code-fixture",
+            "version": 1,
+            "args": {
+              "value": 6
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "purpose": "native_saved_code_service",
+          "explicitBackgroundConsent": true,
+          "expiresInMs": 60000,
+          "codeWorkflow": {
+            "definitionId": "saved-code-fixture",
+            "version": 1,
+            "args": {
+              "value": 6
+            }
+          },
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeServiceLocator": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "leaseId": "native-code-fixture"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "leaseId": "native-code-fixture",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeServiceReadyReceipt": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "leaseId": "native-code-fixture",
+          "operationId": "native-code-task-fixture",
+          "acceptance": null,
+          "modelCalls": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "leaseId": "native-code-fixture",
+          "operationId": "native-code-task-fixture",
+          "acceptance": null,
+          "modelCalls": 0,
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeOwnerObservation": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": "last_persisted"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": "caller-defined-unregistered-value"
+      }
+    ]
+  },
+  "NativeCodeCurrentOsState": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": "caller-defined-unregistered-value"
+      }
+    ]
+  },
+  "NativeCodeServiceIntent": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "template": "native-saved-code-service-v1",
+          "leaseId": "native-code-fixture",
+          "operationId": "explicit-native-code-fixture",
+          "scope": {
+            "accountId": "fixture-owner",
+            "targetId": "fixture-target",
+            "workspaceId": "fixture-workspace",
+            "identityGeneration": "fixture-identity",
+            "targetRevision": "fixture-configuration"
+          },
+          "definitionId": "saved-code-fixture",
+          "definitionVersion": 1,
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "expiresAtMs": 123456789
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "template": "native-saved-code-service-v1",
+          "leaseId": "native-code-fixture",
+          "operationId": "explicit-native-code-fixture",
+          "scope": {
+            "accountId": "fixture-owner",
+            "targetId": "fixture-target",
+            "workspaceId": "fixture-workspace",
+            "identityGeneration": "fixture-identity",
+            "targetRevision": "fixture-configuration"
+          },
+          "definitionId": "saved-code-fixture",
+          "definitionVersion": 1,
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "expiresAtMs": 123456789,
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeServiceRecord": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "schemaVersion": 1,
+          "revision": 1,
+          "intent": {
+            "template": "native-saved-code-service-v1",
+            "leaseId": "native-code-fixture",
+            "operationId": "explicit-native-code-fixture",
+            "scope": {
+              "accountId": "fixture-owner",
+              "targetId": "fixture-target",
+              "workspaceId": "fixture-workspace",
+              "identityGeneration": "fixture-identity",
+              "targetRevision": "fixture-configuration"
+            },
+            "definitionId": "saved-code-fixture",
+            "definitionVersion": 1,
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "expiresAtMs": 123456789
+          },
+          "grantRef": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "state": "approved",
+          "enabled": false,
+          "observedAtMs": 123450000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "schemaVersion": 1,
+          "revision": 1,
+          "intent": {
+            "template": "native-saved-code-service-v1",
+            "leaseId": "native-code-fixture",
+            "operationId": "explicit-native-code-fixture",
+            "scope": {
+              "accountId": "fixture-owner",
+              "targetId": "fixture-target",
+              "workspaceId": "fixture-workspace",
+              "identityGeneration": "fixture-identity",
+              "targetRevision": "fixture-configuration"
+            },
+            "definitionId": "saved-code-fixture",
+            "definitionVersion": 1,
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "expiresAtMs": 123456789
+          },
+          "grantRef": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "state": "approved",
+          "enabled": false,
+          "observedAtMs": 123450000,
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeServiceGrantView": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "reference": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "status": "active",
+          "expiresAtMs": 123456789
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "reference": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "status": "active",
+          "expiresAtMs": 123456789,
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeServiceReadResult": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "record": {
+            "schemaVersion": 1,
+            "revision": 1,
+            "intent": {
+              "template": "native-saved-code-service-v1",
+              "leaseId": "native-code-fixture",
+              "operationId": "explicit-native-code-fixture",
+              "scope": {
+                "accountId": "fixture-owner",
+                "targetId": "fixture-target",
+                "workspaceId": "fixture-workspace",
+                "identityGeneration": "fixture-identity",
+                "targetRevision": "fixture-configuration"
+              },
+              "definitionId": "saved-code-fixture",
+              "definitionVersion": 1,
+              "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "expiresAtMs": 123456789
+            },
+            "grantRef": {
+              "id": "original-code-grant",
+              "revision": "1"
+            },
+            "state": "approved",
+            "enabled": false,
+            "observedAtMs": 123450000
+          },
+          "grant": {
+            "reference": {
+              "id": "original-code-grant",
+              "revision": "1"
+            },
+            "status": "active",
+            "expiresAtMs": 123456789
+          },
+          "ownerObservation": "last_persisted",
+          "currentOsState": "unknown"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "record": {
+            "schemaVersion": 1,
+            "revision": 1,
+            "intent": {
+              "template": "native-saved-code-service-v1",
+              "leaseId": "native-code-fixture",
+              "operationId": "explicit-native-code-fixture",
+              "scope": {
+                "accountId": "fixture-owner",
+                "targetId": "fixture-target",
+                "workspaceId": "fixture-workspace",
+                "identityGeneration": "fixture-identity",
+                "targetRevision": "fixture-configuration"
+              },
+              "definitionId": "saved-code-fixture",
+              "definitionVersion": 1,
+              "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "expiresAtMs": 123456789
+            },
+            "grantRef": {
+              "id": "original-code-grant",
+              "revision": "1"
+            },
+            "state": "approved",
+            "enabled": false,
+            "observedAtMs": 123450000
+          },
+          "grant": {
+            "reference": {
+              "id": "original-code-grant",
+              "revision": "1"
+            },
+            "status": "active",
+            "expiresAtMs": 123456789
+          },
+          "ownerObservation": "last_persisted",
+          "currentOsState": "unknown",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "NativeCodeServiceMutationResult": {
+    "valid": [
+      {
+        "name": "structural-native-code-example",
+        "value": {
+          "record": {
+            "schemaVersion": 1,
+            "revision": 1,
+            "intent": {
+              "template": "native-saved-code-service-v1",
+              "leaseId": "native-code-fixture",
+              "operationId": "explicit-native-code-fixture",
+              "scope": {
+                "accountId": "fixture-owner",
+                "targetId": "fixture-target",
+                "workspaceId": "fixture-workspace",
+                "identityGeneration": "fixture-identity",
+                "targetRevision": "fixture-configuration"
+              },
+              "definitionId": "saved-code-fixture",
+              "definitionVersion": 1,
+              "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "expiresAtMs": 123456789
+            },
+            "grantRef": {
+              "id": "original-code-grant",
+              "revision": "1"
+            },
+            "state": "approved",
+            "enabled": false,
+            "observedAtMs": 123450000
+          },
+          "ready": {
+            "leaseId": "native-code-fixture",
+            "operationId": "native-code-task-fixture",
+            "acceptance": null,
+            "modelCalls": 0
+          },
+          "reconciled": false,
+          "cancellationRequested": false,
+          "cancellationSettled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-authority-or-unregistered-value",
+        "value": {
+          "record": {
+            "schemaVersion": 1,
+            "revision": 1,
+            "intent": {
+              "template": "native-saved-code-service-v1",
+              "leaseId": "native-code-fixture",
+              "operationId": "explicit-native-code-fixture",
+              "scope": {
+                "accountId": "fixture-owner",
+                "targetId": "fixture-target",
+                "workspaceId": "fixture-workspace",
+                "identityGeneration": "fixture-identity",
+                "targetRevision": "fixture-configuration"
+              },
+              "definitionId": "saved-code-fixture",
+              "definitionVersion": 1,
+              "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "expiresAtMs": 123456789
+            },
+            "grantRef": {
+              "id": "original-code-grant",
+              "revision": "1"
+            },
+            "state": "approved",
+            "enabled": false,
+            "observedAtMs": 123450000
+          },
+          "ready": {
+            "leaseId": "native-code-fixture",
+            "operationId": "native-code-task-fixture",
+            "acceptance": null,
+            "modelCalls": 0
+          },
+          "reconciled": false,
+          "cancellationRequested": false,
+          "cancellationSettled": false,
+          "callerAuthority": true
+        }
+      }
+    ]
+  }
+}

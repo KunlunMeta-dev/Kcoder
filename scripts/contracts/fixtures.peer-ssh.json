@@ -1,0 +1,1083 @@
+{
+  "PeerSshEnrollmentV1": {
+    "valid": [
+      {
+        "name": "shape-only-without-authorization-or-signature-verdict",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 7,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "physical-profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "public-shape-cannot-carry-an-allow-grant",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 7,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "physical-profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          },
+          "allow": true
+        }
+      },
+      {
+        "name": "reject-invalid-generation",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 0,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "physical-profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          }
+        }
+      },
+      {
+        "name": "reject-invalid-version",
+        "value": {
+          "version": 2,
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 7,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "physical-profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          }
+        }
+      },
+      {
+        "name": "reject-invalid-purpose",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.gateway.connection-proof.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 7,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "physical-profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          }
+        }
+      },
+      {
+        "name": "reject-trailing-line-break",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 7,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "profile\n",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          }
+        }
+      },
+      {
+        "name": "reject-control-character",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 7,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          }
+        }
+      },
+      {
+        "name": "reject-too-long",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+          "enrollmentId": "controlled-enrollment",
+          "generation": 7,
+          "gateway": {
+            "gatewayId": "gateway-A",
+            "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            "keyGeneration": 2
+          },
+          "target": {
+            "targetId": "saved-ssh-target",
+            "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "accountGeneration": "account-generation",
+            "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+            "sshUser": "peer-user"
+          },
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          }
+        }
+      }
+    ]
+  },
+  "PeerSshChallengeOfferV1": {
+    "valid": [
+      {
+        "name": "shape-only-without-authorization-or-signature-verdict",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-challenge.v1",
+          "enrollmentId": "controlled-enrollment",
+          "enrollmentGeneration": 7,
+          "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "public-shape-cannot-carry-an-allow-grant",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-challenge.v1",
+          "enrollmentId": "controlled-enrollment",
+          "enrollmentGeneration": 7,
+          "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "allow": true
+        }
+      },
+      {
+        "name": "reject-noncanonical-nonce",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-challenge.v1",
+          "enrollmentId": "controlled-enrollment",
+          "enrollmentGeneration": 7,
+          "nativeNonce": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ]
+  },
+  "PeerSshChallengeClaimsV1": {
+    "valid": [
+      {
+        "name": "shape-only-without-authorization-or-signature-verdict",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-challenge.v1",
+          "enrollment": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+            "enrollmentId": "controlled-enrollment",
+            "generation": 7,
+            "gateway": {
+              "gatewayId": "gateway-A",
+              "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "keyGeneration": 2
+            },
+            "target": {
+              "targetId": "saved-ssh-target",
+              "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "accountGeneration": "account-generation",
+              "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+              "sshUser": "peer-user"
+            },
+            "native": {
+              "accountUid": 20001,
+              "profileIdentity": "physical-profile",
+              "targetId": "native-profile-target",
+              "workspaceId": "physical-workspace",
+              "identityEpoch": "profile-epoch",
+              "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+            }
+          },
+          "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "public-shape-cannot-carry-an-allow-grant",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-challenge.v1",
+          "enrollment": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+            "enrollmentId": "controlled-enrollment",
+            "generation": 7,
+            "gateway": {
+              "gatewayId": "gateway-A",
+              "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "keyGeneration": 2
+            },
+            "target": {
+              "targetId": "saved-ssh-target",
+              "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "accountGeneration": "account-generation",
+              "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+              "sshUser": "peer-user"
+            },
+            "native": {
+              "accountUid": 20001,
+              "profileIdentity": "physical-profile",
+              "targetId": "native-profile-target",
+              "workspaceId": "physical-workspace",
+              "identityEpoch": "profile-epoch",
+              "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+            }
+          },
+          "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "allow": true
+        }
+      },
+      {
+        "name": "reject-truncated-gateway-key",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-challenge.v1",
+          "enrollment": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+            "enrollmentId": "controlled-enrollment",
+            "generation": 7,
+            "gateway": {
+              "gatewayId": "gateway-A",
+              "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+              "keyGeneration": 2
+            },
+            "target": {
+              "targetId": "saved-ssh-target",
+              "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "accountGeneration": "account-generation",
+              "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+              "sshUser": "peer-user"
+            },
+            "native": {
+              "accountUid": 20001,
+              "profileIdentity": "physical-profile",
+              "targetId": "native-profile-target",
+              "workspaceId": "physical-workspace",
+              "identityEpoch": "profile-epoch",
+              "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+            }
+          },
+          "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ]
+  },
+  "PeerSshNativeProofV1": {
+    "valid": [
+      {
+        "name": "shape-only-without-authorization-or-signature-verdict",
+        "value": {
+          "claims": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-challenge.v1",
+            "enrollment": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "enrollmentId": "controlled-enrollment",
+              "generation": 7,
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                "keyGeneration": 2
+              },
+              "target": {
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user"
+              },
+              "native": {
+                "accountUid": 20001,
+                "profileIdentity": "physical-profile",
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace",
+                "identityEpoch": "profile-epoch",
+                "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+              }
+            },
+            "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "public-shape-cannot-carry-an-allow-grant",
+        "value": {
+          "claims": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-challenge.v1",
+            "enrollment": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "enrollmentId": "controlled-enrollment",
+              "generation": 7,
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                "keyGeneration": 2
+              },
+              "target": {
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user"
+              },
+              "native": {
+                "accountUid": 20001,
+                "profileIdentity": "physical-profile",
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace",
+                "identityEpoch": "profile-epoch",
+                "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+              }
+            },
+            "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "allow": true
+        }
+      },
+      {
+        "name": "reject-truncated-native-signature",
+        "value": {
+          "claims": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-challenge.v1",
+            "enrollment": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "enrollmentId": "controlled-enrollment",
+              "generation": 7,
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                "keyGeneration": 2
+              },
+              "target": {
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user"
+              },
+              "native": {
+                "accountUid": 20001,
+                "profileIdentity": "physical-profile",
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace",
+                "identityEpoch": "profile-epoch",
+                "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+              }
+            },
+            "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+      }
+    ]
+  },
+  "PeerSshGatewayProofV1": {
+    "valid": [
+      {
+        "name": "shape-only-without-authorization-or-signature-verdict",
+        "value": {
+          "native": {
+            "claims": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-challenge.v1",
+              "enrollment": {
+                "version": 1,
+                "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+                "enrollmentId": "controlled-enrollment",
+                "generation": 7,
+                "gateway": {
+                  "gatewayId": "gateway-A",
+                  "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                  "keyGeneration": 2
+                },
+                "target": {
+                  "targetId": "saved-ssh-target",
+                  "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "accountGeneration": "account-generation",
+                  "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                  "sshUser": "peer-user"
+                },
+                "native": {
+                  "accountUid": 20001,
+                  "profileIdentity": "physical-profile",
+                  "targetId": "native-profile-target",
+                  "workspaceId": "physical-workspace",
+                  "identityEpoch": "profile-epoch",
+                  "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+                }
+              },
+              "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          },
+          "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "public-shape-cannot-carry-an-allow-grant",
+        "value": {
+          "native": {
+            "claims": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-challenge.v1",
+              "enrollment": {
+                "version": 1,
+                "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+                "enrollmentId": "controlled-enrollment",
+                "generation": 7,
+                "gateway": {
+                  "gatewayId": "gateway-A",
+                  "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                  "keyGeneration": 2
+                },
+                "target": {
+                  "targetId": "saved-ssh-target",
+                  "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "accountGeneration": "account-generation",
+                  "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                  "sshUser": "peer-user"
+                },
+                "native": {
+                  "accountUid": 20001,
+                  "profileIdentity": "physical-profile",
+                  "targetId": "native-profile-target",
+                  "workspaceId": "physical-workspace",
+                  "identityEpoch": "profile-epoch",
+                  "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+                }
+              },
+              "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          },
+          "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+          "allow": true
+        }
+      },
+      {
+        "name": "reject-source-presence-as-transport-proof",
+        "value": {
+          "native": {
+            "claims": {
+              "version": 1,
+              "purpose": "kcoder.peer-source.presence.v1",
+              "enrollment": {
+                "version": 1,
+                "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+                "enrollmentId": "controlled-enrollment",
+                "generation": 7,
+                "gateway": {
+                  "gatewayId": "gateway-A",
+                  "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                  "keyGeneration": 2
+                },
+                "target": {
+                  "targetId": "saved-ssh-target",
+                  "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  "accountGeneration": "account-generation",
+                  "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                  "sshUser": "peer-user"
+                },
+                "native": {
+                  "accountUid": 20001,
+                  "profileIdentity": "physical-profile",
+                  "targetId": "native-profile-target",
+                  "workspaceId": "physical-workspace",
+                  "identityEpoch": "profile-epoch",
+                  "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+                }
+              },
+              "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+              "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+            },
+            "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          },
+          "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        }
+      }
+    ]
+  },
+  "PeerSshPinCommandV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-pin-change.v1",
+          "operationId": "original-explicit-operation",
+          "expectedRevision": 0,
+          "action": {
+            "kind": "authorize",
+            "enrollment": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "enrollmentId": "controlled-enrollment",
+              "generation": 1,
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                "keyGeneration": 2
+              },
+              "target": {
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user"
+              },
+              "native": {
+                "accountUid": 20001,
+                "profileIdentity": "physical-profile",
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace",
+                "identityEpoch": "profile-epoch",
+                "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "explicit-original-revoke-shape",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-pin-change.v1",
+          "operationId": "original-explicit-revoke",
+          "expectedRevision": 1,
+          "action": {
+            "kind": "revoke",
+            "enrollmentId": "controlled-enrollment",
+            "expectedGeneration": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "version": 1,
+          "purpose": "kcoder.peer-message.ssh-pin-change.v1",
+          "operationId": "original-explicit-operation",
+          "expectedRevision": 0,
+          "action": {
+            "kind": "authorize",
+            "enrollment": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "enrollmentId": "controlled-enrollment",
+              "generation": 1,
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                "keyGeneration": 2
+              },
+              "target": {
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user"
+              },
+              "native": {
+                "accountUid": 20001,
+                "profileIdentity": "physical-profile",
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace",
+                "identityEpoch": "profile-epoch",
+                "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+              }
+            }
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshPinReceiptV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "version": 1,
+          "operationId": "original-explicit-operation",
+          "enrollmentId": "controlled-enrollment",
+          "revision": 1,
+          "generation": 1,
+          "status": "pinned"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "version": 1,
+          "operationId": "original-explicit-operation",
+          "enrollmentId": "controlled-enrollment",
+          "revision": 1,
+          "generation": 1,
+          "status": "pinned",
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshProfileObservationV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "version": 1,
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "physical-profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          },
+          "pinRevision": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "version": 1,
+          "native": {
+            "accountUid": 20001,
+            "profileIdentity": "physical-profile",
+            "targetId": "native-profile-target",
+            "workspaceId": "physical-workspace",
+            "identityEpoch": "profile-epoch",
+            "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+          },
+          "pinRevision": 0,
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshPinReceiptReadV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "version": 1,
+          "operationId": "original-explicit-operation",
+          "receipt": {
+            "version": 1,
+            "operationId": "original-explicit-operation",
+            "enrollmentId": "controlled-enrollment",
+            "revision": 1,
+            "generation": 1,
+            "status": "pinned"
+          }
+        }
+      },
+      {
+        "name": "missing-receipt-is-not-permission-to-replay",
+        "value": {
+          "version": 1,
+          "operationId": "original-explicit-operation",
+          "receipt": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "version": 1,
+          "operationId": "original-explicit-operation",
+          "receipt": {
+            "version": 1,
+            "operationId": "original-explicit-operation",
+            "enrollmentId": "controlled-enrollment",
+            "revision": 1,
+            "generation": 1,
+            "status": "pinned"
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshAuthOfferParamsV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "enrollmentId": "controlled-enrollment"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "enrollmentId": "controlled-enrollment",
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshAuthNativeProofParamsV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "claims": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-challenge.v1",
+            "enrollment": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "enrollmentId": "controlled-enrollment",
+              "generation": 1,
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                "keyGeneration": 2
+              },
+              "target": {
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user"
+              },
+              "native": {
+                "accountUid": 20001,
+                "profileIdentity": "physical-profile",
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace",
+                "identityEpoch": "profile-epoch",
+                "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+              }
+            },
+            "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "claims": {
+            "version": 1,
+            "purpose": "kcoder.peer-message.ssh-challenge.v1",
+            "enrollment": {
+              "version": 1,
+              "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+              "enrollmentId": "controlled-enrollment",
+              "generation": 1,
+              "gateway": {
+                "gatewayId": "gateway-A",
+                "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                "keyGeneration": 2
+              },
+              "target": {
+                "targetId": "saved-ssh-target",
+                "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "accountGeneration": "account-generation",
+                "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                "sshUser": "peer-user"
+              },
+              "native": {
+                "accountUid": 20001,
+                "profileIdentity": "physical-profile",
+                "targetId": "native-profile-target",
+                "workspaceId": "physical-workspace",
+                "identityEpoch": "profile-epoch",
+                "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+              }
+            },
+            "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshAuthCompleteParamsV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "proof": {
+            "native": {
+              "claims": {
+                "version": 1,
+                "purpose": "kcoder.peer-message.ssh-challenge.v1",
+                "enrollment": {
+                  "version": 1,
+                  "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+                  "enrollmentId": "controlled-enrollment",
+                  "generation": 1,
+                  "gateway": {
+                    "gatewayId": "gateway-A",
+                    "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    "keyGeneration": 2
+                  },
+                  "target": {
+                    "targetId": "saved-ssh-target",
+                    "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "accountGeneration": "account-generation",
+                    "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                    "sshUser": "peer-user"
+                  },
+                  "native": {
+                    "accountUid": 20001,
+                    "profileIdentity": "physical-profile",
+                    "targetId": "native-profile-target",
+                    "workspaceId": "physical-workspace",
+                    "identityEpoch": "profile-epoch",
+                    "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+                  }
+                },
+                "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            },
+            "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "proof": {
+            "native": {
+              "claims": {
+                "version": 1,
+                "purpose": "kcoder.peer-message.ssh-challenge.v1",
+                "enrollment": {
+                  "version": 1,
+                  "purpose": "kcoder.peer-message.ssh-enrollment.v1",
+                  "enrollmentId": "controlled-enrollment",
+                  "generation": 1,
+                  "gateway": {
+                    "gatewayId": "gateway-A",
+                    "publicKey": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                    "keyGeneration": 2
+                  },
+                  "target": {
+                    "targetId": "saved-ssh-target",
+                    "targetRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "accountGeneration": "account-generation",
+                    "sshHostKey": "ssh-ed25519 SHA256:expected-key",
+                    "sshUser": "peer-user"
+                  },
+                  "native": {
+                    "accountUid": 20001,
+                    "profileIdentity": "physical-profile",
+                    "targetId": "native-profile-target",
+                    "workspaceId": "physical-workspace",
+                    "identityEpoch": "profile-epoch",
+                    "publicKey": [2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+                  }
+                },
+                "nativeNonce": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "gatewayNonce": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+              },
+              "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            },
+            "signature": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+          },
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "PeerSshAuthCompleteResultV1": {
+    "valid": [
+      {
+        "name": "shape-only-not-an-authorization-verdict",
+        "value": {
+          "version": 1,
+          "enrollmentId": "controlled-enrollment",
+          "generation": 1,
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-caller-supplied-authorization",
+        "value": {
+          "version": 1,
+          "enrollmentId": "controlled-enrollment",
+          "generation": 1,
+          "processInstance": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "authorized": true
+        }
+      }
+    ]
+  }
+}

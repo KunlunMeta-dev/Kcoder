@@ -1,0 +1,33 @@
+[package]
+name = "kcoder_integration_storage"
+description = "Native integration storage and original turn-attempt receipts."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+anyhow.workspace = true
+fs2 = "0.4"
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+] }
+
+[dev-dependencies]
+kcoder_config = { path = "../../../kcoder_config", features = ["private-file-test-hooks"] }
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/integration_storage/lib.rs"

@@ -1,0 +1,1960 @@
+{
+  "IntegrationAutomationMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/automation/listTemplates",
+      "integrations/automation/previewSubscription",
+      "integrations/automation/listSubscriptions",
+      "integrations/automation/listAutomationRuns",
+      "integrations/automation/listConnectionEventSources",
+      "integrations/automation/listQuarantinedEvents",
+      "integrations/automation/readAutomationRun",
+      "integrations/automation/readAutomationArtifacts",
+      "integrations/automation/readAutomationClaims",
+      "integrations/automation/selectApplicationEventSource",
+      "integrations/automation/selectFileEventSource",
+      "integrations/automation/saveSubscription",
+      "integrations/automation/setSubscriptionEnabled",
+      "integrations/automation/removeSubscription",
+      "integrations/automation/hideAutomationRun",
+      "integrations/automation/cancelAutomationRun",
+      "integrations/automation/cancelAutomationDelivery",
+      "integrations/automation/reconcileAutomationDelivery"
+    ],
+    "title": "IntegrationAutomationMethod",
+    "type": "string"
+  },
+  "IntegrationDelegationAction": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "runtime.acceptTask",
+      "runtime.readOperation",
+      "runtime.readTask",
+      "runtime.steerTask",
+      "runtime.cancelTask",
+      "runtime.respondInteraction",
+      "delivery.submit"
+    ],
+    "title": "IntegrationDelegationAction",
+    "type": "string"
+  },
+  "IntegrationDelegationPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationAuthorizationTime": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        ],
+        "description": "Numeric legacy deadlines retain their signed encoding. Missing fields, zero, and oversized durations never become persistent authorization."
+      },
+      "IntegrationDelegationAction": {
+        "enum": [
+          "runtime.acceptTask",
+          "runtime.readOperation",
+          "runtime.readTask",
+          "runtime.steerTask",
+          "runtime.cancelTask",
+          "runtime.respondInteraction",
+          "delivery.submit"
+        ],
+        "type": "string"
+      },
+      "IntegrationDelegationPurpose": {
+        "enum": [
+          "channel_binding"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "actions": {
+        "items": {
+          "$ref": "#/definitions/IntegrationDelegationAction"
+        },
+        "type": "array",
+        "uniqueItems": true
+      },
+      "connectionId": {
+        "type": "string"
+      },
+      "expiresInMs": {
+        "$ref": "#/definitions/IntegrationAuthorizationTime"
+      },
+      "observedSubjectRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "purpose": {
+        "$ref": "#/definitions/IntegrationDelegationPurpose"
+      },
+      "resourceRefs": {
+        "items": {
+          "$ref": "#/definitions/IntegrationEntityRef"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "actions",
+      "connectionId",
+      "expiresInMs",
+      "observedSubjectRef",
+      "purpose",
+      "resourceRefs"
+    ],
+    "title": "IntegrationDelegationPrepareParams",
+    "type": "object"
+  },
+  "IntegrationDelegationPurpose": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "channel_binding"
+    ],
+    "title": "IntegrationDelegationPurpose",
+    "type": "string"
+  },
+  "IntegrationDelegationReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "delegationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "delegationId"
+    ],
+    "title": "IntegrationDelegationReadParams",
+    "type": "object"
+  },
+  "IntegrationDelegationReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationAuthorizationTime": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        ],
+        "description": "Numeric legacy deadlines retain their signed encoding. Missing fields, zero, and oversized durations never become persistent authorization."
+      },
+      "IntegrationDelegationStatus": {
+        "enum": [
+          "active",
+          "revoked",
+          "expired"
+        ],
+        "type": "string"
+      },
+      "IntegrationDelegationView": {
+        "additionalProperties": false,
+        "properties": {
+          "delegationRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "expiresAtMs": {
+            "$ref": "#/definitions/IntegrationAuthorizationTime"
+          },
+          "policyRevision": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/IntegrationDelegationStatus"
+          }
+        },
+        "required": [
+          "delegationRef",
+          "expiresAtMs",
+          "policyRevision",
+          "status"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_IntegrationDelegationView": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationDelegationView"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "delegation": {
+        "$ref": "#/definitions/IntegrationNullable_for_IntegrationDelegationView"
+      }
+    },
+    "required": [
+      "delegation"
+    ],
+    "title": "IntegrationDelegationReadResult",
+    "type": "object"
+  },
+  "IntegrationDelegationRevokeResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationDelegationStatus": {
+        "enum": [
+          "active",
+          "revoked",
+          "expired"
+        ],
+        "type": "string"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "cancellationRequested": {
+        "type": "boolean"
+      },
+      "cancellationSettled": {
+        "type": "boolean"
+      },
+      "delegationRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "status": {
+        "$ref": "#/definitions/IntegrationDelegationStatus"
+      }
+    },
+    "required": [
+      "cancellationRequested",
+      "cancellationSettled",
+      "delegationRef",
+      "status"
+    ],
+    "title": "IntegrationDelegationRevokeResult",
+    "type": "object"
+  },
+  "IntegrationDelegationStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "active",
+      "revoked",
+      "expired"
+    ],
+    "title": "IntegrationDelegationStatus",
+    "type": "string"
+  },
+  "IntegrationDelegationView": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationAuthorizationTime": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        ],
+        "description": "Numeric legacy deadlines retain their signed encoding. Missing fields, zero, and oversized durations never become persistent authorization."
+      },
+      "IntegrationDelegationStatus": {
+        "enum": [
+          "active",
+          "revoked",
+          "expired"
+        ],
+        "type": "string"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "delegationRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "expiresAtMs": {
+        "$ref": "#/definitions/IntegrationAuthorizationTime"
+      },
+      "policyRevision": {
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/definitions/IntegrationDelegationStatus"
+      }
+    },
+    "required": [
+      "delegationRef",
+      "expiresAtMs",
+      "policyRevision",
+      "status"
+    ],
+    "title": "IntegrationDelegationView",
+    "type": "object"
+  },
+  "IntegrationEntityRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "kind": {
+        "$ref": "#/definitions/IntegrationEntityKind"
+      },
+      "revision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "id",
+      "kind"
+    ],
+    "title": "IntegrationEntityRef",
+    "type": "object"
+  },
+  "IntegrationError": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationRecovery": {
+        "enum": [
+          "none",
+          "retry_read",
+          "reconcile_original",
+          "repair_configuration",
+          "request_authorization",
+          "explicit_user_decision"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "code": {
+        "type": "string"
+      },
+      "messageKey": {
+        "type": "string"
+      },
+      "recovery": {
+        "$ref": "#/definitions/IntegrationRecovery"
+      }
+    },
+    "required": [
+      "code",
+      "messageKey",
+      "recovery"
+    ],
+    "title": "IntegrationError",
+    "type": "object"
+  },
+  "IntegrationKnowledgeMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/knowledge/listPublications",
+      "integrations/knowledge/listPublicationHistory",
+      "integrations/knowledge/listAdoptions",
+      "integrations/knowledge/resolvePublication",
+      "integrations/knowledge/retrieveKnowledge",
+      "integrations/knowledge/readCitation",
+      "integrations/knowledge/readPublicationSources",
+      "integrations/knowledge/publishKnowledge",
+      "integrations/knowledge/revokePublication",
+      "integrations/knowledge/adoptPublication",
+      "integrations/knowledge/setAdoptionEnabled"
+    ],
+    "title": "IntegrationKnowledgeMethod",
+    "type": "string"
+  },
+  "IntegrationMemoryMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/memory/list",
+      "integrations/memory/read",
+      "integrations/memory/readTaskSnapshot",
+      "integrations/memory/propose",
+      "integrations/memory/review",
+      "integrations/memory/setEnabled",
+      "integrations/memory/edit",
+      "integrations/memory/forget"
+    ],
+    "title": "IntegrationMemoryMethod",
+    "type": "string"
+  },
+  "IntegrationOperationReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "title": "IntegrationOperationReadParams",
+    "type": "object"
+  },
+  "IntegrationOperationReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "messageKey": {
+            "type": "string"
+          },
+          "recovery": {
+            "$ref": "#/definitions/IntegrationRecovery"
+          }
+        },
+        "required": [
+          "code",
+          "messageKey",
+          "recovery"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_IntegrationOperationReceipt": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationOperationReceipt"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOperationPhase": {
+        "enum": [
+          "pending",
+          "executing",
+          "accepted",
+          "completed",
+          "rejected",
+          "unknown",
+          "cancel_requested",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "IntegrationOperationReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "entityRef": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationEntityRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationError"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "method": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "phase": {
+            "$ref": "#/definitions/IntegrationOperationPhase"
+          },
+          "port": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "runtimeAcceptance": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationRuntimeAcceptance"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Immutable observation at native acceptance, not the task's current state."
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "method",
+          "operationId",
+          "phase",
+          "port",
+          "revision",
+          "scope",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "IntegrationRecovery": {
+        "enum": [
+          "none",
+          "retry_read",
+          "reconcile_original",
+          "repair_configuration",
+          "request_authorization",
+          "explicit_user_decision"
+        ],
+        "type": "string"
+      },
+      "IntegrationRuntimeAcceptance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/definitions/IntegrationTaskState"
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationRuntimeUnsubmittedInput": {
+        "additionalProperties": false,
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "operationRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "operationRevision",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "receipt": {
+        "$ref": "#/definitions/IntegrationNullable_for_IntegrationOperationReceipt"
+      },
+      "unsubmittedInput": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationRuntimeUnsubmittedInput"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Negative admission evidence only; the original outcome remains unknown."
+      }
+    },
+    "required": [
+      "receipt"
+    ],
+    "title": "IntegrationOperationReadResult",
+    "type": "object"
+  },
+  "IntegrationOperationReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "messageKey": {
+            "type": "string"
+          },
+          "recovery": {
+            "$ref": "#/definitions/IntegrationRecovery"
+          }
+        },
+        "required": [
+          "code",
+          "messageKey",
+          "recovery"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOperationPhase": {
+        "enum": [
+          "pending",
+          "executing",
+          "accepted",
+          "completed",
+          "rejected",
+          "unknown",
+          "cancel_requested",
+          "cancelled"
+        ],
+        "type": "string"
+      },
+      "IntegrationRecovery": {
+        "enum": [
+          "none",
+          "retry_read",
+          "reconcile_original",
+          "repair_configuration",
+          "request_authorization",
+          "explicit_user_decision"
+        ],
+        "type": "string"
+      },
+      "IntegrationRuntimeAcceptance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/definitions/IntegrationTaskState"
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "entityRef": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationEntityRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "error": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationError"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "method": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "phase": {
+        "$ref": "#/definitions/IntegrationOperationPhase"
+      },
+      "port": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "runtimeAcceptance": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationRuntimeAcceptance"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Immutable observation at native acceptance, not the task's current state."
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "createdAtMs",
+      "method",
+      "operationId",
+      "phase",
+      "port",
+      "revision",
+      "scope",
+      "updatedAtMs"
+    ],
+    "title": "IntegrationOperationReceipt",
+    "type": "object"
+  },
+  "IntegrationOwner": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      }
+    },
+    "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+    "properties": {
+      "accountId": {
+        "type": "string"
+      },
+      "organizationId": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "targetId": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "$ref": "#/definitions/IntegrationNullable_for_String"
+      }
+    },
+    "required": [
+      "accountId",
+      "targetId",
+      "workspaceId"
+    ],
+    "title": "IntegrationOwner",
+    "type": "object"
+  },
+  "IntegrationPolicyEvaluation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationPolicyDecision": {
+        "enum": [
+          "allow",
+          "deny",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "decision": {
+        "$ref": "#/definitions/IntegrationPolicyDecision"
+      },
+      "policyRevision": {
+        "type": "string"
+      },
+      "reasonCode": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "decision",
+      "policyRevision",
+      "reasonCode"
+    ],
+    "title": "IntegrationPolicyEvaluation",
+    "type": "object"
+  },
+  "IntegrationPort": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "P-RUNTIME",
+      "P-POLICY",
+      "P-MODEL",
+      "P-ASSET",
+      "P-CONNECTION",
+      "P-READINESS",
+      "P-DELIVERY",
+      "P-KNOWLEDGE",
+      "P-MEMORY",
+      "P-AUTOMATION"
+    ],
+    "title": "IntegrationPort",
+    "type": "string"
+  },
+  "IntegrationReply": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationContractVersion": {
+        "enum": [
+          "parallel-v1"
+        ],
+        "type": "string"
+      },
+      "IntegrationError": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "messageKey": {
+            "type": "string"
+          },
+          "recovery": {
+            "$ref": "#/definitions/IntegrationRecovery"
+          }
+        },
+        "required": [
+          "code",
+          "messageKey",
+          "recovery"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_IntegrationError": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationError"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationNullable_for_Map_of_AnyValue": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "additionalProperties": true,
+            "type": "object"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRecovery": {
+        "enum": [
+          "none",
+          "retry_read",
+          "reconcile_original",
+          "repair_configuration",
+          "request_authorization",
+          "explicit_user_decision"
+        ],
+        "type": "string"
+      },
+      "IntegrationStatus": {
+        "enum": [
+          "accepted",
+          "completed",
+          "rejected",
+          "unknown",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "contractVersion": {
+        "$ref": "#/definitions/IntegrationContractVersion"
+      },
+      "entityRevision": {
+        "$ref": "#/definitions/IntegrationNullable_for_String"
+      },
+      "error": {
+        "$ref": "#/definitions/IntegrationNullable_for_IntegrationError"
+      },
+      "observedAt": {
+        "type": "string"
+      },
+      "operationId": {
+        "$ref": "#/definitions/IntegrationNullable_for_String"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "result": {
+        "$ref": "#/definitions/IntegrationNullable_for_Map_of_AnyValue"
+      },
+      "status": {
+        "$ref": "#/definitions/IntegrationStatus"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "entityRevision",
+      "error",
+      "observedAt",
+      "operationId",
+      "requestId",
+      "result",
+      "status"
+    ],
+    "title": "IntegrationReply",
+    "type": "object"
+  },
+  "IntegrationRequest": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationContractVersion": {
+        "enum": [
+          "parallel-v1"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "cancellationRef": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "contractVersion": {
+        "$ref": "#/definitions/IntegrationContractVersion"
+      },
+      "expectedRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "operationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "payload": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "timeoutMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "contractVersion",
+      "payload",
+      "requestId",
+      "scope",
+      "timeoutMs"
+    ],
+    "title": "IntegrationRequest",
+    "type": "object"
+  },
+  "IntegrationRevisionRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "id",
+      "revision"
+    ],
+    "title": "IntegrationRevisionRef",
+    "type": "object"
+  },
+  "IntegrationRuntimeAcceptance": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "state": {
+        "$ref": "#/definitions/IntegrationTaskState"
+      },
+      "taskId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "state",
+      "threadId"
+    ],
+    "title": "IntegrationRuntimeAcceptance",
+    "type": "object"
+  },
+  "IntegrationRuntimeReadTaskParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "taskId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "turnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "IntegrationRuntimeReadTaskParams",
+    "type": "object"
+  },
+  "IntegrationRuntimeTask": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationInteractionKind": {
+        "enum": [
+          "question",
+          "approval"
+        ],
+        "type": "string"
+      },
+      "IntegrationPendingInteraction": {
+        "additionalProperties": false,
+        "properties": {
+          "interactionId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationInteractionKind"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "interactionId",
+          "kind",
+          "prompt",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "artifactRefs": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/IntegrationEntityRef"
+        },
+        "type": "array"
+      },
+      "output": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "pendingInteractions": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/IntegrationPendingInteraction"
+        },
+        "type": "array"
+      },
+      "state": {
+        "$ref": "#/definitions/IntegrationTaskState"
+      },
+      "taskId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "state",
+      "threadId"
+    ],
+    "title": "IntegrationRuntimeTask",
+    "type": "object"
+  },
+  "IntegrationScope": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      }
+    },
+    "properties": {
+      "accountId": {
+        "type": "string"
+      },
+      "identityGeneration": {
+        "type": "string"
+      },
+      "organizationId": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "targetId": {
+        "type": "string"
+      },
+      "targetRevision": {
+        "type": "string"
+      },
+      "workspaceId": {
+        "$ref": "#/definitions/IntegrationNullable_for_String"
+      }
+    },
+    "required": [
+      "accountId",
+      "identityGeneration",
+      "targetId",
+      "targetRevision",
+      "workspaceId"
+    ],
+    "title": "IntegrationScope",
+    "type": "object"
+  },
+  "IntegrationScopeReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "title": "IntegrationScopeReadParams",
+    "type": "object"
+  },
+  "IntegrationTaskStateObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRuntimeReadTaskParams": {
+        "additionalProperties": false,
+        "properties": {
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "One observation of an original persisted task binding. The binding's CAS revision also supplies the entity sequence, independent of a connection's transport sequence. A gap requires reading the original current snapshot.",
+    "properties": {
+      "entityId": {
+        "type": "string"
+      },
+      "observedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "reference": {
+        "$ref": "#/definitions/IntegrationRuntimeReadTaskParams"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "sequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "snapshot": {
+        "type": "boolean"
+      },
+      "state": {
+        "$ref": "#/definitions/IntegrationTaskState"
+      }
+    },
+    "required": [
+      "entityId",
+      "observedAtMs",
+      "operationId",
+      "reference",
+      "revision",
+      "scope",
+      "sequence",
+      "snapshot",
+      "state"
+    ],
+    "title": "IntegrationTaskStateObservation",
+    "type": "object"
+  },
+  "IntegrationTaskStateReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRuntimeReadTaskParams": {
+        "additionalProperties": false,
+        "properties": {
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "reference": {
+        "$ref": "#/definitions/IntegrationRuntimeReadTaskParams"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      }
+    },
+    "required": [
+      "reference",
+      "requestId",
+      "scope"
+    ],
+    "title": "IntegrationTaskStateReadParams",
+    "type": "object"
+  }
+}

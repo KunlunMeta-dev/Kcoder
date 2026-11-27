@@ -1,0 +1,6 @@
+{
+  "extends": "../../../tsconfig.app.json",
+  "compilerOptions": { "types": ["react", "react-dom"], "tsBuildInfoFile": "../../../node_modules/.tmp/office-integration.tsbuildinfo", "strict": true },
+  "include": ["./**/*.ts", "./**/*.tsx"],
+  "exclude": ["./**/*.test.ts", "./**/*.test.tsx", "./vitest.config.ts"]
+}

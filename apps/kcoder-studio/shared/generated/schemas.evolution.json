@@ -1,0 +1,2472 @@
+{
+  "EvolutionChangedNotification": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionChangedReason": {
+        "enum": [
+          "proposal",
+          "promoted",
+          "rolled_back",
+          "settings",
+          "cleared"
+        ],
+        "type": "string"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "description": "`evolution/changed` notification payload.",
+    "properties": {
+      "reason": {
+        "$ref": "#/definitions/EvolutionChangedReason"
+      },
+      "targetKey": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TargetKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "reason"
+    ],
+    "title": "EvolutionChangedNotification",
+    "type": "object"
+  },
+  "EvolutionDataClearParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "EvolutionDataScope": {
+        "enum": [
+          "project",
+          "user",
+          "all"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "confirm": {
+        "description": "Must be `true`; the server rejects anything else.",
+        "type": "boolean"
+      },
+      "scope": {
+        "$ref": "#/definitions/EvolutionDataScope"
+      },
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "confirm",
+      "scope"
+    ],
+    "title": "EvolutionDataClearParams",
+    "type": "object"
+  },
+  "EvolutionDataClearResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "cleared": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "cleared"
+    ],
+    "title": "EvolutionDataClearResult",
+    "type": "object"
+  },
+  "EvolutionDistillOutcome": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Outcome of a manual distillation request. Only `queued` schedules work; the job itself still runs from the session's idle step.",
+    "oneOf": [
+      {
+        "enum": [
+          "queued"
+        ],
+        "type": "string"
+      },
+      {
+        "description": "Evolution, the target or its propose mode is not active.",
+        "enum": [
+          "disabled"
+        ],
+        "type": "string"
+      },
+      {
+        "description": "The target is not a known skill of a session for that workspace.",
+        "enum": [
+          "unknown_target"
+        ],
+        "type": "string"
+      },
+      {
+        "description": "The distill model cannot be used; `reason` says why.",
+        "enum": [
+          "model_unavailable"
+        ],
+        "type": "string"
+      }
+    ],
+    "title": "EvolutionDistillOutcome"
+  },
+  "EvolutionErrorCode": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Stable error codes carried in JSON-RPC error data.",
+    "enum": [
+      "evolution_disabled",
+      "evolution_unsupported_target_type",
+      "evolution_target_not_found",
+      "evolution_revision_conflict",
+      "evolution_proposal_not_found",
+      "evolution_invalid_transition",
+      "evolution_content_rejected",
+      "evolution_content_too_large"
+    ],
+    "title": "EvolutionErrorCode",
+    "type": "string"
+  },
+  "EvolutionOverlayUpdateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "EvolutionOverlaySlotName": {
+        "description": "Only the stable slot accepts user edits.",
+        "enum": [
+          "stable"
+        ],
+        "type": "string"
+      },
+      "OverlayContent": {
+        "additionalProperties": false,
+        "description": "Overlay slot content as edited and displayed by clients.",
+        "properties": {
+          "checklist": {
+            "type": "string"
+          },
+          "examples": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/ProposalExample"
+            },
+            "type": "array"
+          },
+          "lessons": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProposalExample": {
+        "additionalProperties": false,
+        "description": "Example text written by the model from a pattern; never copied user work.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "text"
+        ],
+        "type": "object"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "properties": {
+      "content": {
+        "$ref": "#/definitions/OverlayContent"
+      },
+      "expectedRevision": {
+        "type": "string"
+      },
+      "slot": {
+        "$ref": "#/definitions/EvolutionOverlaySlotName"
+      },
+      "targetKey": {
+        "$ref": "#/definitions/TargetKey"
+      },
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "content",
+      "expectedRevision",
+      "slot",
+      "targetKey"
+    ],
+    "title": "EvolutionOverlayUpdateParams",
+    "type": "object"
+  },
+  "EvolutionOverlayUpdateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "overlayRevision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "overlayRevision"
+    ],
+    "title": "EvolutionOverlayUpdateResult",
+    "type": "object"
+  },
+  "EvolutionPreferenceListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "title": "EvolutionPreferenceListParams",
+    "type": "object"
+  },
+  "EvolutionPreferenceListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionPreferenceItem": {
+        "properties": {
+          "evidenceCount": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "key": {
+            "description": "`pref.<scope>.<category>`.",
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "description": "RFC 3339 UTC timestamp.",
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidenceCount",
+          "key",
+          "scope",
+          "updatedAt",
+          "value"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/EvolutionPreferenceItem"
+        },
+        "type": "array"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "items",
+      "revision"
+    ],
+    "title": "EvolutionPreferenceListResult",
+    "type": "object"
+  },
+  "EvolutionPreferenceUpdateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "key": {
+        "type": "string"
+      },
+      "value": {
+        "default": null,
+        "description": "Absent or null deletes the preference.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "key"
+    ],
+    "title": "EvolutionPreferenceUpdateParams",
+    "type": "object"
+  },
+  "EvolutionPreferenceUpdateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "revision"
+    ],
+    "title": "EvolutionPreferenceUpdateResult",
+    "type": "object"
+  },
+  "EvolutionProposalDecideParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "EvolutionDecision": {
+        "enum": [
+          "accept",
+          "reject",
+          "rollback",
+          "pin_stable"
+        ],
+        "type": "string"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "properties": {
+      "decision": {
+        "$ref": "#/definitions/EvolutionDecision"
+      },
+      "expectedRevision": {
+        "description": "The target's current `overlay.overlayRevision` from the last `evolution/target/read` (for `skill_file` targets the skill revision).",
+        "type": "string"
+      },
+      "proposalId": {
+        "type": "string"
+      },
+      "targetKey": {
+        "$ref": "#/definitions/TargetKey"
+      },
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "decision",
+      "expectedRevision",
+      "proposalId",
+      "targetKey"
+    ],
+    "title": "EvolutionProposalDecideParams",
+    "type": "object"
+  },
+  "EvolutionProposalDecideResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionScore": {
+        "description": "Posterior score of one (target, revision, channel) bucket.",
+        "properties": {
+          "lower": {
+            "description": "Equal-tailed 95% credible interval.",
+            "format": "double",
+            "type": "number"
+          },
+          "mean": {
+            "format": "double",
+            "type": "number"
+          },
+          "observations": {
+            "description": "Scored usages contributing to the posterior.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "description": "[`super::TargetRevision::label`] of the scored revision.",
+            "type": "string"
+          },
+          "upper": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lower",
+          "mean",
+          "observations",
+          "revision",
+          "upper"
+        ],
+        "type": "object"
+      },
+      "EvolutionTargetSummary": {
+        "description": "One row of `evolution/targets/list`.",
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionScore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channelTraffic": {
+            "description": "Candidate traffic share while a canary is active.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "evolutionMode": {
+            "$ref": "#/definitions/EvolutionWriteMode"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needsRevalidation": {
+            "description": "The target's base revision changed; the overlay is shown but not injected.",
+            "type": "boolean"
+          },
+          "pendingProposals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pinned": {
+            "description": "The user pinned the stable slot; candidates are not served.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "stable": {
+            "$ref": "#/definitions/EvolutionScore"
+          },
+          "targetKey": {
+            "$ref": "#/definitions/TargetKey"
+          },
+          "type": {
+            "$ref": "#/definitions/TargetType"
+          }
+        },
+        "required": [
+          "enabled",
+          "evolutionMode",
+          "name",
+          "needsRevalidation",
+          "pendingProposals",
+          "pinned",
+          "source",
+          "stable",
+          "targetKey",
+          "type"
+        ],
+        "type": "object"
+      },
+      "EvolutionWriteMode": {
+        "description": "How a target's learned content takes effect.",
+        "enum": [
+          "overlay",
+          "skill_file"
+        ],
+        "type": "string"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      },
+      "TargetType": {
+        "description": "Kind of learnable target. The snake_case wire name is also the first segment of a [`TargetKey`] and the key under `evolution.targets`.",
+        "enum": [
+          "skill",
+          "preference",
+          "project_knowledge",
+          "tool_usage",
+          "workflow_template"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "notice": {
+        "description": "Part of the decision was not carried out and the user should know, e.g. a rolled-back skill edited after its promotion keeps the edit.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "summary": {
+        "$ref": "#/definitions/EvolutionTargetSummary"
+      }
+    },
+    "required": [
+      "summary"
+    ],
+    "title": "EvolutionProposalDecideResult",
+    "type": "object"
+  },
+  "EvolutionRateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "EvolutionRating": {
+        "enum": [
+          "up",
+          "down"
+        ],
+        "type": "string"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "description": "Rates the usages of one turn. Without `targetKey` the rating applies to every usage in that turn. A usage is addressed by its recorded turn id (`turnId`, as `evolution/ratings/list` reports it) or by its recorded tool call (`toolCallIds`, the turn's `skill` calls the client shows). The latest rating of a usage stands: an opposite rating or a new reason is appended as a new observation (earlier ones are kept, not counted); repeating the standing rating appends nothing. With `subagentId` the client still addresses the parent thread it owns; the server resolves the child agent thread through the parent's agent registry and `turnId` refers to the child turn. An unknown or unowned subagent fails with `evolution_target_not_found`.",
+    "properties": {
+      "rating": {
+        "$ref": "#/definitions/EvolutionRating"
+      },
+      "reason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "subagentId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "targetKey": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TargetKey"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "toolCallIds": {
+        "description": "At most [`EVOLUTION_RATE_TOOL_CALLS_MAX`] tool call ids.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "turnId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "rating",
+      "threadId",
+      "turnId"
+    ],
+    "title": "EvolutionRateParams",
+    "type": "object"
+  },
+  "EvolutionRateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "`recorded` is whether the requested rating now stands for at least one usage of the turn; `false` when no usage of the turn is recorded (for example the skill call failed, its target is off, or the data was cleared) or the rating control signal is off.",
+    "properties": {
+      "recorded": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "recorded"
+    ],
+    "title": "EvolutionRateResult",
+    "type": "object"
+  },
+  "EvolutionRatingsListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "`evolution/ratings/list`: which turns of a thread `evolution/rate` accepts. With `subagentId` the turns of that subagent of the thread, resolved as for `evolution/rate`.",
+    "properties": {
+      "subagentId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "EvolutionRatingsListParams",
+    "type": "object"
+  },
+  "EvolutionRatingsListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionRatableTurn": {
+        "description": "One ratable turn: it has at least one recorded skill usage.",
+        "properties": {
+          "rating": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionRating"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The rating that stands (the latest across the turn's usages)."
+          },
+          "targetKeys": {
+            "items": {
+              "$ref": "#/definitions/TargetKey"
+            },
+            "type": "array"
+          },
+          "toolCallIds": {
+            "description": "Recorded `skill` tool calls that started the turn's usages; empty for usages recorded before tool calls were kept.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "turnId": {
+            "description": "Recorded turn id; send it as `evolution/rate.turnId`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetKeys",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "EvolutionRating": {
+        "enum": [
+          "up",
+          "down"
+        ],
+        "type": "string"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "description": "Newest turns first, at most [`EVOLUTION_RATINGS_LIST_MAX`]. Empty while `signals.rating_ui` is off.",
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/EvolutionRatableTurn"
+        },
+        "type": "array"
+      },
+      "truncated": {
+        "description": "Older ratable turns were left out.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "items",
+      "truncated"
+    ],
+    "title": "EvolutionRatingsListResult",
+    "type": "object"
+  },
+  "EvolutionSettingsReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "title": "EvolutionSettingsReadParams",
+    "type": "object"
+  },
+  "EvolutionSettingsReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionEvalSettings": {
+        "additionalProperties": false,
+        "description": "Offline evaluation pass thresholds (`evolution.eval`).",
+        "properties": {
+          "max_diversity_drop": {
+            "description": "Largest accepted relative diversity drop for free text, in [0, 1].",
+            "format": "double",
+            "type": "number"
+          },
+          "win_rate": {
+            "description": "Minimum share of decisive comparisons the candidate wins, in (0, 1].",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "max_diversity_drop",
+          "win_rate"
+        ],
+        "type": "object"
+      },
+      "EvolutionItemSetting": {
+        "additionalProperties": false,
+        "description": "Per-item switch in `targets.<type>.items`.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "EvolutionMode": {
+        "description": "How far the framework may act on what it learned. Ordered from the most to the least restrictive so `min` yields the narrower mode.",
+        "oneOf": [
+          {
+            "description": "Collect usages and outcomes only.",
+            "enum": [
+              "observe"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Distill and create proposals that wait for user confirmation.",
+            "enum": [
+              "propose"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Apply proposals automatically after evaluation and canary.",
+            "enum": [
+              "auto"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "EvolutionModelRef": {
+        "additionalProperties": false,
+        "description": "Reference to an already configured model, case-preserving.",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "EvolutionSettings": {
+        "additionalProperties": false,
+        "description": "The user-level `evolution` settings block with its persisted snake_case keys (plan section 15). It mirrors `kcoder_config::EvolutionSettings`; the server validates it with that type before writing user settings.",
+        "properties": {
+          "candidate_traffic": {
+            "format": "double",
+            "type": "number"
+          },
+          "distill_min_usages": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "eval": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionEvalSettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Always present in results. A save without it (a client that predates the field) keeps the stored thresholds."
+          },
+          "evidence_ttl_days": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mode": {
+            "$ref": "#/definitions/EvolutionMode"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "promote_threshold": {
+            "format": "double",
+            "type": "number"
+          },
+          "rollback_threshold": {
+            "format": "double",
+            "type": "number"
+          },
+          "share_aggregates": {
+            "type": "boolean"
+          },
+          "signals": {
+            "$ref": "#/definitions/EvolutionSignalSettings"
+          },
+          "stage_models": {
+            "$ref": "#/definitions/EvolutionStageModels"
+          },
+          "targets": {
+            "$ref": "#/definitions/EvolutionTargetSettings"
+          },
+          "usage_limit": {
+            "$ref": "#/definitions/EvolutionUsageLimit"
+          }
+        },
+        "required": [
+          "candidate_traffic",
+          "distill_min_usages",
+          "enabled",
+          "evidence_ttl_days",
+          "mode",
+          "promote_threshold",
+          "rollback_threshold",
+          "share_aggregates",
+          "signals",
+          "stage_models",
+          "targets",
+          "usage_limit"
+        ],
+        "type": "object"
+      },
+      "EvolutionSignalSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_edits": {
+            "type": "boolean"
+          },
+          "chat_corrections": {
+            "type": "boolean"
+          },
+          "procedure_results": {
+            "type": "boolean"
+          },
+          "rating_ui": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "artifact_edits",
+          "chat_corrections",
+          "procedure_results",
+          "rating_ui"
+        ],
+        "type": "object"
+      },
+      "EvolutionStageModels": {
+        "additionalProperties": false,
+        "properties": {
+          "classifier": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distill": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eval": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "EvolutionTargetScopeSetting": {
+        "enum": [
+          "all",
+          "selected"
+        ],
+        "type": "string"
+      },
+      "EvolutionTargetSetting": {
+        "additionalProperties": false,
+        "description": "One `targets.<type>` block. Optional fields keep the type's default.",
+        "properties": {
+          "allow_file_edits": {
+            "description": "Skill only.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "items": {
+            "additionalProperties": {
+              "$ref": "#/definitions/EvolutionItemSetting"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionTargetScopeSetting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "EvolutionTargetSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "preference": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "project_knowledge": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "skill": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "tool_usage": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "workflow_template": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          }
+        },
+        "required": [
+          "preference",
+          "project_knowledge",
+          "skill",
+          "tool_usage",
+          "workflow_template"
+        ],
+        "type": "object"
+      },
+      "EvolutionUsageLimit": {
+        "additionalProperties": false,
+        "properties": {
+          "monthly_max_tokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "description": "Result of both settings methods. `revision` identifies the user settings document state and is passed back as `expectedRevision`.",
+    "properties": {
+      "revision": {
+        "type": "string"
+      },
+      "settings": {
+        "$ref": "#/definitions/EvolutionSettings"
+      }
+    },
+    "required": [
+      "revision",
+      "settings"
+    ],
+    "title": "EvolutionSettingsReadResult",
+    "type": "object"
+  },
+  "EvolutionSettingsSaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "EvolutionEvalSettings": {
+        "additionalProperties": false,
+        "description": "Offline evaluation pass thresholds (`evolution.eval`).",
+        "properties": {
+          "max_diversity_drop": {
+            "description": "Largest accepted relative diversity drop for free text, in [0, 1].",
+            "format": "double",
+            "type": "number"
+          },
+          "win_rate": {
+            "description": "Minimum share of decisive comparisons the candidate wins, in (0, 1].",
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "max_diversity_drop",
+          "win_rate"
+        ],
+        "type": "object"
+      },
+      "EvolutionItemSetting": {
+        "additionalProperties": false,
+        "description": "Per-item switch in `targets.<type>.items`.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "type": "object"
+      },
+      "EvolutionMode": {
+        "description": "How far the framework may act on what it learned. Ordered from the most to the least restrictive so `min` yields the narrower mode.",
+        "oneOf": [
+          {
+            "description": "Collect usages and outcomes only.",
+            "enum": [
+              "observe"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Distill and create proposals that wait for user confirmation.",
+            "enum": [
+              "propose"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Apply proposals automatically after evaluation and canary.",
+            "enum": [
+              "auto"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "EvolutionModelRef": {
+        "additionalProperties": false,
+        "description": "Reference to an already configured model, case-preserving.",
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "model",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "EvolutionSettings": {
+        "additionalProperties": false,
+        "description": "The user-level `evolution` settings block with its persisted snake_case keys (plan section 15). It mirrors `kcoder_config::EvolutionSettings`; the server validates it with that type before writing user settings.",
+        "properties": {
+          "candidate_traffic": {
+            "format": "double",
+            "type": "number"
+          },
+          "distill_min_usages": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "eval": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionEvalSettings"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Always present in results. A save without it (a client that predates the field) keeps the stored thresholds."
+          },
+          "evidence_ttl_days": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "mode": {
+            "$ref": "#/definitions/EvolutionMode"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "promote_threshold": {
+            "format": "double",
+            "type": "number"
+          },
+          "rollback_threshold": {
+            "format": "double",
+            "type": "number"
+          },
+          "share_aggregates": {
+            "type": "boolean"
+          },
+          "signals": {
+            "$ref": "#/definitions/EvolutionSignalSettings"
+          },
+          "stage_models": {
+            "$ref": "#/definitions/EvolutionStageModels"
+          },
+          "targets": {
+            "$ref": "#/definitions/EvolutionTargetSettings"
+          },
+          "usage_limit": {
+            "$ref": "#/definitions/EvolutionUsageLimit"
+          }
+        },
+        "required": [
+          "candidate_traffic",
+          "distill_min_usages",
+          "enabled",
+          "evidence_ttl_days",
+          "mode",
+          "promote_threshold",
+          "rollback_threshold",
+          "share_aggregates",
+          "signals",
+          "stage_models",
+          "targets",
+          "usage_limit"
+        ],
+        "type": "object"
+      },
+      "EvolutionSignalSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "artifact_edits": {
+            "type": "boolean"
+          },
+          "chat_corrections": {
+            "type": "boolean"
+          },
+          "procedure_results": {
+            "type": "boolean"
+          },
+          "rating_ui": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "artifact_edits",
+          "chat_corrections",
+          "procedure_results",
+          "rating_ui"
+        ],
+        "type": "object"
+      },
+      "EvolutionStageModels": {
+        "additionalProperties": false,
+        "properties": {
+          "classifier": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "distill": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "eval": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionModelRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "EvolutionTargetScopeSetting": {
+        "enum": [
+          "all",
+          "selected"
+        ],
+        "type": "string"
+      },
+      "EvolutionTargetSetting": {
+        "additionalProperties": false,
+        "description": "One `targets.<type>` block. Optional fields keep the type's default.",
+        "properties": {
+          "allow_file_edits": {
+            "description": "Skill only.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "items": {
+            "additionalProperties": {
+              "$ref": "#/definitions/EvolutionItemSetting"
+            },
+            "type": [
+              "object",
+              "null"
+            ]
+          },
+          "mode": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionMode"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "scope": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionTargetScopeSetting"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "EvolutionTargetSettings": {
+        "additionalProperties": false,
+        "properties": {
+          "preference": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "project_knowledge": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "skill": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "tool_usage": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          },
+          "workflow_template": {
+            "$ref": "#/definitions/EvolutionTargetSetting"
+          }
+        },
+        "required": [
+          "preference",
+          "project_knowledge",
+          "skill",
+          "tool_usage",
+          "workflow_template"
+        ],
+        "type": "object"
+      },
+      "EvolutionUsageLimit": {
+        "additionalProperties": false,
+        "properties": {
+          "monthly_max_tokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "description": "Writes go to user settings only. A stale revision fails with error data `{ \"kind\": \"evolution_revision_conflict\" }`.",
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "settings": {
+        "$ref": "#/definitions/EvolutionSettings"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "settings"
+    ],
+    "title": "EvolutionSettingsSaveParams",
+    "type": "object"
+  },
+  "EvolutionStatusParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "EvolutionStatusParams",
+    "type": "object"
+  },
+  "EvolutionStatusResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionCost": {
+        "description": "Estimated money cost of evolution model calls.",
+        "properties": {
+          "amount": {
+            "format": "double",
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount",
+          "currency"
+        ],
+        "type": "object"
+      },
+      "EvolutionDisabledReason": {
+        "description": "Why an enabled evolution currently does not act. A disabled master switch is reported by `enabled: false` alone.",
+        "enum": [
+          "training_mode",
+          "project_disabled",
+          "model_unavailable",
+          "usage_limit"
+        ],
+        "type": "string"
+      },
+      "EvolutionJobKind": {
+        "enum": [
+          "classify",
+          "distill",
+          "eval"
+        ],
+        "type": "string"
+      },
+      "EvolutionJobState": {
+        "enum": [
+          "idle",
+          "running",
+          "paused"
+        ],
+        "type": "string"
+      },
+      "EvolutionJobStatus": {
+        "properties": {
+          "kind": {
+            "$ref": "#/definitions/EvolutionJobKind"
+          },
+          "lastRunAt": {
+            "description": "RFC 3339 UTC timestamp.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/definitions/EvolutionJobState"
+          },
+          "targetKey": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TargetKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "state"
+        ],
+        "type": "object"
+      },
+      "EvolutionMode": {
+        "description": "How far the framework may act on what it learned. Ordered from the most to the least restrictive so `min` yields the narrower mode.",
+        "oneOf": [
+          {
+            "description": "Collect usages and outcomes only.",
+            "enum": [
+              "observe"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Distill and create proposals that wait for user confirmation.",
+            "enum": [
+              "propose"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Apply proposals automatically after evaluation and canary.",
+            "enum": [
+              "auto"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "EvolutionModelSelection": {
+        "description": "Model selection projected for status.",
+        "enum": [
+          "follow_session",
+          "configured"
+        ],
+        "type": "string"
+      },
+      "EvolutionModelStatus": {
+        "properties": {
+          "available": {
+            "description": "False pauses evolution model calls; there is no fallback model.",
+            "type": "boolean"
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "selection": {
+            "$ref": "#/definitions/EvolutionModelSelection"
+          }
+        },
+        "required": [
+          "available",
+          "selection"
+        ],
+        "type": "object"
+      },
+      "EvolutionProjectScopeIssue": {
+        "description": "Why project-scope evolution data was skipped; user scope keeps working.",
+        "oneOf": [
+          {
+            "description": "The user data root lies inside the project (for example a developer home inside the checkout); project data is never written there.",
+            "enum": [
+              "data_root_inside_project"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Project storage could not be opened.",
+            "enum": [
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "EvolutionStorageDiagnostics": {
+        "description": "Read-side counters of skipped journal lines.",
+        "properties": {
+          "duplicateRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "futureRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "invalidRecords": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "projectScopeIssue": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionProjectScopeIssue"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when project-scope data was skipped for this request."
+          },
+          "tornTail": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "duplicateRecords",
+          "futureRecords",
+          "invalidRecords",
+          "tornTail"
+        ],
+        "type": "object"
+      },
+      "EvolutionTargetTypeStatus": {
+        "description": "Per-type row of `evolution/status`.",
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "implemented": {
+            "description": "False for target types whose integration has not shipped yet.",
+            "type": "boolean"
+          },
+          "learnedItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pendingProposals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "type": {
+            "$ref": "#/definitions/TargetType"
+          }
+        },
+        "required": [
+          "enabled",
+          "implemented",
+          "learnedItems",
+          "pendingProposals",
+          "type"
+        ],
+        "type": "object"
+      },
+      "EvolutionUsageSummary": {
+        "description": "Evolution model usage of the current month, as shown by clients.",
+        "properties": {
+          "estimatedCost": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionCost"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Absent when no price information is configured."
+          },
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens"
+        ],
+        "type": "object"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      },
+      "TargetType": {
+        "description": "Kind of learnable target. The snake_case wire name is also the first segment of a [`TargetKey`] and the key under `evolution.targets`.",
+        "enum": [
+          "skill",
+          "preference",
+          "project_knowledge",
+          "tool_usage",
+          "workflow_template"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Scope-level status snapshot backing `evolution/status`.",
+    "properties": {
+      "diagnostics": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/EvolutionStorageDiagnostics"
+          }
+        ],
+        "default": {
+          "duplicateRecords": 0,
+          "futureRecords": 0,
+          "invalidRecords": 0,
+          "tornTail": false
+        }
+      },
+      "disabledReason": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/EvolutionDisabledReason"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "jobs": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/EvolutionJobStatus"
+        },
+        "type": "array"
+      },
+      "mode": {
+        "$ref": "#/definitions/EvolutionMode"
+      },
+      "model": {
+        "$ref": "#/definitions/EvolutionModelStatus"
+      },
+      "skillFileEditsSupported": {
+        "default": false,
+        "description": "Whether direct skill-file edits are available (requires skill-store candidate slots; false until then).",
+        "type": "boolean"
+      },
+      "targets": {
+        "items": {
+          "$ref": "#/definitions/EvolutionTargetTypeStatus"
+        },
+        "type": "array"
+      },
+      "usageThisMonth": {
+        "$ref": "#/definitions/EvolutionUsageSummary"
+      }
+    },
+    "required": [
+      "enabled",
+      "mode",
+      "model",
+      "targets",
+      "usageThisMonth"
+    ],
+    "title": "EvolutionStatusSnapshot",
+    "type": "object"
+  },
+  "EvolutionTargetDistillParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "properties": {
+      "targetKey": {
+        "$ref": "#/definitions/TargetKey"
+      },
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "targetKey"
+    ],
+    "title": "EvolutionTargetDistillParams",
+    "type": "object"
+  },
+  "EvolutionTargetDistillResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionDistillOutcome": {
+        "description": "Outcome of a manual distillation request. Only `queued` schedules work; the job itself still runs from the session's idle step.",
+        "oneOf": [
+          {
+            "enum": [
+              "queued"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Evolution, the target or its propose mode is not active.",
+            "enum": [
+              "disabled"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The target is not a known skill of a session for that workspace.",
+            "enum": [
+              "unknown_target"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The distill model cannot be used; `reason` says why.",
+            "enum": [
+              "model_unavailable"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "outcome": {
+        "$ref": "#/definitions/EvolutionDistillOutcome"
+      },
+      "reason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "outcome"
+    ],
+    "title": "EvolutionTargetDistillResult",
+    "type": "object"
+  },
+  "EvolutionTargetReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "properties": {
+      "targetKey": {
+        "$ref": "#/definitions/TargetKey"
+      },
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "targetKey"
+    ],
+    "title": "EvolutionTargetReadParams",
+    "type": "object"
+  },
+  "EvolutionTargetReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionEvaluationSummary": {
+        "description": "Compact evaluation projection for proposal lists.",
+        "properties": {
+          "completed": {
+            "type": "boolean"
+          },
+          "diversityDelta": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "hardCheckRegressions": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "ties": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "winRate": {
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "completed",
+          "hardCheckRegressions",
+          "ties"
+        ],
+        "type": "object"
+      },
+      "EvolutionOverlayView": {
+        "description": "Overlay slots of one target. `overlay_revision` is the opaque document revision to pass back as `expectedRevision`.",
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/OverlayContent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overlayRevision": {
+            "type": "string"
+          },
+          "stable": {
+            "$ref": "#/definitions/OverlayContent"
+          }
+        },
+        "required": [
+          "overlayRevision",
+          "stable"
+        ],
+        "type": "object"
+      },
+      "EvolutionPattern": {
+        "additionalProperties": false,
+        "description": "One distilled pattern with its support.",
+        "properties": {
+          "categories": {
+            "description": "Generic category names, optionally followed by target domain names.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "counterEvidence": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "id": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/EvolutionPatternScope"
+          },
+          "statement": {
+            "type": "string"
+          },
+          "support": {
+            "$ref": "#/definitions/EvolutionPatternSupport"
+          }
+        },
+        "required": [
+          "categories",
+          "counterEvidence",
+          "id",
+          "scope",
+          "statement",
+          "support"
+        ],
+        "type": "object"
+      },
+      "EvolutionPatternScope": {
+        "description": "Where code placed a distilled pattern (plan section 8).",
+        "enum": [
+          "target_overlay",
+          "user_preference",
+          "insufficient"
+        ],
+        "type": "string"
+      },
+      "EvolutionPatternSupport": {
+        "additionalProperties": false,
+        "properties": {
+          "sessions": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "usages": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "users": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sessions",
+          "usages",
+          "users"
+        ],
+        "type": "object"
+      },
+      "EvolutionProposalSummary": {
+        "description": "One row of a target's proposal list.",
+        "properties": {
+          "actor": {
+            "$ref": "#/definitions/ProposalActor"
+          },
+          "createdAt": {
+            "description": "RFC 3339 UTC timestamp.",
+            "type": "string"
+          },
+          "diff": {
+            "type": "string"
+          },
+          "evaluation": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionEvaluationSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "rejectReason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/definitions/ProposalState"
+          }
+        },
+        "required": [
+          "actor",
+          "createdAt",
+          "diff",
+          "id",
+          "state"
+        ],
+        "type": "object"
+      },
+      "EvolutionScore": {
+        "description": "Posterior score of one (target, revision, channel) bucket.",
+        "properties": {
+          "lower": {
+            "description": "Equal-tailed 95% credible interval.",
+            "format": "double",
+            "type": "number"
+          },
+          "mean": {
+            "format": "double",
+            "type": "number"
+          },
+          "observations": {
+            "description": "Scored usages contributing to the posterior.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "description": "[`super::TargetRevision::label`] of the scored revision.",
+            "type": "string"
+          },
+          "upper": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lower",
+          "mean",
+          "observations",
+          "revision",
+          "upper"
+        ],
+        "type": "object"
+      },
+      "EvolutionTargetSummary": {
+        "description": "One row of `evolution/targets/list`.",
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionScore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channelTraffic": {
+            "description": "Candidate traffic share while a canary is active.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "evolutionMode": {
+            "$ref": "#/definitions/EvolutionWriteMode"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needsRevalidation": {
+            "description": "The target's base revision changed; the overlay is shown but not injected.",
+            "type": "boolean"
+          },
+          "pendingProposals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pinned": {
+            "description": "The user pinned the stable slot; candidates are not served.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "stable": {
+            "$ref": "#/definitions/EvolutionScore"
+          },
+          "targetKey": {
+            "$ref": "#/definitions/TargetKey"
+          },
+          "type": {
+            "$ref": "#/definitions/TargetType"
+          }
+        },
+        "required": [
+          "enabled",
+          "evolutionMode",
+          "name",
+          "needsRevalidation",
+          "pendingProposals",
+          "pinned",
+          "source",
+          "stable",
+          "targetKey",
+          "type"
+        ],
+        "type": "object"
+      },
+      "EvolutionWriteMode": {
+        "description": "How a target's learned content takes effect.",
+        "enum": [
+          "overlay",
+          "skill_file"
+        ],
+        "type": "string"
+      },
+      "OverlayContent": {
+        "additionalProperties": false,
+        "description": "Overlay slot content as edited and displayed by clients.",
+        "properties": {
+          "checklist": {
+            "type": "string"
+          },
+          "examples": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/ProposalExample"
+            },
+            "type": "array"
+          },
+          "lessons": {
+            "default": "",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ProposalActor": {
+        "description": "Who performed a proposal step.",
+        "enum": [
+          "auto",
+          "user"
+        ],
+        "type": "string"
+      },
+      "ProposalExample": {
+        "additionalProperties": false,
+        "description": "Example text written by the model from a pattern; never copied user work.",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ProposalState": {
+        "description": "Lifecycle of a proposal (plan §6.3): `draft → evaluated → canary → promoted | rolled_back | rejected`.",
+        "enum": [
+          "draft",
+          "evaluated",
+          "canary",
+          "promoted",
+          "rolled_back",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      },
+      "TargetType": {
+        "description": "Kind of learnable target. The snake_case wire name is also the first segment of a [`TargetKey`] and the key under `evolution.targets`.",
+        "enum": [
+          "skill",
+          "preference",
+          "project_knowledge",
+          "tool_usage",
+          "workflow_template"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "overlay": {
+        "$ref": "#/definitions/EvolutionOverlayView"
+      },
+      "patterns": {
+        "items": {
+          "$ref": "#/definitions/EvolutionPattern"
+        },
+        "type": "array"
+      },
+      "proposals": {
+        "items": {
+          "$ref": "#/definitions/EvolutionProposalSummary"
+        },
+        "type": "array"
+      },
+      "summary": {
+        "$ref": "#/definitions/EvolutionTargetSummary"
+      }
+    },
+    "required": [
+      "overlay",
+      "patterns",
+      "proposals",
+      "summary"
+    ],
+    "title": "EvolutionTargetReadResult",
+    "type": "object"
+  },
+  "EvolutionTargetsListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TargetType": {
+        "description": "Kind of learnable target. The snake_case wire name is also the first segment of a [`TargetKey`] and the key under `evolution.targets`.",
+        "enum": [
+          "skill",
+          "preference",
+          "project_knowledge",
+          "tool_usage",
+          "workflow_template"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "type": {
+        "$ref": "#/definitions/TargetType"
+      },
+      "workspace": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "type"
+    ],
+    "title": "EvolutionTargetsListParams",
+    "type": "object"
+  },
+  "EvolutionTargetsListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "EvolutionScore": {
+        "description": "Posterior score of one (target, revision, channel) bucket.",
+        "properties": {
+          "lower": {
+            "description": "Equal-tailed 95% credible interval.",
+            "format": "double",
+            "type": "number"
+          },
+          "mean": {
+            "format": "double",
+            "type": "number"
+          },
+          "observations": {
+            "description": "Scored usages contributing to the posterior.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "description": "[`super::TargetRevision::label`] of the scored revision.",
+            "type": "string"
+          },
+          "upper": {
+            "format": "double",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lower",
+          "mean",
+          "observations",
+          "revision",
+          "upper"
+        ],
+        "type": "object"
+      },
+      "EvolutionTargetSummary": {
+        "description": "One row of `evolution/targets/list`.",
+        "properties": {
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/EvolutionScore"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channelTraffic": {
+            "description": "Candidate traffic share while a canary is active.",
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "evolutionMode": {
+            "$ref": "#/definitions/EvolutionWriteMode"
+          },
+          "name": {
+            "type": "string"
+          },
+          "needsRevalidation": {
+            "description": "The target's base revision changed; the overlay is shown but not injected.",
+            "type": "boolean"
+          },
+          "pendingProposals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "pinned": {
+            "description": "The user pinned the stable slot; candidates are not served.",
+            "type": "boolean"
+          },
+          "source": {
+            "type": "string"
+          },
+          "stable": {
+            "$ref": "#/definitions/EvolutionScore"
+          },
+          "targetKey": {
+            "$ref": "#/definitions/TargetKey"
+          },
+          "type": {
+            "$ref": "#/definitions/TargetType"
+          }
+        },
+        "required": [
+          "enabled",
+          "evolutionMode",
+          "name",
+          "needsRevalidation",
+          "pendingProposals",
+          "pinned",
+          "source",
+          "stable",
+          "targetKey",
+          "type"
+        ],
+        "type": "object"
+      },
+      "EvolutionWriteMode": {
+        "description": "How a target's learned content takes effect.",
+        "enum": [
+          "overlay",
+          "skill_file"
+        ],
+        "type": "string"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      },
+      "TargetType": {
+        "description": "Kind of learnable target. The snake_case wire name is also the first segment of a [`TargetKey`] and the key under `evolution.targets`.",
+        "enum": [
+          "skill",
+          "preference",
+          "project_knowledge",
+          "tool_usage",
+          "workflow_template"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/EvolutionTargetSummary"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "title": "EvolutionTargetsListResult",
+    "type": "object"
+  }
+}

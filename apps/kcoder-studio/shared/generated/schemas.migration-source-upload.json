@@ -1,0 +1,651 @@
+{
+  "MigrationSourceProductCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "commandId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "manifestSha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "commandId",
+      "manifestSha256",
+      "operationId"
+    ],
+    "title": "MigrationSourceProductCancelParams",
+    "type": "object"
+  },
+  "MigrationSourceProductParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "manifestSha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "manifestSha256",
+      "operationId"
+    ],
+    "title": "MigrationSourceProductParams",
+    "type": "object"
+  },
+  "MigrationSourceProductRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cancelWatermark": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "manifestSha256": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cancelWatermark",
+      "expectedSequence",
+      "manifestSha256",
+      "operationId"
+    ],
+    "title": "MigrationSourceProductRunParams",
+    "type": "object"
+  },
+  "MigrationSourceProductSelectResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceProductOrigin": {
+        "enum": [
+          "user_supplied"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "manifestSha256": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "origin": {
+        "$ref": "#/definitions/MigrationSourceProductOrigin"
+      },
+      "remainingMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      }
+    },
+    "required": [
+      "manifestSha256",
+      "operationId",
+      "origin",
+      "remainingMs",
+      "source"
+    ],
+    "title": "MigrationSourceProductSelectResult",
+    "type": "object"
+  },
+  "MigrationSourceProductStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "SourceUploadStage": {
+        "enum": [
+          "prepared",
+          "receiving",
+          "verifying",
+          "ready",
+          "cancel_requested",
+          "cancelled",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "SourceUploadState": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelWatermark": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completedFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "manifestSha256": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "receivedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "stage": {
+            "$ref": "#/definitions/SourceUploadStage"
+          },
+          "totalBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "verifiedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workerState": {
+            "$ref": "#/definitions/SourceUploadWorkerState"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelWatermark",
+          "completedFiles",
+          "manifestSha256",
+          "operationId",
+          "receivedBytes",
+          "sequence",
+          "source",
+          "stage",
+          "totalBytes",
+          "totalFiles",
+          "verifiedBytes",
+          "workerState"
+        ],
+        "type": "object"
+      },
+      "SourceUploadWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "materialization": {
+        "$ref": "#/definitions/SourceUploadState"
+      }
+    },
+    "required": [
+      "materialization"
+    ],
+    "title": "MigrationSourceProductStateResult",
+    "type": "object"
+  },
+  "MigrationSourceUploadCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "commandId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "commandId",
+      "operationId"
+    ],
+    "title": "MigrationSourceUploadCancelParams",
+    "type": "object"
+  },
+  "MigrationSourceUploadFilesParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "default": null,
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "title": "MigrationSourceUploadFilesParams",
+    "type": "object"
+  },
+  "MigrationSourceUploadFilesResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "SourceUploadFilePage": {
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/definitions/SourceUploadFileProgress"
+            },
+            "type": "array"
+          },
+          "manifestSha256": {
+            "type": "string"
+          },
+          "nextCursor": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "files",
+          "manifestSha256",
+          "operationId"
+        ],
+        "type": "object"
+      },
+      "SourceUploadFileProgress": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "complete": {
+            "type": "boolean"
+          },
+          "fileIndex": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "nextPart": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "acceptedBytes",
+          "complete",
+          "fileIndex",
+          "nextPart"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/SourceUploadFilePage"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "MigrationSourceUploadFilesResult",
+    "type": "object"
+  },
+  "MigrationSourceUploadPartParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cancelWatermark": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contentBase64": {
+        "maxLength": 174764,
+        "minLength": 4,
+        "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+        "type": "string"
+      },
+      "fileIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "partIndex": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "cancelWatermark",
+      "contentBase64",
+      "fileIndex",
+      "operationId",
+      "partIndex"
+    ],
+    "title": "MigrationSourceUploadPartParams",
+    "type": "object"
+  },
+  "MigrationSourceUploadPrepareParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "SourceUploadFile": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "relativePath": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "relativePath",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "SourceUploadManifest": {
+        "additionalProperties": false,
+        "description": "Version 1 describes regular files relative to one selected product directory. File order is immutable and defines the backup container's payload order.",
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/definitions/SourceUploadFile"
+            },
+            "type": "array"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "files",
+          "source",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "manifest": {
+        "$ref": "#/definitions/SourceUploadManifest"
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "manifest",
+      "operationId"
+    ],
+    "title": "MigrationSourceUploadPrepareParams",
+    "type": "object"
+  },
+  "MigrationSourceUploadReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "operationId"
+    ],
+    "title": "MigrationSourceUploadReadParams",
+    "type": "object"
+  },
+  "MigrationSourceUploadRunParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cancelWatermark": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedSequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "cancelWatermark",
+      "expectedSequence",
+      "operationId"
+    ],
+    "title": "MigrationSourceUploadRunParams",
+    "type": "object"
+  },
+  "MigrationSourceUploadStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "SourceUploadStage": {
+        "enum": [
+          "prepared",
+          "receiving",
+          "verifying",
+          "ready",
+          "cancel_requested",
+          "cancelled",
+          "failed"
+        ],
+        "type": "string"
+      },
+      "SourceUploadState": {
+        "additionalProperties": false,
+        "properties": {
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "cancelWatermark": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completedFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "manifestSha256": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "receivedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "stage": {
+            "$ref": "#/definitions/SourceUploadStage"
+          },
+          "totalBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalFiles": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "verifiedBytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "workerState": {
+            "$ref": "#/definitions/SourceUploadWorkerState"
+          }
+        },
+        "required": [
+          "cancelRequested",
+          "cancelWatermark",
+          "completedFiles",
+          "manifestSha256",
+          "operationId",
+          "receivedBytes",
+          "sequence",
+          "source",
+          "stage",
+          "totalBytes",
+          "totalFiles",
+          "verifiedBytes",
+          "workerState"
+        ],
+        "type": "object"
+      },
+      "SourceUploadWorkerState": {
+        "enum": [
+          "running",
+          "stopped",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "upload": {
+        "$ref": "#/definitions/SourceUploadState"
+      }
+    },
+    "required": [
+      "upload"
+    ],
+    "title": "MigrationSourceUploadStateResult",
+    "type": "object"
+  }
+}

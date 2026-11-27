@@ -1,0 +1,68 @@
+{
+  "AttachmentDraftRetainParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "ownerScope": {
+        "description": "Injected by the trusted parent, never accepted from a Gateway client.",
+        "type": "string"
+      },
+      "paths": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "recoverOnly": {
+        "default": false,
+        "description": "A reconnect can recover existing records but cannot adopt arbitrary uploads owned by another virtual client on the parent connection.",
+        "type": "boolean"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "ownerScope",
+      "paths",
+      "threadId"
+    ],
+    "title": "AttachmentDraftRetainParams",
+    "type": "object"
+  },
+  "AttachmentDraftRetainResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AttachmentDraftPath": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "sourcePath": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "sourcePath"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "drafts": {
+        "items": {
+          "$ref": "#/definitions/AttachmentDraftPath"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "drafts"
+    ],
+    "title": "AttachmentDraftRetainResult",
+    "type": "object"
+  }
+}

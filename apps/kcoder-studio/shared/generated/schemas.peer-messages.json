@@ -1,0 +1,2664 @@
+{
+  "CrossSessionMessageDiscoveryCompleteness": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Absence on older draft responses stays unknown, never complete.",
+    "enum": [
+      "complete",
+      "partial",
+      "indexing",
+      "unknown"
+    ],
+    "title": "CrossSessionMessageDiscoveryCompleteness",
+    "type": "string"
+  },
+  "CrossSessionMessageDiscoveryCoverage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "A bounded resident observation must not claim to enumerate saved history.",
+    "enum": [
+      "resident_only",
+      "workspace_history"
+    ],
+    "title": "CrossSessionMessageDiscoveryCoverage",
+    "type": "string"
+  },
+  "CrossSessionMessageGetParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "clientMessageId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "messageId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "CrossSessionMessageGetParams",
+    "type": "object"
+  },
+  "CrossSessionMessageGetResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "anyOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "receipt": {
+            "$ref": "#/definitions/CrossSessionMessageReceipt"
+          }
+        },
+        "required": [
+          "receipt"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "receipt": {
+            "type": "null"
+          }
+        },
+        "required": [
+          "receipt"
+        ],
+        "type": "object"
+      }
+    ],
+    "definitions": {
+      "CrossSessionMessageReceipt": {
+        "additionalProperties": false,
+        "description": "Applied means present in native history, never model comprehension or task success.",
+        "properties": {
+          "clientMessageId": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replyToMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/CrossSessionMessageStatus"
+          },
+          "targetAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientMessageId",
+          "messageId",
+          "revision",
+          "status",
+          "targetThreadId"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageStatus": {
+        "enum": [
+          "queued",
+          "delivering",
+          "applied",
+          "rejected",
+          "expired",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Null is a confirmed missing receipt, never a read failure or an unknown result.",
+    "title": "CrossSessionMessageGetResult"
+  },
+  "CrossSessionMessageGetRpcParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageGetParams": {
+        "additionalProperties": false,
+        "properties": {
+          "clientMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "messageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "query": {
+        "$ref": "#/definitions/CrossSessionMessageGetParams"
+      },
+      "sourceThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "query",
+      "sourceThreadId"
+    ],
+    "title": "CrossSessionMessageGetRpcParams",
+    "type": "object"
+  },
+  "CrossSessionMessageLastTurn": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TurnStatus": {
+        "enum": [
+          "running",
+          "completed",
+          "interrupted",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A committed last-turn fact only; idle or a missing runtime is never a completion receipt.",
+    "properties": {
+      "endedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/TurnStatus"
+      },
+      "turnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "CrossSessionMessageLastTurn",
+    "type": "object"
+  },
+  "CrossSessionMessageMode": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "enqueue_only",
+      "wake_if_idle"
+    ],
+    "title": "CrossSessionMessageMode",
+    "type": "string"
+  },
+  "CrossSessionMessagePolicyReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "sourceThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sourceThreadId"
+    ],
+    "title": "CrossSessionMessagePolicyReadParams",
+    "type": "object"
+  },
+  "CrossSessionMessagePolicyResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "An account-owned policy observation; support negotiation is not an allow verdict.",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "revision": {
+        "type": "string"
+      },
+      "wakeIdle": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "enabled",
+      "revision",
+      "wakeIdle"
+    ],
+    "title": "CrossSessionMessagePolicyResult",
+    "type": "object"
+  },
+  "CrossSessionMessagePolicySaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "type": "string"
+      },
+      "sourceThreadId": {
+        "type": "string"
+      },
+      "wakeIdle": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "enabled",
+      "expectedRevision",
+      "sourceThreadId",
+      "wakeIdle"
+    ],
+    "title": "CrossSessionMessagePolicySaveParams",
+    "type": "object"
+  },
+  "CrossSessionMessageReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageStatus": {
+        "enum": [
+          "queued",
+          "delivering",
+          "applied",
+          "rejected",
+          "expired",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Applied means present in native history, never model comprehension or task success.",
+    "properties": {
+      "clientMessageId": {
+        "type": "string"
+      },
+      "messageId": {
+        "type": "string"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "replyToMessageId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceAddress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/SessionAddressV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/CrossSessionMessageStatus"
+      },
+      "targetAddress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/SessionAddressV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "targetThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientMessageId",
+      "messageId",
+      "revision",
+      "status",
+      "targetThreadId"
+    ],
+    "title": "CrossSessionMessageReceipt",
+    "type": "object"
+  },
+  "CrossSessionMessageReceiptListEntry": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageReceipt": {
+        "additionalProperties": false,
+        "description": "Applied means present in native history, never model comprehension or task success.",
+        "properties": {
+          "clientMessageId": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replyToMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/CrossSessionMessageStatus"
+          },
+          "targetAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientMessageId",
+          "messageId",
+          "revision",
+          "status",
+          "targetThreadId"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageStatus": {
+        "enum": [
+          "queued",
+          "delivering",
+          "applied",
+          "rejected",
+          "expired",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ReceiptConfirmation": {
+        "enum": [
+          "confirmed",
+          "missing",
+          "unconfirmed"
+        ],
+        "type": "string"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "clientMessageId": {
+        "type": "string"
+      },
+      "confirmation": {
+        "$ref": "#/definitions/ReceiptConfirmation"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "expiresAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "mode": {
+        "$ref": "#/definitions/CrossSessionMessageMode"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "targetAddress": {
+        "$ref": "#/definitions/SessionAddressV1"
+      }
+    },
+    "required": [
+      "clientMessageId",
+      "confirmation",
+      "mode",
+      "targetAddress"
+    ],
+    "title": "CrossSessionMessageReceiptListEntry",
+    "type": "object"
+  },
+  "CrossSessionMessageReceiptListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageStatus": {
+        "enum": [
+          "queued",
+          "delivering",
+          "applied",
+          "rejected",
+          "expired",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "createdAfterMs": {
+        "description": "Inclusive lower bound on message creation time, in Unix milliseconds (UTC). Omit for no lower bound.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "createdBeforeMs": {
+        "description": "Exclusive upper bound on message creation time, in Unix milliseconds (UTC). Must exceed createdAfterMs.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "cursor": {
+        "description": "On continuation copy nextCursor exactly and repeat the original target/status/time filters. Start without cursor to change filters or refresh. A short or empty page can still have a nextCursor.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "description": "Maximum matches for this call, an integer from 1 to 256. Default 10. You may change it between pages.",
+        "format": "uint",
+        "maximum": 256,
+        "minimum": 1,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "status": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageStatus"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional current receipt status. queued is awaiting delivery, delivering is in progress, applied is appended to the recipient's history. rejected, expired and unknown are also valid. An unreachable destination has unconfirmed observations and cannot match a status filter."
+      },
+      "targetThreadId": {
+        "description": "Optional exact, case-sensitive destination threadId. Copy threadId from ListSessions. Omit to search messages sent by your current session to any destination.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "CrossSessionMessageReceiptListParams",
+    "type": "object"
+  },
+  "CrossSessionMessageReceiptListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageReceipt": {
+        "additionalProperties": false,
+        "description": "Applied means present in native history, never model comprehension or task success.",
+        "properties": {
+          "clientMessageId": {
+            "type": "string"
+          },
+          "messageId": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "replyToMessageId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/CrossSessionMessageStatus"
+          },
+          "targetAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetThreadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientMessageId",
+          "messageId",
+          "revision",
+          "status",
+          "targetThreadId"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageReceiptListEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "clientMessageId": {
+            "type": "string"
+          },
+          "confirmation": {
+            "$ref": "#/definitions/ReceiptConfirmation"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "expiresAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mode": {
+            "$ref": "#/definitions/CrossSessionMessageMode"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receipt": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CrossSessionMessageReceipt"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetAddress": {
+            "$ref": "#/definitions/SessionAddressV1"
+          }
+        },
+        "required": [
+          "clientMessageId",
+          "confirmation",
+          "mode",
+          "targetAddress"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageStatus": {
+        "enum": [
+          "queued",
+          "delivering",
+          "applied",
+          "rejected",
+          "expired",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ReceiptConfirmation": {
+        "enum": [
+          "confirmed",
+          "missing",
+          "unconfirmed"
+        ],
+        "type": "string"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/CrossSessionMessageReceiptListEntry"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "unconfirmedCount": {
+        "description": "Count of candidate observations on this page that could not be verified.",
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "unconfirmedCount"
+    ],
+    "title": "CrossSessionMessageReceiptListResult",
+    "type": "object"
+  },
+  "CrossSessionMessageReceiptListRpcParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageStatus": {
+        "enum": [
+          "queued",
+          "delivering",
+          "applied",
+          "rejected",
+          "expired",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "createdAfterMs": {
+        "description": "Inclusive lower bound on message creation time, in Unix milliseconds (UTC). Omit for no lower bound.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "createdBeforeMs": {
+        "description": "Exclusive upper bound on message creation time, in Unix milliseconds (UTC). Must exceed createdAfterMs.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "cursor": {
+        "description": "On continuation copy nextCursor exactly and repeat the original target/status/time filters. Start without cursor to change filters or refresh. A short or empty page can still have a nextCursor.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "description": "Maximum matches for this call, an integer from 1 to 256. Default 10. You may change it between pages.",
+        "format": "uint",
+        "maximum": 256,
+        "minimum": 1,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "sourceThreadId": {
+        "type": "string"
+      },
+      "status": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageStatus"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional current receipt status. queued is awaiting delivery, delivering is in progress, applied is appended to the recipient's history. rejected, expired and unknown are also valid. An unreachable destination has unconfirmed observations and cannot match a status filter."
+      },
+      "targetThreadId": {
+        "description": "Optional exact, case-sensitive destination threadId. Copy threadId from ListSessions. Omit to search messages sent by your current session to any destination.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "sourceThreadId"
+    ],
+    "title": "CrossSessionMessageReceiptListRpcParams",
+    "type": "object"
+  },
+  "CrossSessionMessageResolveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Gateway resolves a full Native address through a current authorized broker.",
+    "properties": {
+      "address": {
+        "$ref": "#/definitions/SessionAddressV1"
+      },
+      "sourceThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "address",
+      "sourceThreadId"
+    ],
+    "title": "CrossSessionMessageResolveParams",
+    "type": "object"
+  },
+  "CrossSessionMessageResolveResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "address": {
+        "$ref": "#/definitions/SessionAddressV1"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "workspacePath": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "address",
+      "serverId",
+      "threadId",
+      "workspacePath"
+    ],
+    "title": "CrossSessionMessageResolveResult",
+    "type": "object"
+  },
+  "CrossSessionMessageSendParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "The exact immutable request. Debug output deliberately omits its private text.",
+    "properties": {
+      "clientMessageId": {
+        "type": "string"
+      },
+      "expectedTurnId": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "mode": {
+        "$ref": "#/definitions/CrossSessionMessageMode"
+      },
+      "replyToMessageId": {
+        "description": "Reference to a message actually received by this source from this recipient.",
+        "maxLength": 128,
+        "minLength": 1,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "targetAddress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/SessionAddressV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "targetThreadId": {
+        "type": "string"
+      },
+      "text": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientMessageId",
+      "mode",
+      "targetThreadId",
+      "text"
+    ],
+    "title": "CrossSessionMessageSendParams",
+    "type": "object"
+  },
+  "CrossSessionMessageSendRpcParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageIntent": {
+        "additionalProperties": false,
+        "description": "The exact immutable request. Debug output deliberately omits its private text.",
+        "properties": {
+          "clientMessageId": {
+            "type": "string"
+          },
+          "expectedTurnId": {
+            "maxLength": 256,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "mode": {
+            "$ref": "#/definitions/CrossSessionMessageMode"
+          },
+          "replyToMessageId": {
+            "description": "Reference to a message actually received by this source from this recipient.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "targetAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetThreadId": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "clientMessageId",
+          "mode",
+          "targetThreadId",
+          "text"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "message": {
+        "$ref": "#/definitions/CrossSessionMessageIntent"
+      },
+      "sourceThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "message",
+      "sourceThreadId"
+    ],
+    "title": "CrossSessionMessageSendRpcParams",
+    "type": "object"
+  },
+  "CrossSessionMessageSessionReadOutcome": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "anyOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "result": {
+            "$ref": "#/definitions/SessionReadResult"
+          }
+        },
+        "required": [
+          "result"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "refused": {
+            "$ref": "#/definitions/SessionReadErrorCode"
+          }
+        },
+        "required": [
+          "refused"
+        ],
+        "type": "object"
+      }
+    ],
+    "definitions": {
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "SessionReadErrorCode": {
+        "description": "Stable refusal codes shared by local and routed reads.",
+        "oneOf": [
+          {
+            "enum": [
+              "session_read_not_found",
+              "session_read_other_project",
+              "session_read_not_permitted",
+              "session_read_self",
+              "session_read_turn_not_found",
+              "session_read_unsupported_target",
+              "session_read_unavailable"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The router could not reach the target owner; nothing is known about the target.",
+            "enum": [
+              "session_read_target_unreachable"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The routed read did not finish in time; nothing is known about the target.",
+            "enum": [
+              "session_read_timeout"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "SessionReadItem": {
+        "additionalProperties": false,
+        "properties": {
+          "isError": {
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/definitions/SessionReadItemKind"
+          },
+          "partial": {
+            "description": "Assistant text still being streamed by the target's current turn.",
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "truncatedFront": {
+            "description": "The beginning of this text was dropped; the newest part is kept.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "text"
+        ],
+        "type": "object"
+      },
+      "SessionReadItemKind": {
+        "oneOf": [
+          {
+            "enum": [
+              "user_message",
+              "assistant_message",
+              "tool_call",
+              "tool_result"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "A message another session sent into the target conversation.",
+            "enum": [
+              "peer_message"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Name/type/size placeholder only; contents are never transferred.",
+            "enum": [
+              "attachment"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "SessionReadResult": {
+        "additionalProperties": false,
+        "description": "One window of the target's visible transcript, oldest turn first.",
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Resolved complete address when the host has a peer identity."
+          },
+          "archived": {
+            "default": false,
+            "type": "boolean"
+          },
+          "hasEarlierTurns": {
+            "default": false,
+            "description": "Visible turns older than this window exist.",
+            "type": "boolean"
+          },
+          "otherTarget": {
+            "description": "The conversation lives on another runtime target and was read by its owner through the authenticated peer router. Set by the reading host, never trusted from the target's reply.",
+            "type": "boolean"
+          },
+          "otherWorkspace": {
+            "default": false,
+            "description": "The conversation is in another workspace of the same host and account.",
+            "type": "boolean"
+          },
+          "resident": {
+            "default": false,
+            "description": "Read from the loaded conversation; the newest turn may include live text.",
+            "type": "boolean"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turns": {
+            "items": {
+              "$ref": "#/definitions/SessionReadTurn"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "threadId",
+          "turns"
+        ],
+        "type": "object"
+      },
+      "SessionReadTurn": {
+        "additionalProperties": false,
+        "properties": {
+          "endedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "items": {
+            "items": {
+              "$ref": "#/definitions/SessionReadItem"
+            },
+            "type": "array"
+          },
+          "omittedItems": {
+            "default": 0,
+            "description": "Earlier items of this turn dropped by the per-turn item cap.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "partial": {
+            "description": "The turn is still in progress and its content may be incomplete.",
+            "type": "boolean"
+          },
+          "startedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/SessionReadTurnStatus"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "status",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "SessionReadTurnStatus": {
+        "oneOf": [
+          {
+            "enum": [
+              "running",
+              "completed",
+              "failed",
+              "interrupted"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "No durable outcome was recorded; this is not a failure.",
+            "enum": [
+              "unknown"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "description": "A routed read's reply from the target owner: one bounded window, or a typed refusal decided by that owner. Transport failures are never encoded here.",
+    "title": "CrossSessionMessageSessionReadOutcome"
+  },
+  "CrossSessionMessageSessionReadRpcParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "SessionReadParams": {
+        "additionalProperties": false,
+        "description": "Model/RPC request. The source session, account and workspace are bound by the host.",
+        "properties": {
+          "beforeTurnId": {
+            "description": "Optional. Read turns strictly older than this turn when paging backwards. Copy nextBeforeTurnId from the previous ReadSession result. Do not combine with turnId.",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "includeAttachments": {
+            "description": "Optional, default false. Set true to list attachments and images as name/type/size placeholders. File and image contents are never returned.",
+            "type": "boolean"
+          },
+          "includeOutputs": {
+            "description": "Optional, default false. Set true only when you need what the other conversation did with tools: adds each tool call's name with truncated arguments and its truncated result. Costs more output; reasoning is never included.",
+            "type": "boolean"
+          },
+          "targetAddress": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Copy the entire address object from that same ListSessions row when present. Its threadId must equal threadId. Omit for a conversation listed without an address."
+          },
+          "threadId": {
+            "description": "Required. Copy threadId exactly from a ListSessions result. Never use a title, a turn ID or your own conversation's ID.",
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "turnId": {
+            "description": "Optional. Read this visible turn and up to turns-1 turns before it. Copy a turnId from an earlier ReadSession result. Do not combine with beforeTurnId.",
+            "maxLength": 256,
+            "minLength": 1,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "turns": {
+            "description": "Optional number of turns, 1–10. Defaults to 3 (the newest turns).",
+            "format": "uint8",
+            "maximum": 10,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "threadId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Router-to-target ReadSession request. The source identity comes from the private route proof; `sourceThreadId` only selects a session inside that proven identity.",
+    "properties": {
+      "read": {
+        "$ref": "#/definitions/SessionReadParams"
+      },
+      "sourceThreadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "read",
+      "sourceThreadId"
+    ],
+    "title": "CrossSessionMessageSessionReadRpcParams",
+    "type": "object"
+  },
+  "CrossSessionMessageStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "queued",
+      "delivering",
+      "applied",
+      "rejected",
+      "expired",
+      "unknown"
+    ],
+    "title": "CrossSessionMessageStatus",
+    "type": "string"
+  },
+  "CrossSessionMessageTarget": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageLastTurn": {
+        "additionalProperties": false,
+        "description": "A committed last-turn fact only; idle or a missing runtime is never a completion receipt.",
+        "properties": {
+          "endedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/TurnStatus"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageTargetPresence": {
+        "enum": [
+          "resident",
+          "not_resident",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageTargetRunSummary": {
+        "additionalProperties": false,
+        "description": "Safe run facts copied from the canonical thread summary; unknown counts stay null.",
+        "properties": {
+          "activeJobs": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mainTurn": {
+            "$ref": "#/definitions/ThreadMainTurn"
+          },
+          "pendingApprovals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pendingFollowups": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pendingGoals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pendingQuestions": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tasksPending": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tasksRunning": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "mainTurn"
+        ],
+        "type": "object"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "ThreadMainTurn": {
+        "description": "Main-turn component of [`ThreadRunFacts`]; `Unknown` means \"unreadable\", not \"idle\".",
+        "enum": [
+          "idle",
+          "running",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ThreadStatus": {
+        "oneOf": [
+          {
+            "enum": [
+              "idle",
+              "running",
+              "waiting_for_approval",
+              "waiting_for_answer",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The main turn is finished but a background run is still working.",
+            "enum": [
+              "background"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Only delivery/aggregation of finished background work is outstanding.",
+            "enum": [
+              "aggregating"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Authoritative run facts could not be read; never report this as idle.",
+            "enum": [
+              "unknown"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "TurnStatus": {
+        "enum": [
+          "running",
+          "completed",
+          "interrupted",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Discovery grants neither history access nor a saved permission verdict.",
+    "properties": {
+      "activeTurnId": {
+        "description": "Current actual stream registration only; absent is never a saved turn grant.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "address": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/SessionAddressV1"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Full location supplied by the authenticated target, never an access grant."
+      },
+      "allowedModes": {
+        "items": {
+          "$ref": "#/definitions/CrossSessionMessageMode"
+        },
+        "type": "array"
+      },
+      "archivedAt": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "lastHistoryUpdateAtMs": {
+        "description": "Persisted history update only; never evidence of current activity.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "lastTurn": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageLastTurn"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "presence": {
+        "$ref": "#/definitions/CrossSessionMessageTargetPresence"
+      },
+      "runSummary": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageTargetRunSummary"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/ThreadStatus"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "title": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "allowedModes",
+      "presence",
+      "status",
+      "threadId"
+    ],
+    "title": "CrossSessionMessageTarget",
+    "type": "object"
+  },
+  "CrossSessionMessageTargetPresence": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "resident",
+      "not_resident",
+      "unknown"
+    ],
+    "title": "CrossSessionMessageTargetPresence",
+    "type": "string"
+  },
+  "CrossSessionMessageTargetRunSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadMainTurn": {
+        "description": "Main-turn component of [`ThreadRunFacts`]; `Unknown` means \"unreadable\", not \"idle\".",
+        "enum": [
+          "idle",
+          "running",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Safe run facts copied from the canonical thread summary; unknown counts stay null.",
+    "properties": {
+      "activeJobs": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "mainTurn": {
+        "$ref": "#/definitions/ThreadMainTurn"
+      },
+      "pendingApprovals": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pendingFollowups": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pendingGoals": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "pendingQuestions": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "tasksPending": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "tasksRunning": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "mainTurn"
+    ],
+    "title": "CrossSessionMessageTargetRunSummary",
+    "type": "object"
+  },
+  "CrossSessionMessageTargetsParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageTargetPresence": {
+        "enum": [
+          "resident",
+          "not_resident",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ThreadStatus": {
+        "oneOf": [
+          {
+            "enum": [
+              "idle",
+              "running",
+              "waiting_for_approval",
+              "waiting_for_answer",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The main turn is finished but a background run is still working.",
+            "enum": [
+              "background"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Only delivery/aggregation of finished background work is outstanding.",
+            "enum": [
+              "aggregating"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Authoritative run facts could not be read; never report this as idle.",
+            "enum": [
+              "unknown"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "description": "Optional, intersecting selectors over visible metadata, independent of the caller's authority.",
+    "properties": {
+      "allowedMode": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageMode"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional advertised delivery mode. enqueue_only finds sessions that currently accept a queued message; wake_if_idle finds sessions that currently allow a wake. This filter never sends or wakes a session. Copy the selected address into SendSessionMessage; authority and current state are checked again at send time."
+      },
+      "cursor": {
+        "description": "Omit on the first call. For the next page, pass the exact nextCursor string returned to this caller as cursor. Continuations inherit the original filters. You may change limit only. To change filters or recover an expired/consumed cursor, start a fresh search without cursor. Do not fabricate a token or issue parallel reads of the same cursor.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "description": "Optional integer from 1 to 256. Maximum matching rows for this call. Omit for 10 on the first call. A continuation inherits the previous limit unless you supply a new one. A page may be shorter; follow nextCursor when present.",
+        "format": "uint",
+        "maximum": 256,
+        "minimum": 1,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "presence": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageTargetPresence"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional runtime presence: resident (currently loaded), not_resident (saved but not loaded) or unknown. A resident session can be idle or running. Omit this filter when looking for saved sessions by title."
+      },
+      "query": {
+        "description": "Optional literal substring (1–256 UTF-8 bytes) of either the title OR the thread ID. Use this when you only remember a few characters of an ID or are unsure whether your text is a title. Case-insensitive. If title is also provided, both fields must match. Message bodies are never searched.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ThreadStatus"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional current activity. Use running, idle, waiting_for_approval, waiting_for_answer, background, aggregating, failed or unknown. Use running to find an executing turn; idle means no active main turn. For a previous outcome, inspect lastTurn.status on the returned row."
+      },
+      "targetId": {
+        "description": "Optional exact, case-sensitive runtime target ID, up to 256 UTF-8 bytes. Copy address.targetId from a returned session. Omit to search all visible targets. A target alias, machine name, workspace path or thread ID is not a targetId.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "description": "Optional literal substring of the visible session title. Case-insensitive; Chinese text works directly. Example: \"安装包\" matches \"Windows 安装包更新\". Untitled sessions do not match. No wildcards or regular expressions. Supply 1–256 UTF-8 bytes of nonblank text. Combine with other fields using AND.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "CrossSessionMessageTargetsParams",
+    "type": "object"
+  },
+  "CrossSessionMessageTargetsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageDiscoveryCompleteness": {
+        "description": "Absence on older draft responses stays unknown, never complete.",
+        "enum": [
+          "complete",
+          "partial",
+          "indexing",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageDiscoveryCoverage": {
+        "description": "A bounded resident observation must not claim to enumerate saved history.",
+        "enum": [
+          "resident_only",
+          "workspace_history"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageLastTurn": {
+        "additionalProperties": false,
+        "description": "A committed last-turn fact only; idle or a missing runtime is never a completion receipt.",
+        "properties": {
+          "endedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/TurnStatus"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageTarget": {
+        "additionalProperties": false,
+        "description": "Discovery grants neither history access nor a saved permission verdict.",
+        "properties": {
+          "activeTurnId": {
+            "description": "Current actual stream registration only; absent is never a saved turn grant.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "address": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/SessionAddressV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Full location supplied by the authenticated target, never an access grant."
+          },
+          "allowedModes": {
+            "items": {
+              "$ref": "#/definitions/CrossSessionMessageMode"
+            },
+            "type": "array"
+          },
+          "archivedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastHistoryUpdateAtMs": {
+            "description": "Persisted history update only; never evidence of current activity.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "lastTurn": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CrossSessionMessageLastTurn"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "presence": {
+            "$ref": "#/definitions/CrossSessionMessageTargetPresence"
+          },
+          "runSummary": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/CrossSessionMessageTargetRunSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/ThreadStatus"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "allowedModes",
+          "presence",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "CrossSessionMessageTargetPresence": {
+        "enum": [
+          "resident",
+          "not_resident",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageTargetRunSummary": {
+        "additionalProperties": false,
+        "description": "Safe run facts copied from the canonical thread summary; unknown counts stay null.",
+        "properties": {
+          "activeJobs": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "mainTurn": {
+            "$ref": "#/definitions/ThreadMainTurn"
+          },
+          "pendingApprovals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pendingFollowups": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pendingGoals": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "pendingQuestions": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tasksPending": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "tasksRunning": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "mainTurn"
+        ],
+        "type": "object"
+      },
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "ThreadMainTurn": {
+        "description": "Main-turn component of [`ThreadRunFacts`]; `Unknown` means \"unreadable\", not \"idle\".",
+        "enum": [
+          "idle",
+          "running",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ThreadStatus": {
+        "oneOf": [
+          {
+            "enum": [
+              "idle",
+              "running",
+              "waiting_for_approval",
+              "waiting_for_answer",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The main turn is finished but a background run is still working.",
+            "enum": [
+              "background"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Only delivery/aggregation of finished background work is outstanding.",
+            "enum": [
+              "aggregating"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Authoritative run facts could not be read; never report this as idle.",
+            "enum": [
+              "unknown"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "TurnStatus": {
+        "enum": [
+          "running",
+          "completed",
+          "interrupted",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "completeness": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageDiscoveryCompleteness"
+          }
+        ],
+        "default": "unknown"
+      },
+      "coverage": {
+        "$ref": "#/definitions/CrossSessionMessageDiscoveryCoverage"
+      },
+      "issueCount": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "observedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "targets": {
+        "items": {
+          "$ref": "#/definitions/CrossSessionMessageTarget"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "coverage",
+      "observedAtMs",
+      "targets"
+    ],
+    "title": "CrossSessionMessageTargetsResult",
+    "type": "object"
+  },
+  "CrossSessionMessageTargetsRpcParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CrossSessionMessageMode": {
+        "enum": [
+          "enqueue_only",
+          "wake_if_idle"
+        ],
+        "type": "string"
+      },
+      "CrossSessionMessageTargetPresence": {
+        "enum": [
+          "resident",
+          "not_resident",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ThreadStatus": {
+        "oneOf": [
+          {
+            "enum": [
+              "idle",
+              "running",
+              "waiting_for_approval",
+              "waiting_for_answer",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The main turn is finished but a background run is still working.",
+            "enum": [
+              "background"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Only delivery/aggregation of finished background work is outstanding.",
+            "enum": [
+              "aggregating"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Authoritative run facts could not be read; never report this as idle.",
+            "enum": [
+              "unknown"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "description": "RPC selectors locate sessions; the authenticated host still verifies authority.",
+    "properties": {
+      "allowedMode": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageMode"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional advertised delivery mode. enqueue_only finds sessions that currently accept a queued message; wake_if_idle finds sessions that currently allow a wake. This filter never sends or wakes a session. Copy the selected address into SendSessionMessage; authority and current state are checked again at send time."
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "description": "Optional integer from 1 to 256. Maximum matching rows for this call. Omit for 10 on the first call. A continuation inherits the previous limit unless you supply a new one. A page may be shorter; follow nextCursor when present.",
+        "format": "uint",
+        "maximum": 256,
+        "minimum": 1,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "presence": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CrossSessionMessageTargetPresence"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional runtime presence: resident (currently loaded), not_resident (saved but not loaded) or unknown. A resident session can be idle or running. Omit this filter when looking for saved sessions by title."
+      },
+      "query": {
+        "description": "Optional literal substring (1–256 UTF-8 bytes) of either the title OR the thread ID. Use this when you only remember a few characters of an ID or are unsure whether your text is a title. Case-insensitive. If title is also provided, both fields must match. Message bodies are never searched.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourceThreadId": {
+        "type": "string"
+      },
+      "status": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ThreadStatus"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional current activity. Use running, idle, waiting_for_approval, waiting_for_answer, background, aggregating, failed or unknown. Use running to find an executing turn; idle means no active main turn. For a previous outcome, inspect lastTurn.status on the returned row."
+      },
+      "targetId": {
+        "description": "Optional exact, case-sensitive runtime target ID, up to 256 UTF-8 bytes. Copy address.targetId from a returned session. Omit to search all visible targets. A target alias, machine name, workspace path or thread ID is not a targetId.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "title": {
+        "description": "Optional literal substring of the visible session title. Case-insensitive; Chinese text works directly. Example: \"安装包\" matches \"Windows 安装包更新\". Untitled sessions do not match. No wildcards or regular expressions. Supply 1–256 UTF-8 bytes of nonblank text. Combine with other fields using AND.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "sourceThreadId"
+    ],
+    "title": "CrossSessionMessageTargetsRpcParams",
+    "type": "object"
+  },
+  "PeerAgentMessageV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "SessionAddressV1": {
+        "additionalProperties": false,
+        "properties": {
+          "targetId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "targetId",
+          "threadId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "bodySha256": {
+        "description": "Integrity only. This is not evidence of current sender or recipient access.",
+        "type": "string"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "messageId": {
+        "type": "string"
+      },
+      "replyToMessageId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "sourceAddress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/SessionAddressV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sourceThreadId": {
+        "type": "string"
+      },
+      "targetAddress": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/SessionAddressV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "targetThreadId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "bodySha256",
+      "createdAtMs",
+      "messageId",
+      "sourceThreadId",
+      "targetThreadId",
+      "version"
+    ],
+    "title": "PeerAgentMessageV1",
+    "type": "object"
+  }
+}

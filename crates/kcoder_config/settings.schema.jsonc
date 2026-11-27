@@ -1,0 +1,1497 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kcoder.dev/schema/settings.json",
+  "title": "KCoder settings",
+  "description": "KCoder settings.json. All properties are optional because settings files are merged by scope.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "description": "Local JSON Schema reference for editor validation." },
+    "hooks": { "type": "object", "description": "Lifecycle hooks consumed by kcoder_hooks." },
+    "meta": { "$ref": "#/$defs/configMetadata" },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "total_timeout_ms": {
+              "type": ["integer", "null"],
+              "minimum": 1,
+              "maximum": 86400000,
+              "default": null,
+              "description": "Absolute logical Provider generation/recovery budget across retries, backoff and reactive compaction. Null disables it. Does not change request_timeout_secs or max_duration_secs; compaction commits and completed-response trailing accounting finish under their existing safety protocols."
+            }
+          }
+        }
+      }
+    },
+    "studio_context": { "$ref": "#/$defs/studioContext" },
+    "active_provider": { "type": ["string", "null"] },
+    "providers": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/provider" }
+    },
+    "model_discovery": { "$ref": "#/$defs/modelDiscovery" },
+    "web": { "$ref": "#/$defs/webSettings" },
+    "active_model_selection": { "$ref": "#/$defs/activeModelSelection" },
+    "model": { "type": "string" },
+    "model_reasoning_effort": { "type": ["string", "null"], "minLength": 1 },
+    "model_reasoning_policy": { "$ref": "#/$defs/reasoningPolicy" },
+    "provider": { "type": ["string", "null"] },
+    "api_format": { "$ref": "#/$defs/apiFormatOrNull" },
+    "request_timeout_secs": { "type": ["integer", "null"], "minimum": 0 },
+    "provider_no_proxy": { "type": "boolean" },
+    "provider_extra_body": { "type": "object" },
+    "provider_chat_protocol": { "enum": ["auto", "standard", "minimax"] },
+    "model_capabilities": { "$ref": "#/$defs/modelCapabilities" },
+    "api_key": { "type": ["string", "null"] },
+    "base_url": { "type": ["string", "null"] },
+    "anthropic_api_key": { "type": ["string", "null"] },
+    "anthropic_base_url": { "type": ["string", "null"] },
+    "kunlunmeta_api_key": { "type": ["string", "null"] },
+    "kunlunmeta_base_url": { "type": ["string", "null"] },
+    "openai_api_key": { "type": ["string", "null"] },
+    "openai_base_url": { "type": ["string", "null"] },
+    "openai_user_agent": { "type": ["string", "null"] },
+    "local_api_key": { "type": ["string", "null"] },
+    "local_base_url": { "type": ["string", "null"] },
+    "gemini_api_key": { "type": ["string", "null"] },
+    "gemini_base_url": { "type": ["string", "null"] },
+    "grok_api_key": { "type": ["string", "null"] },
+    "grok_base_url": { "type": ["string", "null"] },
+    "permission_mode": { "enum": ["ask", "auto", "accept_edits", "dont_ask", "bypass", "yolo"], "default": "yolo" },
+    "tdd_gate": { "enum": ["auto", "off", "preferred", "required"] },
+    "credential_store": { "enum": ["auto", "keyring", "file"] },
+    "allowed_tools": { "type": "array", "items": { "type": "string" } },
+    "denied_tools": { "type": "array", "items": { "type": "string" } },
+    "permission_rules": { "type": "array", "items": { "$ref": "#/$defs/permissionRule" } },
+    "auto_memory_enabled": { "type": "boolean" },
+    "auto_tool_memory_enabled": { "type": "boolean" },
+    "goal_enabled": { "type": "boolean" },
+    "goal_max_auto_continuations": { "type": "integer", "minimum": 0, "default": 8 },
+    "goal_pro": { "$ref": "#/$defs/goalPro" },
+    "orchestrate": { "$ref": "#/$defs/orchestrate" },
+    "continuous_work": { "$ref": "#/$defs/continuousWork" },
+    "evolution": { "$ref": "#/$defs/evolution" },
+    "auto_skill_review_interval": { "type": "integer", "minimum": 0 },
+    "plugins": { "$ref": "#/$defs/plugins" },
+    "skills": { "$ref": "#/$defs/skills" },
+    "memory_directory": { "type": ["string", "null"] },
+    "knowledge": { "type": "object", "additionalProperties": false, "properties": { "enabled": { "type": "boolean", "default": false, "description": "Legacy default for both Wiki switches; explicit individual values take precedence." }, "retrieval_enabled": { "type": ["boolean", "null"], "description": "Allow Wiki retrieval independently of organization. Defaults to enabled when absent." }, "organization_enabled": { "type": ["boolean", "null"], "description": "Allow Wiki imports and organization independently of retrieval. Disabling pauses organization jobs." }, "organization_model": { "type": ["string", "null"], "minLength": 1, "description": "Optional target-qualified model for Wiki organization only. Omit/null to inherit; image extraction retains its own current model." }, "organization_reasoning_effort": { "type": ["string", "null"], "minLength": 1, "description": "Optional Wiki-only reasoning effort. Omit/null to inherit without changing Provider or session settings." } } },
+    "integrations": { "$ref": "#/$defs/integrations" },
+    "memory": { "$ref": "#/$defs/memory" },
+    "session_memory": { "$ref": "#/$defs/sessionMemory" },
+    "context_compaction": { "$ref": "#/$defs/contextCompaction" },
+    "time_based_micro_compact": { "$ref": "#/$defs/timeBasedMicroCompact" },
+    "turn_file_changes": { "$ref": "#/$defs/turnFileChanges" },
+    "history_enabled": { "type": "boolean" },
+    "history_max_messages": { "type": "integer", "minimum": 0 },
+    "history_directory": { "type": ["string", "null"] },
+    "render_markdown": { "type": "boolean" },
+    "rich_terminal": { "type": "boolean" },
+    "tui": { "$ref": "#/$defs/tui" },
+    "code_theme": { "type": "string" },
+    "context_window_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "context_system_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "context_tools_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "context_output_headroom": { "type": ["integer", "null"], "minimum": 0 },
+    "context_hard_input_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "auto_compact_threshold_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "prefire_threshold_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "estimated_tool_growth_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "max_tokens": { "type": ["integer", "null"], "minimum": 0 },
+    "summary_provider": { "type": ["string", "null"] },
+    "summary_profile": { "type": ["string", "null"] },
+    "summary_model": { "type": ["string", "null"] },
+    "summary_max_tokens": { "type": "integer", "minimum": 0, "default": 262144 },
+    "moa": { "$ref": "#/$defs/moa" },
+    "moa_plan": { "$ref": "#/$defs/moaPlan" },
+    "max_retries": { "type": "integer", "minimum": 0, "default": 5, "description": "Maximum retries after the initial transient model request failure; zero disables retries." },
+    "retry_base_delay_ms": { "type": "integer", "minimum": 0, "default": 2000, "description": "Initial model retry delay in milliseconds, doubled for each retry without random jitter. A longer upstream Retry-After takes precedence." },
+    "max_duration_secs": { "type": ["integer", "null"], "minimum": 0 },
+    "mcp_servers": { "type": "array", "items": { "$ref": "#/$defs/mcpServer" } },
+    "mcp_inherited_servers": { "type": ["array", "null"], "items": { "type": "string", "minLength": 1, "maxLength": 128 }, "maxItems": 1024, "uniqueItems": true, "default": null, "description": "Project-only explicit names to inherit from lower settings layers alongside this project's mcp_servers. Definitions and private values remain in their original layer. Missing names are not restored. Other layers keep ordinary array replacement." },
+    "mcp_disabled_servers": { "type": "array", "items": { "type": "string" }, "uniqueItems": true, "default": [], "description": "MCP server names disabled for new conversations. Denials are combined across settings layers; existing conversations retain their connections." },
+    "cross_session_messages": { "type": "object", "additionalProperties": false, "properties": { "enabled": {"type":"boolean","default":false}, "wake_idle": {"type":"boolean","default":false}, "message_ttl_seconds": {"type":"integer","minimum":1,"maximum":604800,"default":86400}, "max_messages_per_minute": {"type":"integer","minimum":1,"maximum":256,"default":32}, "max_source_messages_per_minute": {"type":"integer","minimum":1,"maximum":256,"default":8}, "read_access": {"type":"string","enum":["same_project","same_account","none"],"default":"same_project","description":"Which sessions may read this account's conversations with ReadSession; checked by the host that owns the target on every read. same_project: same host, workspace and account; same_account: any workspace of the same account, including other runtime targets routed by the same Studio Gateway account; none: disabled."} } },
+    "tools": { "$ref": "#/$defs/tools" },
+    "tool_timeout_ms": { "type": "integer", "minimum": 0 },
+    "tool_limits": { "$ref": "#/$defs/toolLimits" },
+    "max_tool_output_bytes": { "type": "integer", "minimum": 0 },
+    "tool_output_head_bytes": { "type": "integer", "minimum": 0 },
+    "tool_output_tail_bytes": { "type": "integer", "minimum": 0 },
+    "background_completion_preview_bytes": { "type": "integer", "minimum": 0 },
+    "max_concurrent_subagents": { "type": "integer", "minimum": 0 },
+    "default_subagent_max_turns": { "type": "integer", "minimum": 0, "default": 80 },
+    "subagent_max_turns": { "type": "integer", "minimum": 0, "description": "Deprecated alias for default_subagent_max_turns." },
+    "sandbox": { "$ref": "#/$defs/sandbox" }
+  },
+  "$defs": {
+    "webSettings": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "search": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "mode": { "enum": ["auto", "pinned"], "default": "auto" },
+            "preferredProvider": { "enum": [null, "exa-public", "searxng-bundled", "bing-html"], "default": null },
+            "fallbackScope": { "enum": ["none", "builtin", "enabled"], "default": "builtin" },
+            "providers": {
+              "type": "array", "maxItems": 3,
+              "description": "Explicit source ceiling. Empty means no sources; omitted retains product defaults. Tool availability remains in tools.",
+              "items": {
+                "type": "object", "additionalProperties": false, "required": ["id", "kind"],
+                "properties": {
+                  "id": { "enum": ["exa-public", "searxng-bundled", "bing-html"] },
+                  "kind": { "enum": ["exa_mcp", "searxng", "bing_html"] },
+                  "enabled": { "type": "boolean", "default": true }
+                }
+              }
+            }
+          }
+        },
+        "fetch": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "networkPolicy": { "enum": ["public"], "default": "public" },
+            "proxyMode": { "enum": ["inherit", "direct", "configured"], "default": "inherit" },
+            "proxyEnv": { "type": ["string", "null"], "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,127}$", "description": "Host environment variable reference for configured proxy mode, never a URL or secret." }
+          }
+        }
+      }
+    },
+    "integrations": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "services": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean", "default": true }
+          }
+        },
+        "remotes": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Native profile-owned peer availability; never grants delegation, model, tool or account permissions.",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "outbound": {
+              "type": "object", "additionalProperties": false,
+              "description": "Explicit finite per-accepted-turn outbound ceiling; normal Native tool approval remains required. No credentials, money credit or P-RUNTIME task is created by configuration.",
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "maximumTotalTokens": { "type": "integer", "minimum": 1, "maximum": 1000000, "default": 16384 },
+                "maximumModelCalls": { "type": "integer", "minimum": 1, "maximum": 64, "default": 1 },
+                "maximumDurationSeconds": { "type": "integer", "minimum": 1, "maximum": 1800, "default": 120 }
+              }
+            },
+            "receiver": {
+              "type": "object", "additionalProperties": false,
+              "description": "Independent receiver opt-in and exact native sender-account allowlist. Bounds restrict a native budget; they do not create credit.",
+              "allOf": [{
+                "if": { "required": ["acceptMaterials"], "properties": { "acceptMaterials": { "const": true } } },
+                "then": { "required": ["maximumMaterialBytes"], "properties": { "maximumMaterialBytes": { "minimum": 1 } } }
+              }],
+              "properties": {
+                "enabled": { "type": "boolean", "default": false },
+                "office": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "Independent receiver Office limits and installation evidence; actual OS-held receiver parent, normal permissions and original Accepted/budget remain required.",
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "default": false
+                    },
+                    "allowedFormats": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "maxItems": 3,
+                      "default": [],
+                      "items": {
+                        "enum": [
+                          "docx",
+                          "xlsx",
+                          "pptx"
+                        ]
+                      }
+                    },
+                    "allowedTools": {
+                      "type": "array",
+                      "uniqueItems": true,
+                      "maxItems": 3,
+                      "default": [],
+                      "items": {
+                        "enum": [
+                          "OfficeDocument",
+                          "tool_execute",
+                          "tool_search"
+                        ]
+                      }
+                    },
+                    "startupConfiguration": {
+                      "type": [
+                        "object",
+                        "null"
+                      ],
+                      "additionalProperties": false,
+                      "required": [
+                        "schemaVersion",
+                        "componentRoot",
+                        "manifestSha256",
+                        "runtime"
+                      ],
+                      "properties": {
+                        "schemaVersion": {
+                          "const": 1
+                        },
+                        "componentRoot": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "manifestSha256": {
+                          "type": "string",
+                          "pattern": "^[a-fA-F0-9]{64}$"
+                        },
+                        "runtime": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "program",
+                            "sha256",
+                            "mode",
+                            "nodeVersion"
+                          ],
+                          "properties": {
+                            "program": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "sha256": {
+                              "type": "string",
+                              "pattern": "^[a-fA-F0-9]{64}$"
+                            },
+                            "mode": {
+                              "enum": [
+                                "standalone_node",
+                                "electron_as_node"
+                              ]
+                            },
+                            "nodeVersion": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 64
+                            },
+                            "electronVersion": {
+                              "type": [
+                                "string",
+                                "null"
+                              ],
+                              "minLength": 1,
+                              "maxLength": 64
+                            }
+                          }
+                        }
+                      },
+                      "default": null
+                    }
+                  },
+                  "allOf": [
+                    {
+                      "if": {
+                        "required": [
+                          "enabled"
+                        ],
+                        "properties": {
+                          "enabled": {
+                            "const": true
+                          }
+                        }
+                      },
+                      "then": {
+                        "required": [
+                          "allowedFormats",
+                          "allowedTools",
+                          "startupConfiguration"
+                        ],
+                        "properties": {
+                          "allowedFormats": {
+                            "minItems": 1
+                          },
+                          "allowedTools": {
+                            "minItems": 3
+                          },
+                          "startupConfiguration": {
+                            "type": "object"
+                          }
+                        }
+                      }
+                    }
+                  ]
+                },
+                "acceptMaterials": { "type": "boolean", "default": false },
+                "maximumMaterialBytes": { "type": "integer", "minimum": 0, "maximum": 33554432, "default": 0 },
+                "allowSameAccountAcp": { "type": "boolean", "default": false },
+                "allowedSenderAccounts": { "type": "array", "maxItems": 32, "uniqueItems": true, "default": [], "items": { "type": "string", "minLength": 1, "maxLength": 256 } },
+                "maximumTotalTokens": { "type": "integer", "minimum": 1, "maximum": 1000000, "default": 16384 },
+                "maximumModelCalls": { "type": "integer", "minimum": 1, "maximum": 64, "default": 1 },
+                "maximumDurationSeconds": { "type": "integer", "minimum": 1, "maximum": 1800, "default": 120 }
+              }
+            },
+            "nativeSshPeers": {
+              "type": "array",
+              "default": [],
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "target"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$" },
+                  "title": { "type": "string", "maxLength": 256, "default": "" },
+                  "enabled": { "type": "boolean", "default": false },
+                  "maximumDurationSeconds": { "type": "integer", "minimum": 1, "maximum": 1800, "default": 120 },
+                  "target": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["targetId", "targetRevision", "targetPlatform", "expectedNativeSha256"],
+                    "properties": {
+                      "targetId": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\s\\u0000-\\u001f\\u007f-\\u009f](?:[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f])?$" },
+                      "targetRevision": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\s\\u0000-\\u001f\\u007f-\\u009f](?:[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\s\\u0000-\\u001f\\u007f-\\u009f])?$" },
+                      "targetPlatform": { "type": "string", "enum": ["linux", "windows"] },
+                      "expectedNativeSha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+                    }
+                  }
+                }
+              }
+            },
+            "nativeAcpPeers": {
+              "type": "array",
+              "default": [],
+              "maxItems": 16,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "profileDirectory"],
+                "properties": {
+                  "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9._-]+$" },
+                  "title": { "type": "string", "maxLength": 256, "default": "" },
+                  "enabled": { "type": "boolean", "default": false },
+                  "profileDirectory": { "type": "string", "minLength": 1 },
+                  "maximumDurationSeconds": { "type": "integer", "minimum": 1, "maximum": 1800, "default": 120 }
+                }
+              }
+            }
+          }
+        },
+        "core": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "channelTaskBudget": {
+              "type": ["object", "null"],
+              "description": "Explicit target-owned Native channel/business task ceiling. Omitted/null preserves the existing 32768-token, 8-call, 240-second tool-task fallback. Limits do not grant tools or override tighter current account/organization policy.",
+              "additionalProperties": false,
+              "required": ["tokens"],
+              "properties": {
+                "tokens": { "type": "integer", "minimum": 1, "maximum": 1000000 },
+                "modelCalls": { "type": "integer", "minimum": 1, "maximum": 8, "default": 8 },
+                "runMillis": { "type": "integer", "minimum": 1000, "maximum": 240000, "default": 240000 }
+              }
+            },
+            "modelPolicies": {
+              "type": "array",
+              "default": [],
+              "maxItems": 32,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "id",
+                  "candidates"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 256
+                  },
+                  "title": {
+                    "type": "string",
+                    "maxLength": 256,
+                    "default": ""
+                  },
+                  "enabled": {
+                    "type": "boolean",
+                    "default": true
+                  },
+                  "candidates": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 16,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "provider",
+                        "model"
+                      ],
+                      "properties": {
+                        "provider": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "model": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 256
+                        },
+                        "enabled": {
+                          "type": "boolean",
+                          "default": true
+                        },
+                        "configurationRevision": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "minLength": 1,
+                          "maxLength": 256
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "office": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "allowOrganizationTemplates": {
+              "type": "boolean",
+              "default": false
+            },
+            "allowExternalDelivery": {
+              "type": "boolean",
+              "default": false
+            },
+            "allowedFormats": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 6,
+              "items": {
+                "enum": [
+                  "docx",
+                  "xlsx",
+                  "pptx",
+                  "pdf",
+                  "csv",
+                  "json"
+                ]
+              },
+              "default": [
+                "docx",
+                "xlsx",
+                "pptx",
+                "csv",
+                "json"
+              ]
+            },
+            "maxOutputBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20971520,
+              "default": 20971520
+            },
+            "maxDatasetRows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 10000
+            },
+            "datasetPageRows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            },
+            "projectionPreviewChars": {
+              "type": "integer",
+              "minimum": 128,
+              "maximum": 8000,
+              "default": 2000
+            },
+            "generationTimeoutMs": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 60000,
+              "default": 30000
+            }
+          }
+        },
+        "connectivity": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "maxConnections": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 64,
+              "default": 16
+            },
+            "maxPendingEvents": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000,
+              "default": 1000
+            },
+            "maxMetadataBytes": {
+              "type": "integer",
+              "minimum": 1048576,
+              "maximum": 1073741824,
+              "default": 67108864
+            },
+            "maxAttachmentBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 104857600,
+              "default": 104857600
+            },
+            "replayRetentionMs": {
+              "type": "integer",
+              "minimum": 86400000,
+              "maximum": 31536000000,
+              "default": 2592000000
+            }
+          }
+        },
+        "knowledge": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "memory_center_enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "publications_enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "business_automation_enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "observer_candidates_enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "auxiliary_extraction_enabled": {
+              "type": "boolean",
+              "default": false
+            },
+            "extraction_maximum_tokens": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20000,
+              "default": 2000
+            },
+            "extraction_maximum_input_bytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 524288,
+              "default": 65536
+            },
+            "extraction_maximum_candidates": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 32,
+              "default": 8
+            }
+          }
+        }
+      },
+      "description": "Target-owned integration configuration; enabling a feature does not grant tools, account access, publishing rights or background execution."
+    },
+    "configMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["config_version"],
+      "properties": {
+        "config_version": {
+          "type": "integer",
+          "const": 1,
+          "description": "Config family version; files that omit meta.config_version are read as v1."
+        }
+      }
+    },
+    "apiFormat": {
+      "enum": ["anthropic_messages", "openai_chat_completions", "openai_responses", "gemini_generate_content"]
+    },
+    "apiFormatOrNull": {
+      "type": ["string", "null"],
+      "enum": ["anthropic_messages", "openai_chat_completions", "openai_responses", "gemini_generate_content", null]
+    },
+    "provider": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "chat_protocol": { "enum": ["auto", "standard", "minimax"] },
+        "response_limits": { "$ref": "#/$defs/responseLimits" },
+        "credential_env": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "authentication": {
+          "type": "object", "additionalProperties": false, "required": ["mode"],
+          "properties": { "mode": { "enum": ["api_key", "none"], "default": "api_key" } },
+          "description": "Explicit transport authentication; none omits all keys and is supported only for Chat Completions."
+        },
+        "api_format": { "$ref": "#/$defs/apiFormat" },
+        "endpoint": { "type": "string", "minLength": 1 },
+        "default_model": { "type": "string", "minLength": 1 },
+        "models": {
+          "type": "object",
+          "maxProperties": 1024,
+          "propertyNames": { "type": "string", "minLength": 1 },
+          "additionalProperties": { "$ref": "#/$defs/providerModel" },
+          "description": "Explicit model catalog; each settings layer replaces this entire table. Empty preserves the legacy default model."
+        },
+        "discover_models": { "type": ["boolean", "null"] },
+        "capabilities": { "$ref": "#/$defs/modelCapabilities" },
+        "reasoning_effort": { "type": ["string", "null"], "minLength": 1 },
+        "reasoning_policy": { "$ref": "#/$defs/reasoningPolicy" },
+        "context_window_tokens": { "type": "integer", "minimum": 0 },
+        "auto_compact_threshold_tokens": { "type": ["integer", "null"], "minimum": 0 },
+        "output_headroom_tokens": { "type": "integer", "minimum": 0 },
+        "max_output_tokens": { "type": "integer", "minimum": 0, "default": 262144 },
+        "request_timeout_secs": { "type": ["integer", "null"], "minimum": 0 },
+        "user_agent": { "type": ["string", "null"] },
+        "max_retries": { "type": ["integer", "null"], "minimum": 0 },
+        "retry_base_delay_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "no_proxy": { "type": "boolean" },
+        "extra_body": { "type": "object" }
+      }
+    },
+    "reasoningPolicy": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["hidden", "optional", "always_on", "always_off"] },
+        "efforts": { "type": "array", "maxItems": 8, "uniqueItems": true, "items": { "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] } }
+      }
+    },
+    "responseLimits": {
+      "type": "object", "additionalProperties": false,
+      "description": "Local decoded-response memory bounds; model fields override provider fields. These do not change output token or context quotas.",
+      "properties": {
+        "total_decoded_bytes": { "type": "integer", "minimum": 1, "default": 67108864 },
+        "tool_arguments_bytes": { "type": "integer", "minimum": 1, "default": 16777216 },
+        "content_blocks": { "type": "integer", "minimum": 1, "default": 1024 },
+        "active_tool_calls": { "type": "integer", "minimum": 1, "default": 64 }
+      }
+    },
+    "providerModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_window_tokens", "output_headroom_tokens", "max_output_tokens"],
+      "properties": {
+        "response_limits": { "$ref": "#/$defs/responseLimits" },
+        "context_window_tokens": { "type": "integer", "minimum": 1 },
+        "output_headroom_tokens": { "type": "integer", "minimum": 1 },
+        "max_output_tokens": { "type": "integer", "minimum": 1 },
+        "auto_compact_threshold_tokens": { "type": ["integer", "null"], "minimum": 1 },
+        "capabilities": { "$ref": "#/$defs/modelCapabilities" },
+        "reasoning_effort": { "type": ["string", "null"], "minLength": 1 },
+        "reasoning_policy": { "$ref": "#/$defs/reasoningPolicy" },
+        "extra_body": { "type": ["object", "null"] }
+      }
+    },
+    "modelCapabilities": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "boolean" },
+        "tools": { "type": "boolean" },
+        "vision": { "type": "boolean" },
+        "reasoning": { "type": "boolean" },
+        "structured_output": { "type": "boolean" }
+      }
+    },
+    "modelDiscovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "request_timeout_secs": { "type": "integer", "minimum": 0 },
+        "cache_ttl_secs": { "type": "integer", "minimum": 0 },
+        "max_models_per_provider": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "activeModelSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_profile": { "type": "string" },
+        "model": { "type": "string" }
+      }
+    },
+    "goalPro": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "verifier_profile": { "type": ["string", "null"], "minLength": 1 },
+        "verifier_provider": { "type": ["string", "null"], "minLength": 1 },
+        "verifier_model": { "type": ["string", "null"], "minLength": 1 },
+        "verifier_models": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/goalProVerifierModel" },
+          "maxItems": 5,
+          "description": "Multi-model verifier panel: two or more entries enable majority voting; an odd count is recommended. Absent or empty keeps single-verifier behavior."
+        },
+        "verifier_max_turns": { "type": "integer", "minimum": 1, "default": 64, "description": "Maximum internal turns for one Goal Pro verifier review; does not limit parent Goal continuations." },
+        "completion_rejection_limit": { "type": "integer", "minimum": 1, "default": 8, "description": "After this many cumulative deterministic completion-gate rejections plus semantic FAIL/FLAKY verdicts on a new Goal Pro run, it automatically turns blocked; InfrastructureError does not count." },
+        "model_escalation": { "$ref": "#/$defs/goalProModelEscalation" },
+        "verification": { "$ref": "#/$defs/goalProVerification" }
+      }
+    },
+    "goalProVerifierModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": ["string", "null"], "minLength": 1, "description": "Full Provider profile name; when set, takes precedence over provider/model." },
+        "provider": { "type": ["string", "null"], "minLength": 1, "description": "Provider name; defaults to the current Provider of the main session." },
+        "model": { "type": ["string", "null"], "minLength": 1, "description": "Model name; defaults to the current model of the main session." }
+      }
+    },
+    "evolutionMode": { "type": "string", "enum": ["observe", "propose", "auto"] },
+    "evolutionModelRef": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["provider", "model"],
+      "description": "Reference to an already configured model: Provider id plus model id, both case-preserving. Null follows the session model (or evolution.model for stage overrides); there is no fallback to another model.",
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 }
+      }
+    },
+    "evolutionTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "description": "Type switch. Defaults: skill, preference and project_knowledge on; tool_usage and workflow_template off." },
+        "mode": { "anyOf": [{ "$ref": "#/$defs/evolutionMode" }, { "type": "null" }], "description": "Narrows evolution.mode for this type; null inherits. project_knowledge never exceeds propose." },
+        "scope": { "type": "string", "enum": ["all", "selected"], "default": "all", "description": "all evolves every target except disabled items; selected evolves only items with enabled=true." },
+        "items": { "$ref": "#/$defs/evolutionItems" }
+      }
+    },
+    "evolutionItems": {
+      "type": "object",
+      "description": "Per-target switches keyed by full target key `<type>:<source>:<name>`.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": { "enabled": { "type": "boolean", "default": true } }
+      }
+    },
+    "evolutionSkillTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "mode": { "anyOf": [{ "$ref": "#/$defs/evolutionMode" }, { "type": "null" }] },
+        "scope": { "type": "string", "enum": ["all", "selected"], "default": "all" },
+        "items": { "$ref": "#/$defs/evolutionItems" },
+        "allow_file_edits": { "type": "boolean", "default": false, "description": "Allow direct edits of UserCreated/AgentCreated skill files once the skill store supports candidate slots; otherwise overlays are used." }
+      }
+    },
+    "evolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Self-evolution. Read from user, executable and explicit overlay settings only; project and local settings may only set enabled=false, other keys there are ignored with a warning.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false, "description": "Master switch. Off stops collection, distillation and canaries; existing data is kept." },
+        "mode": { "$ref": "#/$defs/evolutionMode", "default": "propose", "description": "observe collects only; propose waits for confirmation; auto applies after evaluation and canary. Default is propose." },
+        "targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "skill": { "$ref": "#/$defs/evolutionSkillTarget" },
+            "preference": { "$ref": "#/$defs/evolutionTarget" },
+            "project_knowledge": { "$ref": "#/$defs/evolutionTarget" },
+            "tool_usage": { "$ref": "#/$defs/evolutionTarget" },
+            "workflow_template": { "$ref": "#/$defs/evolutionTarget" }
+          }
+        },
+        "signals": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Signal adapter switches; a disabled signal has score weight 0.",
+          "properties": {
+            "artifact_edits": { "type": "boolean", "default": true },
+            "procedure_results": { "type": "boolean", "default": true },
+            "chat_corrections": { "type": "boolean", "default": true },
+            "rating_ui": { "type": "boolean", "default": true }
+          }
+        },
+        "distill_min_usages": { "type": "integer", "minimum": 1, "default": 20, "description": "New observed usages since the last distillation that trigger the next one." },
+        "candidate_traffic": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.5, "description": "Candidate share for targets with an offline evaluator; targets without one use at most 0.1." },
+        "promote_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.8 },
+        "rollback_threshold": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.3, "description": "Must be lower than promote_threshold." },
+        "model": { "$ref": "#/$defs/evolutionModelRef", "default": null },
+        "stage_models": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "classifier": { "$ref": "#/$defs/evolutionModelRef", "default": null },
+            "distill": { "$ref": "#/$defs/evolutionModelRef", "default": null },
+            "eval": { "$ref": "#/$defs/evolutionModelRef", "default": null }
+          }
+        },
+        "evidence_ttl_days": { "type": "integer", "minimum": 1, "maximum": 3650, "default": 90 },
+        "share_aggregates": { "type": "boolean", "default": false, "description": "Phase 5 cross-user statistics; never uploads content." },
+        "usage_limit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "monthly_max_tokens": { "type": ["integer", "null"], "minimum": 1, "default": null, "description": "Null is unlimited." }
+          }
+        },
+        "eval": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Offline evaluation thresholds a candidate must meet before its canary.",
+          "properties": {
+            "win_rate": { "type": "number", "exclusiveMinimum": 0, "maximum": 1, "default": 0.6, "description": "Minimum share of decisive pairwise comparisons the candidate wins; ties are excluded." },
+            "max_diversity_drop": { "type": "number", "minimum": 0, "maximum": 1, "default": 0.1, "description": "Largest accepted relative drop of output diversity for free-text targets." }
+          }
+        }
+      }
+    },
+    "continuousWork": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dispatch_enabled": { "type": "boolean", "default": true, "description": "Host-owned valve for automatic continuous-work dispatch. When false it blocks automatic continuation, background follow-up and source dispatch while ordinary sessions, reads, reconciliation, pause and stop stay available. Already dispatched actions still settle by their original receipt. No tool or RPC exposes it to the model." }
+      }
+    },
+    "orchestrate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "main": { "$ref": "#/$defs/orchestrateMain" },
+        "tiers": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/goalProVerifierModel" }
+        },
+        "roster": {
+          "type": "object",
+          "propertyNames": { "enum": ["junior", "oracle", "librarian", "critic"] },
+          "additionalProperties": { "$ref": "#/$defs/orchestrateRosterEntry" }
+        },
+        "critic_max_cycles": { "type": "integer", "minimum": 1, "default": 3 },
+        "critic_max_infrastructure_retries": { "type": "integer", "minimum": 0, "default": 2 },
+        "policies": { "$ref": "#/$defs/orchestratePolicies" },
+        "notepad": { "$ref": "#/$defs/orchestrateNotepad" },
+        "continuation": { "$ref": "#/$defs/orchestrateContinuation" },
+        "delivery": { "$ref": "#/$defs/orchestrateDelivery" },
+        "fleet": { "$ref": "#/$defs/orchestrateFleet" },
+        "control": { "$ref": "#/$defs/orchestrateControl" },
+        "breaker": { "$ref": "#/$defs/orchestrateBreaker" },
+        "audit": { "$ref": "#/$defs/orchestrateAudit" }
+      }
+    },
+    "orchestrateMain": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "optional_tool_allowlist": {
+          "type": ["array", "null"],
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Shrink whitelist for optional main-orchestrator tools; null keeps all optional tools, an empty array keeps only the non-disableable core orchestration tools."
+        }
+      }
+    },
+    "orchestrateRosterEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tier": { "type": "string", "minLength": 1 },
+        "tool_allowlist": { "type": ["array", "null"], "items": { "type": "string", "minLength": 1 } },
+        "context_mode": { "enum": ["none", "fork", "full"] }
+      }
+    },
+    "orchestratePolicies": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "evidence_gate": { "enum": ["auto", "advisory", "enforce", "off"], "default": "auto" },
+        "delegation_contract": { "enum": ["auto", "advisory", "enforce", "off"], "default": "advisory" }
+      }
+    },
+    "orchestrateNotepad": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inject": { "type": "boolean", "default": true },
+        "max_inject_bytes": { "type": "integer", "minimum": 0, "default": 8192 }
+      }
+    },
+    "orchestrateContinuation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cooldown_seconds": { "type": "integer", "minimum": 0, "default": 30 },
+        "max_stalled_rounds": { "type": "integer", "minimum": 0, "default": 5 },
+        "max_consecutive_failures": { "type": "integer", "minimum": 0, "default": 3 },
+        "max_auto_turns": { "type": "integer", "minimum": 0, "default": 8 }
+      }
+    },
+    "orchestrateDelivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lease_timeout_seconds": { "type": "integer", "minimum": 30, "maximum": 3600, "default": 120, "description": "Local lease timeout for sub-agent messages; does not replace Provider request timeouts." },
+        "max_attempts": { "type": "integer", "minimum": 1, "maximum": 64, "default": 8, "description": "Maximum delivery attempts for one message; once reached it turns blocked and is never silently dropped." }
+      }
+    },
+    "orchestrateFleet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inject": { "type": "boolean", "default": true },
+        "max_members": { "type": "integer", "minimum": 1, "maximum": 100, "default": 24 },
+        "max_inject_bytes": { "type": "integer", "minimum": 1024, "maximum": 32768, "default": 8192 }
+      }
+    },
+    "orchestrateControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true }
+      }
+    },
+    "orchestrateBreaker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "hard_stop": { "type": "boolean", "default": false, "description": "When off, the breaker can at most auto-pause and never auto-terminate an Agent." },
+        "repeated_action_threshold": { "type": "integer", "minimum": 1, "maximum": 64, "default": 8 },
+        "consecutive_error_threshold": { "type": "integer", "minimum": 1, "maximum": 64, "default": 5 },
+        "no_progress_rounds": { "type": "integer", "minimum": 1, "maximum": 64, "default": 4 }
+      }
+    },
+    "orchestrateAudit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "max_events": { "type": "integer", "minimum": 128, "maximum": 65536, "default": 4096 },
+        "max_event_bytes": { "type": "integer", "minimum": 512, "maximum": 65536, "default": 4096 }
+      }
+    },
+    "goalProModelEscalation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean", "default": false, "description": "When enabled, once verifier rejections reach the threshold the main Agent model switches automatically along the ladder with the full context preserved." },
+        "threshold": { "type": "integer", "minimum": 1, "default": 3, "description": "Cumulative semantic rejections required to trigger each ladder step." },
+        "models": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/goalProVerifierModel" },
+          "description": "Model ladder to switch through in order; each entry's api_format and context_window_tokens must exactly match the main Provider (validated at load time)."
+        }
+      }
+    },
+    "goalProVerification": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_tests": { "type": "boolean", "default": true, "description": "Require an independent verifier to actually run tests before an Artifact Goal completes." },
+        "require_behavior_delta": { "type": "boolean", "default": false, "description": "Require the same read-only behavior probe to pass on the candidate patch and fail on the pristine baseline, with trustworthy raw exit codes for both." },
+        "minimum_test_scope": { "enum": ["focused", "target_suite"], "default": "target_suite", "description": "focused accepts a single filtered test; target_suite requires at least one target test run without any test selector." },
+        "require_raw_exit_code": { "type": "boolean", "default": true, "description": "Reject test evidence obtained through output-filtering pipelines or explicit failure-ignoring." },
+        "allow_workspace_changes": { "type": "boolean", "default": false, "description": "Whether the verifier may modify the candidate workspace; disabled by default with fingerprints compared before and after verification." },
+        "isolate_environment": { "type": "boolean", "default": true, "description": "Isolate HOME, caches, temporary directories, and Python user site for the verifier." },
+        "allow_dependency_changes": { "type": "boolean", "default": false, "description": "Whether the verifier may install, uninstall, or update dependencies; disabled by default." },
+        "allow_network_only_failures": { "type": "boolean", "default": true, "description": "Whether peripheral test failures caused solely by unreachable external networks are allowed once target tests have passed." }
+      }
+    },
+    "permissionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string", "minLength": 1 },
+        "input_pattern": { "type": ["string", "null"] },
+        "action": { "enum": ["allow", "deny"] }
+      }
+    },
+    "studioContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instructions": { "type": "string" },
+        "personality": { "enum": ["friendly", "pragmatic"] },
+        "instructions_configured": { "type": "boolean" },
+        "personality_configured": { "type": "boolean" }
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "structured_enabled": { "type": "boolean" },
+        "skip_tools": { "type": "array", "items": { "type": "string" } },
+        "legacy_prompt_enabled": { "type": "boolean" },
+        "private_by_default": { "type": "boolean" },
+        "private_file_paths": { "type": "boolean" },
+        "private_verification_targets": { "type": "boolean" },
+        "record_prompt_placeholders": { "type": "boolean" },
+        "observer_mode": { "enum": ["disabled", "deterministic", "model"] },
+        "observer_queue_size": { "type": "integer", "minimum": 0 },
+        "observer_model": { "type": ["string", "null"] }
+      }
+    },
+    "sessionMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "update_enabled": { "type": "boolean" },
+        "compact_enabled": { "type": "boolean" },
+        "update_interval_turns": { "type": "integer", "minimum": 0 },
+        "init_min_tokens": { "type": "integer", "minimum": 0 },
+        "update_min_token_delta": { "type": "integer", "minimum": 0 },
+        "tool_call_threshold": { "type": "integer", "minimum": 0 },
+        "max_update_messages": { "type": "integer", "minimum": 0 },
+        "update_max_tokens": { "type": "integer", "minimum": 0, "default": 262144 },
+        "compact_min_chars": { "type": "integer", "minimum": 0 },
+        "compact_min_recent_tokens": { "type": "integer", "minimum": 0 },
+        "compact_max_recent_tokens": { "type": "integer", "minimum": 0 },
+        "compact_min_recent_messages": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "contextCompaction": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto_threshold": { "$ref": "#/$defs/autoCompactThreshold" }
+      }
+    },
+    "autoCompactThreshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "small_window_percent": { "type": "integer", "minimum": 1, "maximum": 99, "default": 95 },
+        "medium_window_percent": { "type": "integer", "minimum": 1, "maximum": 99, "default": 85 },
+        "large_window_percent": { "type": "integer", "minimum": 1, "maximum": 99, "default": 75 }
+      }
+    },
+    "turnFileChanges": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "retention_days": { "type": "integer", "minimum": 0 },
+        "max_total_bytes": { "type": "integer", "minimum": 0 },
+        "max_file_bytes": { "type": "integer", "minimum": 0 },
+        "ignore_globs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "timeBasedMicroCompact": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "gap_threshold_minutes": { "type": "integer", "minimum": 0 },
+        "keep_recent": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "plugins": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "runtime": { "$ref": "#/$defs/pluginRuntime" },
+        "compatibility": { "$ref": "#/$defs/pluginCompatibility" },
+        "installation": { "$ref": "#/$defs/pluginInstallation" },
+        "marketplaces": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+            "maxLength": 64
+          },
+          "additionalProperties": { "$ref": "#/$defs/pluginMarketplaceConfig" }
+        },
+        "installed": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*@[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+            "maxLength": 129
+          },
+          "additionalProperties": { "$ref": "#/$defs/pluginPolicy" }
+        }
+      }
+    },
+    "pluginRuntime": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "project_policy": { "enum": ["trusted_only", "disabled"] }
+      }
+    },
+    "pluginMarketplaceConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "source": {
+          "oneOf": [
+            { "$ref": "#/$defs/pluginMarketplaceLocalSource" },
+            { "$ref": "#/$defs/pluginMarketplaceGitSource" },
+            { "$ref": "#/$defs/pluginMarketplaceNpmSource" }
+          ]
+        }
+      }
+    },
+    "pluginMarketplaceLocalSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path"],
+      "properties": {
+        "type": { "const": "local" },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "pluginMarketplaceGitSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "url"],
+      "properties": {
+        "type": { "const": "git" },
+        "url": { "type": "string", "minLength": 1 },
+        "ref_name": { "type": ["string", "null"] },
+        "sha": { "type": ["string", "null"] }
+      }
+    },
+    "pluginMarketplaceNpmSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "package"],
+      "properties": {
+        "type": { "const": "npm" },
+        "package": { "type": "string", "minLength": 1 },
+        "version": { "type": ["string", "null"] },
+        "registry": { "type": ["string", "null"] },
+        "integrity": { "type": ["string", "null"] }
+      }
+    },
+    "pluginCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent_plugins_v1": { "type": "boolean" },
+        "codex": { "type": "boolean" },
+        "claude": { "type": "boolean" },
+        "cursor": { "type": "boolean" },
+        "grok": { "type": "boolean" },
+        "codebuddy": { "type": "boolean" },
+        "qoder": { "type": "boolean" },
+        "trae": { "type": "boolean" }
+      }
+    },
+    "pluginInstallation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "proxy_url": { "type": "string", "maxLength": 2048, "description": "Plugin Git/npm download proxy on this target. Credential-free HTTP(S)/SOCKS5 URL; omitted uses the target proxy environment." },
+        "auto_detect_proxy": { "type": "boolean", "default": false },
+        "proxy_scan_ports": { "type": "array", "maxItems": 256, "uniqueItems": true, "items": { "type": "integer", "minimum": 1, "maximum": 65535 }, "description": "Optional loopback proxy scan ports; empty scans common and local listening ports." },
+        "allow_local": { "type": "boolean" },
+        "allow_git": { "type": "boolean" },
+        "allow_http": { "type": "boolean" },
+        "allow_npm": { "type": "boolean" },
+        "require_git_sha": { "type": "boolean" },
+        "require_npm_integrity": { "type": "boolean" },
+        "max_files": { "type": "integer", "minimum": 1, "maximum": 100000 },
+        "max_total_bytes": { "type": "integer", "minimum": 1, "maximum": 4294967296 },
+        "max_file_bytes": { "type": "integer", "minimum": 1, "maximum": 1073741824 },
+        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 86400000 }
+      }
+    },
+    "pluginPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": ["boolean", "null"] },
+        "skills": { "$ref": "#/$defs/pluginCapabilityPolicy" },
+        "hooks": { "$ref": "#/$defs/pluginCapabilityPolicy" },
+        "mcp_servers": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/pluginMcpServerPolicy" }
+        }
+      }
+    },
+    "pluginCapabilityPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": ["boolean", "null"] }
+      }
+    },
+    "pluginMcpServerPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": ["boolean", "null"] },
+        "enabled_tools": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "disabled_tools": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "auto_skill_review_enabled": { "type": "boolean" },
+        "auto_skill_review_interval": { "type": "integer", "minimum": 0 },
+        "auto_skill_review_idle_minutes": { "type": "integer", "minimum": 1 },
+        "auto_curator_enabled": { "type": "boolean" },
+        "auto_curator_interval_hours": { "type": "integer", "minimum": 0 },
+        "auto_curator_min_idle_hours": { "type": "integer", "minimum": 0 },
+        "stale_after_days": { "type": "integer", "minimum": 0 },
+        "archive_after_days": { "type": "integer", "minimum": 0 },
+        "prune_builtins": { "type": "boolean" },
+        "trust_external": { "type": "boolean" },
+        "auto_lessons_learned": { "type": "boolean" },
+        "external_dirs": { "type": "array", "items": { "type": "string" } },
+        "guard": { "$ref": "#/$defs/skillGuard" },
+        "source_preference": { "$ref": "#/$defs/skillSourcePreference" }
+      }
+    },
+    "skillSourcePreference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "prefer_plugin_skills": {
+          "type": "object",
+          "additionalProperties": { "type": "string", "minLength": 1 }
+        },
+        "prefer_plugins": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "skillGuard": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "block_high_risk": { "type": "boolean" },
+        "block_medium_risk_for_community": { "type": "boolean" }
+      }
+    },
+    "tui": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alternate_screen": { "enum": ["auto", "always", "never"] },
+        "path_preview": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "enabled": { "type": "boolean", "default": false } }
+        }
+      }
+    },
+    "moaModel": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile": { "type": ["string", "null"] },
+        "provider": { "type": "string" },
+        "model": { "type": "string" }
+      }
+    },
+    "moaPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "reference_models": { "type": "array", "items": { "$ref": "#/$defs/moaModel" } },
+        "aggregator": { "$ref": "#/$defs/moaModel" },
+        "reference_max_tokens": { "type": ["integer", "null"], "minimum": 0, "default": 262144 },
+        "aggregator_max_tokens": { "type": ["integer", "null"], "minimum": 0, "default": 262144 }
+      }
+    },
+    "moa": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "default_preset": { "type": "string" },
+        "max_reference_workers": { "type": "integer", "minimum": 0 },
+        "presets": { "type": "object", "additionalProperties": { "$ref": "#/$defs/moaPreset" } }
+      }
+    },
+    "moaPlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "preset": { "type": "string" },
+        "draft_max_turns": { "type": "integer", "minimum": 0 },
+        "draft_max_tokens": { "type": "integer", "minimum": 0, "default": 262144 },
+        "synthesis_max_tokens": { "type": "integer", "minimum": 0, "default": 262144 },
+        "draft_timeout_secs": { "type": "integer", "minimum": 0 },
+        "max_planner_workers": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "mcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "transport": { "type": "string", "enum": ["stdio", "sse", "http", "searxng"] },
+        "command": { "type": "string" },
+        "args": { "type": "array", "items": { "type": "string" } },
+        "url": { "type": "string" },
+        "env": { "type": "object", "additionalProperties": { "type": "string" } },
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "policy": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "oauth_account": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,128}$"},
+            "credential_ref": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["id"],
+              "properties": {"id": {"type":"string", "pattern":"^cred-[a-fA-F0-9]{32}$"}}
+            },
+            "workspace": {"type":["string","null"],"minLength":1},
+            "cwd": { "type": ["string", "null"], "minLength": 1 },
+            "enabled_tools": { "type": ["array", "null"], "maxItems": 4096, "items": {"type":"string","minLength":1} },
+            "disabled_tools": { "type": "array", "maxItems": 4096, "items": {"type":"string","minLength":1} },
+            "task_resource_reads": {
+              "type": "object", "maxProperties": 256,
+              "propertyNames": {"minLength": 1, "maxLength": 256},
+              "additionalProperties": {
+                "type": "object", "additionalProperties": false,
+                "required": ["schema_sha256", "uri_input_pointer", "input_template"],
+                "properties": {
+                  "schema_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+                  "uri_input_pointer": {"type": "string", "pattern": "^/", "maxLength": 512},
+                  "input_template": {"type": "object"}
+                }
+              }
+            },
+            "application_actions": {"type": "object", "maxProperties": 256, "propertyNames": {"minLength": 1, "maxLength": 256}, "additionalProperties": {"type": "object", "additionalProperties": false, "required": ["action", "schema_sha256", "resource_uri_input_pointer", "input_template"], "properties": {"action": {"enum": ["document.read", "document.create", "document.lookup", "mail.list", "mail.read", "mail.attachment", "mail.send", "mail.lookup", "table.query", "table.export", "table.lookup"]}, "schema_sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"}, "resource_uri_input_pointer": {"type": "string", "pattern": "^/", "maxLength": 512}, "operation_id_input_pointer": {"type": ["string", "null"], "pattern": "^/", "maxLength": 512}, "input_template": {"type": "object"}, "fields": {"type": "object", "maxProperties": 16, "propertyNames": {"pattern": "^/", "maxLength": 512}, "additionalProperties": {"oneOf": [{"type": "object", "additionalProperties": false, "required": ["type", "max_bytes"], "properties": {"type": {"const": "string"}, "max_bytes": {"type": "integer", "minimum": 1, "maximum": 65536}, "allowed_values": {"type": "array", "maxItems": 100, "items": {"type": "string"}}}}, {"type": "object", "additionalProperties": false, "required": ["type", "minimum", "maximum"], "properties": {"type": {"const": "integer"}, "minimum": {"type": "integer"}, "maximum": {"type": "integer"}}}]}}}}},
+            "env_vars": { "type": "array", "maxItems": 32, "items": {"type":"string","minLength":1} },
+            "env_aliases": { "type": "object", "maxProperties": 32, "additionalProperties": {"type":"string","minLength":1} },
+            "required_env": { "type": "array", "maxItems": 32, "items": {"type":"string","minLength":1} },
+            "required_headers": { "type": "array", "maxItems": 32, "items": {"type":"string","minLength":1} },
+            "env_http_headers": { "type": "object", "maxProperties": 32, "additionalProperties": {"type":"string","minLength":1} },
+            "bearer_token_env_var": { "type": ["string", "null"], "minLength": 1 },
+            "startup_timeout_secs": { "type": ["integer", "null"], "minimum": 1, "maximum": 3600 },
+            "tool_timeout_secs": { "type": ["integer", "null"], "minimum": 1, "maximum": 3600 }
+          }
+        }
+      }
+    },
+    "tools": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "studio": { "type": "object", "additionalProperties": false, "default": {}, "description": "Exact model-visible tool names per Studio mode. Omitted/null retains legacy defaults; [] selects no tools. Wildcards are literal names. Maximum name length is 256 UTF-8 bytes (also checked at load/save).", "properties": {
+          "kcoder": { "type": ["array", "null"], "maxItems": 1024, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\s\\x00-\\x1F\\x7F-\\x9F](?:[^\\x00-\\x1F\\x7F-\\x9F]*[^\\s\\x00-\\x1F\\x7F-\\x9F])?$" } },
+          "kworker": { "type": ["array", "null"], "maxItems": 1024, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 256, "pattern": "^[^\\s\\x00-\\x1F\\x7F-\\x9F](?:[^\\x00-\\x1F\\x7F-\\x9F]*[^\\s\\x00-\\x1F\\x7F-\\x9F])?$" } }
+        } },
+        "profile": { "enum": ["full", "core", "nano", "none"], "default": "full", "description": "Explicit built-in tool registry profile. Selected when a TUI process or a new Studio conversation starts; CLI --tool-profile overrides this setting. Existing resident conversations retain their registry. Provider IDs and endpoint addresses do not select a profile." },
+        "coerce": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "semantic_boolean": { "type": "boolean" },
+            "semantic_number": { "type": "boolean" },
+            "semantic_integer": { "type": "boolean" },
+            "stringify_mismatched_scalar": { "type": "boolean" }
+          }
+        },
+        "luna": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": { "allowed": { "type": "array", "items": { "type": "string" } } }
+        },
+        "disabled": { "type": "array", "items": { "type": "string" }, "default": ["EnterWorktree", "ExitWorktree", "WorktreeCreate", "WorktreeRemove", "cron_create", "cron_delete", "cron_list", "SpecInit", "SpecNewChange", "SpecArchive", "SpecStatus", "SpecUpdate", "SpecCheck", "SpecSync", "SpecRecordVerification", "SpecReview", "SpecParallelDraft", "SpecConfig", "AskUserQuestionAsync", "EnterPlanMode", "ExitPlanMode", "VerifyPlanExecution", "review", "skill_manage", "skill_curator", "skill_hub", "CtxInspect", "LocalMemoryRecall"], "description": "Exact tools disabled by product default. An explicit list replaces the default; [] enables all available tools. Profile, role, client capability and higher-priority configuration restrictions still apply." },
+        "file_edit_tool": { "enum": ["edit", "apply_patch"], "default": "edit", "description": "Which file-edit tool the model sees. Selected when the session starts and pinned for the session; cannot be switched mid-session. Both stay registered; the inactive surface is hidden from tool definitions and rejected at execution." },
+        "defer_extensions": { "type": "boolean", "default": true, "description": "Keep plugin, MCP and native host extension tools out of the attached tool list in KCoder mode and the CLI/TUI; the model finds them with tool_search and runs them through tool_execute. Tools named in an explicit tools.studio selection stay attached. false attaches extensions directly as before. KWorker keeps its own default selection either way." }
+      }
+    },
+    "toolLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "doom_loop": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default_repetitions": { "type": "integer" },
+            "tools": { "type": "object", "additionalProperties": { "type": "integer" } }
+          }
+        },
+        "foreground_budget_ms": { "$ref": "#/$defs/namedToolLimit" },
+        "execution_timeout_ms": { "type": "object", "description": "Per-tool default total lifetime in milliseconds; omitted names use tool_timeout_ms. Explicit call timeouts retain priority.", "additionalProperties": { "type": "integer", "minimum": 1 } },
+        "task_output_timeout_ms": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default_ms": { "type": "integer", "minimum": 0 },
+            "min_ms": { "type": "integer", "minimum": 0 },
+            "max_ms": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "permission_denials": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "consecutive_limit": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "namedToolLimit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "default_ms": { "type": "integer", "minimum": 0 },
+        "tools": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 } }
+      }
+    },
+    "sandbox": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "readonly": { "type": "boolean" },
+        "allowed_paths": { "type": "array", "items": { "type": "string" } },
+        "denied_paths": { "type": "array", "items": { "type": "string" } },
+        "allow_shell_escalation": { "type": "boolean" },
+        "require_shell_escalation_approval": { "type": "boolean" },
+        "shell_escalation_max_attempts": { "type": "integer", "minimum": 0 },
+        "allow_system_temp_writes": { "type": "boolean" },
+        "allow_shared_dev_cache_writes": { "type": "boolean" },
+        "landlock": { "type": ["boolean", "null"] }
+      }
+    }
+  }
+}

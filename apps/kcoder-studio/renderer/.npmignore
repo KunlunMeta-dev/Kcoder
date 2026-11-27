@@ -1,0 +1,3 @@
+# dist is a required renderer asset for the parent Gateway npm package.
+!dist/
+!dist/**

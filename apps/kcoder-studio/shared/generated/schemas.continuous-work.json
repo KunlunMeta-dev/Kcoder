@@ -1,0 +1,2097 @@
+{
+  "ContinuousWorkCapability": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "continuousWorkV1",
+      "continuousWorkReadV1",
+      "continuousWorkPartialListV1",
+      "continuousWorkNoEphemeralV1",
+      "continuousWorkInputV1",
+      "continuousWorkControlV1"
+    ],
+    "title": "ContinuousWorkCapability",
+    "type": "string"
+  },
+  "ContinuousWorkChanged": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Notification contains an observation hint, never an executable command.",
+    "properties": {
+      "eventId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "eventId",
+      "revision",
+      "workId"
+    ],
+    "title": "ContinuousWorkChanged",
+    "type": "object"
+  },
+  "ContinuousWorkControlAction": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Unknown commands are rejected on input; observations remain lossless strings.",
+    "enum": [
+      "pause",
+      "resume",
+      "stop",
+      "cancel_run",
+      "retry",
+      "reconcile"
+    ],
+    "title": "ContinuousWorkControlAction",
+    "type": "string"
+  },
+  "ContinuousWorkControlParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ContinuousWorkControlAction": {
+        "description": "Unknown commands are rejected on input; observations remain lossless strings.",
+        "enum": [
+          "pause",
+          "resume",
+          "stop",
+          "cancel_run",
+          "retry",
+          "reconcile"
+        ],
+        "type": "string"
+      },
+      "WorkControlTarget": {
+        "description": "Target identities do not grant access. The host must resolve them under the actual work owner and check the original run or operation before acting.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "work"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "attemptId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "turn"
+                ],
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              },
+              "turnId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "attemptId",
+              "kind",
+              "threadId",
+              "turnId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "agentId": {
+                "type": "string"
+              },
+              "attemptId": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "agent"
+                ],
+                "type": "string"
+              },
+              "runId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              },
+              "turnId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agentId",
+              "attemptId",
+              "kind",
+              "runId",
+              "threadId",
+              "turnId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "workflow"
+                ],
+                "type": "string"
+              },
+              "resumeCount": {
+                "format": "uint32",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "revision": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "runId": {
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "resumeCount",
+              "revision",
+              "runId",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "operation"
+                ],
+                "type": "string"
+              },
+              "operationId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "operationId"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "action": {
+        "$ref": "#/definitions/ContinuousWorkControlAction"
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "target": {
+        "$ref": "#/definitions/WorkControlTarget"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "expectedRevision",
+      "requestId",
+      "target",
+      "threadId",
+      "workId"
+    ],
+    "title": "ContinuousWorkControlParams",
+    "type": "object"
+  },
+  "ContinuousWorkControlResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "WorkControlAction": {
+        "type": "string",
+        "x-known-values": [
+          "pause",
+          "resume",
+          "stop",
+          "cancel_run",
+          "retry",
+          "reconcile"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkControlState": {
+        "type": "string",
+        "x-known-values": [
+          "accepted",
+          "settling",
+          "settled",
+          "superseded",
+          "failed",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkControlTargetFact": {
+        "additionalProperties": true,
+        "properties": {
+          "kind": {
+            "pattern": "^[^\\u0000-\\u0020\\u007f-\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[^\\u0000-\\u001f\\u007f-\\u009f]*[^\\u0000-\\u0020\\u007f-\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?(?![\\s\\S])",
+            "type": "string",
+            "x-max-utf8-bytes": 256
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object",
+        "x-max-opaque-json-weight": 16384
+      }
+    },
+    "properties": {
+      "action": {
+        "$ref": "#/definitions/WorkControlAction"
+      },
+      "controlEpoch": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "state": {
+        "$ref": "#/definitions/WorkControlState"
+      },
+      "target": {
+        "$ref": "#/definitions/WorkControlTargetFact"
+      },
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "controlEpoch",
+      "requestId",
+      "revision",
+      "state",
+      "target",
+      "workId"
+    ],
+    "title": "ContinuousWorkControlResult",
+    "type": "object"
+  },
+  "ContinuousWorkControlTarget": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Target identities do not grant access. The host must resolve them under the actual work owner and check the original run or operation before acting.",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "work"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "turn"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "kind",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "agentId": {
+            "type": "string"
+          },
+          "attemptId": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "agent"
+            ],
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "agentId",
+          "attemptId",
+          "kind",
+          "runId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "workflow"
+            ],
+            "type": "string"
+          },
+          "resumeCount": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "resumeCount",
+          "revision",
+          "runId",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "operation"
+            ],
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "operationId"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "WorkControlTarget"
+  },
+  "ContinuousWorkDeliveryRequirement": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ContinuousWorkDeliveryRequirement",
+    "type": "string",
+    "x-known-values": [
+      "not_required",
+      "required",
+      "unknown"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "ContinuousWorkInputReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "inputId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "inputId",
+      "threadId",
+      "workId"
+    ],
+    "title": "ContinuousWorkInputReadParams",
+    "type": "object"
+  },
+  "ContinuousWorkInputReceiptView": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "selector": {
+            "$ref": "#/definitions/InteractionStatusReadParamsV1"
+          }
+        },
+        "required": [
+          "attemptId",
+          "selector"
+        ],
+        "type": "object"
+      },
+      "WorkInputState": {
+        "type": "string",
+        "x-known-values": [
+          "accepted",
+          "queued",
+          "dispatched",
+          "applied",
+          "rejected",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "description": "No private payload, client-supplied authorization, or execution promise.",
+    "properties": {
+      "appliedTurnId": {
+        "description": "Present only when the target can prove the input entered this turn.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "inputId": {
+        "type": "string"
+      },
+      "interaction": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TaskInteractionReferenceV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "requirementsRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "sequence": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "state": {
+        "$ref": "#/definitions/WorkInputState"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "inputId",
+      "requestId",
+      "sequence",
+      "state",
+      "threadId",
+      "workId"
+    ],
+    "title": "ContinuousWorkInputReceiptView",
+    "type": "object"
+  },
+  "ContinuousWorkInputResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ContinuousWorkInputReceiptView": {
+        "description": "No private payload, client-supplied authorization, or execution promise.",
+        "properties": {
+          "appliedTurnId": {
+            "description": "Present only when the target can prove the input entered this turn.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "inputId": {
+            "type": "string"
+          },
+          "interaction": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TaskInteractionReferenceV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "requirementsRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/definitions/WorkInputState"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "workId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "inputId",
+          "requestId",
+          "sequence",
+          "state",
+          "threadId",
+          "workId"
+        ],
+        "type": "object"
+      },
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "selector": {
+            "$ref": "#/definitions/InteractionStatusReadParamsV1"
+          }
+        },
+        "required": [
+          "attemptId",
+          "selector"
+        ],
+        "type": "object"
+      },
+      "WorkInputState": {
+        "type": "string",
+        "x-known-values": [
+          "accepted",
+          "queued",
+          "dispatched",
+          "applied",
+          "rejected",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "properties": {
+      "receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ContinuousWorkInputReceiptView"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "None only reports no observed receipt. It does not permit replay under a new ID."
+      }
+    },
+    "title": "ContinuousWorkInputResult",
+    "type": "object"
+  },
+  "ContinuousWorkInputSubmitParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "selector": {
+            "$ref": "#/definitions/InteractionStatusReadParamsV1"
+          }
+        },
+        "required": [
+          "attemptId",
+          "selector"
+        ],
+        "type": "object"
+      },
+      "TurnRetainedAttachmentV1": {
+        "additionalProperties": false,
+        "properties": {
+          "entryId": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entryId",
+          "filename",
+          "mimeType"
+        ],
+        "type": "object"
+      },
+      "TurnRetentionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "entryIds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "expectedRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "retentionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entryIds",
+          "expectedRevision",
+          "retentionId"
+        ],
+        "type": "object"
+      },
+      "TurnRetentionRequestV1": {
+        "additionalProperties": false,
+        "description": "Public turn input contains references and presentation only. The trusted parent envelope supplies authority separately; no path is an authorization.",
+        "properties": {
+          "attachments": {
+            "items": {
+              "$ref": "#/definitions/TurnRetainedAttachmentV1"
+            },
+            "type": "array"
+          },
+          "references": {
+            "items": {
+              "$ref": "#/definitions/TurnRetentionReferenceV1"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "attachments",
+          "references"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "The host persists the original text and verified attachment references before acknowledging. It must never treat a receipt ID as authorization.",
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "inputId": {
+        "type": "string"
+      },
+      "interaction": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TaskInteractionReferenceV1"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "An original question selector, not an approval or permission grant. The host verifies that it still belongs to this work and thread."
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "retention": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TurnRetentionRequestV1"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Separately negotiated retained attachments, verified by native host."
+      },
+      "text": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "inputId",
+      "requestId",
+      "threadId",
+      "workId"
+    ],
+    "title": "ContinuousWorkInputSubmitParams",
+    "type": "object"
+  },
+  "ContinuousWorkListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "WorkPhase": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "running",
+          "waiting_user",
+          "waiting_event",
+          "paused",
+          "completed",
+          "failed",
+          "stopped",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "description": "All listing is scoped by the server; no caller-selected account or target.",
+    "properties": {
+      "allowPartial": {
+        "description": "Omission retains the original all-or-error list behavior.",
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "phase": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WorkPhase"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "query": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "updatedAfterMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "title": "ContinuousWorkListParams",
+    "type": "object"
+  },
+  "ContinuousWorkListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ContinuousWorkDeliveryRequirement": {
+        "type": "string",
+        "x-known-values": [
+          "not_required",
+          "required",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "ContinuousWorkPendingInputView": {
+        "description": "One accepted requirement still waiting for a request. The state is an open label: `applied` only means the requirement entered a request, and an unknown value stays observable without being read as progress.",
+        "properties": {
+          "inputId": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/definitions/WorkInputState"
+          }
+        },
+        "required": [
+          "inputId",
+          "sequence",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkResultView": {
+        "properties": {
+          "artifactRefs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "deliveryRequirement": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContinuousWorkDeliveryRequirement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The requirement is observed at the parent work's requirements revision. Omission is legacy unknown, never proof of no requirement."
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "requiredDeliveryState": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WorkDeliveryState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None means no observed delivery status, not successful delivery."
+          },
+          "resultId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactRefs",
+          "ready",
+          "resultId"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkView": {
+        "description": "This is a projection, not the owner's private business record or authority.",
+        "properties": {
+          "freshness": {
+            "$ref": "#/definitions/WorkObservationFreshness"
+          },
+          "pendingInputs": {
+            "description": "The observed accepted-but-unconsumed requirements with their real states. Omission means the host did not observe them, never that the queue is empty; an empty array is an observed empty queue.",
+            "items": {
+              "$ref": "#/definitions/ContinuousWorkPendingInputView"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "phase": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/WorkPhase"
+              }
+            ],
+            "description": "A reported phase is a point-in-time claim, not completion evidence."
+          },
+          "requirementsRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContinuousWorkResultView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unconsumedInputs": {
+            "description": "Accepted requirements that no request consumed yet; absence is unknown.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WorkUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Durable batch counters. Absence is an unobserved record, not zero turns."
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContinuousWorkWaitView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "freshness",
+          "phase",
+          "requirementsRevision",
+          "revision",
+          "threadId",
+          "workId"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkWaitView": {
+        "properties": {
+          "kind": {
+            "$ref": "#/definitions/WorkWaitKind"
+          },
+          "reference": {
+            "description": "The original interaction/event is resolved under the original owner.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "WorkDeliveryState": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "sending",
+          "confirmed",
+          "unknown_outcome",
+          "failed",
+          "cancelled"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkInputState": {
+        "type": "string",
+        "x-known-values": [
+          "accepted",
+          "queued",
+          "dispatched",
+          "applied",
+          "rejected",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkObservationFreshness": {
+        "type": "string",
+        "x-known-values": [
+          "current",
+          "partial",
+          "stale",
+          "unreadable",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkPhase": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "running",
+          "waiting_user",
+          "waiting_event",
+          "paused",
+          "completed",
+          "failed",
+          "stopped",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkUsage": {
+        "additionalProperties": false,
+        "description": "Durable counters of one business batch. A process restart, reconnect, status inquiry, model retry or source event must not reset them, and a missing value on an older record is not evidence that no automatic turn ever ran.",
+        "properties": {
+          "automaticTurns": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "consecutiveFailures": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stalledRounds": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "WorkWaitKind": {
+        "type": "string",
+        "x-known-values": [
+          "user",
+          "event"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/ContinuousWorkView"
+        },
+        "maxItems": 10,
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "partial": {
+        "description": "Some records in this page could not be verified and were omitted.",
+        "type": [
+          "boolean",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "items"
+    ],
+    "title": "ContinuousWorkListResult",
+    "type": "object"
+  },
+  "ContinuousWorkPresence": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "ContinuousWorkPresence",
+    "type": "string",
+    "x-known-values": [
+      "present",
+      "confirmed_absent",
+      "unreadable",
+      "unknown"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "ContinuousWorkReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "workId"
+    ],
+    "title": "ContinuousWorkReadParams",
+    "type": "object"
+  },
+  "ContinuousWorkReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ContinuousWorkDeliveryRequirement": {
+        "type": "string",
+        "x-known-values": [
+          "not_required",
+          "required",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "ContinuousWorkPendingInputView": {
+        "description": "One accepted requirement still waiting for a request. The state is an open label: `applied` only means the requirement entered a request, and an unknown value stays observable without being read as progress.",
+        "properties": {
+          "inputId": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/definitions/WorkInputState"
+          }
+        },
+        "required": [
+          "inputId",
+          "sequence",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkPresence": {
+        "type": "string",
+        "x-known-values": [
+          "present",
+          "confirmed_absent",
+          "unreadable",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "ContinuousWorkResultView": {
+        "properties": {
+          "artifactRefs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "deliveryRequirement": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContinuousWorkDeliveryRequirement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The requirement is observed at the parent work's requirements revision. Omission is legacy unknown, never proof of no requirement."
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "requiredDeliveryState": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WorkDeliveryState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None means no observed delivery status, not successful delivery."
+          },
+          "resultId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactRefs",
+          "ready",
+          "resultId"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkView": {
+        "description": "This is a projection, not the owner's private business record or authority.",
+        "properties": {
+          "freshness": {
+            "$ref": "#/definitions/WorkObservationFreshness"
+          },
+          "pendingInputs": {
+            "description": "The observed accepted-but-unconsumed requirements with their real states. Omission means the host did not observe them, never that the queue is empty; an empty array is an observed empty queue.",
+            "items": {
+              "$ref": "#/definitions/ContinuousWorkPendingInputView"
+            },
+            "maxItems": 8,
+            "type": "array"
+          },
+          "phase": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/WorkPhase"
+              }
+            ],
+            "description": "A reported phase is a point-in-time claim, not completion evidence."
+          },
+          "requirementsRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContinuousWorkResultView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unconsumedInputs": {
+            "description": "Accepted requirements that no request consumed yet; absence is unknown.",
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WorkUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Durable batch counters. Absence is an unobserved record, not zero turns."
+          },
+          "waiting": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContinuousWorkWaitView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "workId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "freshness",
+          "phase",
+          "requirementsRevision",
+          "revision",
+          "threadId",
+          "workId"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkWaitView": {
+        "properties": {
+          "kind": {
+            "$ref": "#/definitions/WorkWaitKind"
+          },
+          "reference": {
+            "description": "The original interaction/event is resolved under the original owner.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "WorkDeliveryState": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "sending",
+          "confirmed",
+          "unknown_outcome",
+          "failed",
+          "cancelled"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkInputState": {
+        "type": "string",
+        "x-known-values": [
+          "accepted",
+          "queued",
+          "dispatched",
+          "applied",
+          "rejected",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkObservationFreshness": {
+        "type": "string",
+        "x-known-values": [
+          "current",
+          "partial",
+          "stale",
+          "unreadable",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkPhase": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "running",
+          "waiting_user",
+          "waiting_event",
+          "paused",
+          "completed",
+          "failed",
+          "stopped",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkUsage": {
+        "additionalProperties": false,
+        "description": "Durable counters of one business batch. A process restart, reconnect, status inquiry, model retry or source event must not reset them, and a missing value on an older record is not evidence that no automatic turn ever ran.",
+        "properties": {
+          "automaticTurns": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "consecutiveFailures": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stalledRounds": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "WorkWaitKind": {
+        "type": "string",
+        "x-known-values": [
+          "user",
+          "event"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "properties": {
+      "presence": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ContinuousWorkPresence"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Omission is a legacy unknown observation, never confirmed absence."
+      },
+      "work": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ContinuousWorkView"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Missing is an observation only; it does not create or repair a record."
+      }
+    },
+    "title": "ContinuousWorkReadResult",
+    "type": "object"
+  },
+  "ContinuousWorkResultView": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ContinuousWorkDeliveryRequirement": {
+        "type": "string",
+        "x-known-values": [
+          "not_required",
+          "required",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkDeliveryState": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "sending",
+          "confirmed",
+          "unknown_outcome",
+          "failed",
+          "cancelled"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "properties": {
+      "artifactRefs": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 256,
+        "type": "array"
+      },
+      "deliveryRequirement": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ContinuousWorkDeliveryRequirement"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The requirement is observed at the parent work's requirements revision. Omission is legacy unknown, never proof of no requirement."
+      },
+      "ready": {
+        "type": "boolean"
+      },
+      "requiredDeliveryState": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WorkDeliveryState"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "None means no observed delivery status, not successful delivery."
+      },
+      "resultId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "artifactRefs",
+      "ready",
+      "resultId"
+    ],
+    "title": "ContinuousWorkResultView",
+    "type": "object"
+  },
+  "ContinuousWorkView": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ContinuousWorkDeliveryRequirement": {
+        "type": "string",
+        "x-known-values": [
+          "not_required",
+          "required",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "ContinuousWorkPendingInputView": {
+        "description": "One accepted requirement still waiting for a request. The state is an open label: `applied` only means the requirement entered a request, and an unknown value stays observable without being read as progress.",
+        "properties": {
+          "inputId": {
+            "type": "string"
+          },
+          "sequence": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/definitions/WorkInputState"
+          }
+        },
+        "required": [
+          "inputId",
+          "sequence",
+          "state"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkResultView": {
+        "properties": {
+          "artifactRefs": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 256,
+            "type": "array"
+          },
+          "deliveryRequirement": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ContinuousWorkDeliveryRequirement"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The requirement is observed at the parent work's requirements revision. Omission is legacy unknown, never proof of no requirement."
+          },
+          "ready": {
+            "type": "boolean"
+          },
+          "requiredDeliveryState": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WorkDeliveryState"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "None means no observed delivery status, not successful delivery."
+          },
+          "resultId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactRefs",
+          "ready",
+          "resultId"
+        ],
+        "type": "object"
+      },
+      "ContinuousWorkWaitView": {
+        "properties": {
+          "kind": {
+            "$ref": "#/definitions/WorkWaitKind"
+          },
+          "reference": {
+            "description": "The original interaction/event is resolved under the original owner.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "reference"
+        ],
+        "type": "object"
+      },
+      "WorkDeliveryState": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "sending",
+          "confirmed",
+          "unknown_outcome",
+          "failed",
+          "cancelled"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkInputState": {
+        "type": "string",
+        "x-known-values": [
+          "accepted",
+          "queued",
+          "dispatched",
+          "applied",
+          "rejected",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkObservationFreshness": {
+        "type": "string",
+        "x-known-values": [
+          "current",
+          "partial",
+          "stale",
+          "unreadable",
+          "unknown"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkPhase": {
+        "type": "string",
+        "x-known-values": [
+          "pending",
+          "running",
+          "waiting_user",
+          "waiting_event",
+          "paused",
+          "completed",
+          "failed",
+          "stopped",
+          "needs_reconciliation"
+        ],
+        "x-max-utf8-bytes": 256
+      },
+      "WorkUsage": {
+        "additionalProperties": false,
+        "description": "Durable counters of one business batch. A process restart, reconnect, status inquiry, model retry or source event must not reset them, and a missing value on an older record is not evidence that no automatic turn ever ran.",
+        "properties": {
+          "automaticTurns": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "consecutiveFailures": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "stalledRounds": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "type": "object"
+      },
+      "WorkWaitKind": {
+        "type": "string",
+        "x-known-values": [
+          "user",
+          "event"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "description": "This is a projection, not the owner's private business record or authority.",
+    "properties": {
+      "freshness": {
+        "$ref": "#/definitions/WorkObservationFreshness"
+      },
+      "pendingInputs": {
+        "description": "The observed accepted-but-unconsumed requirements with their real states. Omission means the host did not observe them, never that the queue is empty; an empty array is an observed empty queue.",
+        "items": {
+          "$ref": "#/definitions/ContinuousWorkPendingInputView"
+        },
+        "maxItems": 8,
+        "type": "array"
+      },
+      "phase": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/WorkPhase"
+          }
+        ],
+        "description": "A reported phase is a point-in-time claim, not completion evidence."
+      },
+      "requirementsRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "result": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ContinuousWorkResultView"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "title": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "unconsumedInputs": {
+        "description": "Accepted requirements that no request consumed yet; absence is unknown.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "usage": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/WorkUsage"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Durable batch counters. Absence is an unobserved record, not zero turns."
+      },
+      "waiting": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ContinuousWorkWaitView"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "workId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "freshness",
+      "phase",
+      "requirementsRevision",
+      "revision",
+      "threadId",
+      "workId"
+    ],
+    "title": "ContinuousWorkView",
+    "type": "object"
+  },
+  "ContinuousWorkWaitView": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "WorkWaitKind": {
+        "type": "string",
+        "x-known-values": [
+          "user",
+          "event"
+        ],
+        "x-max-utf8-bytes": 256
+      }
+    },
+    "properties": {
+      "kind": {
+        "$ref": "#/definitions/WorkWaitKind"
+      },
+      "reference": {
+        "description": "The original interaction/event is resolved under the original owner.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "kind",
+      "reference"
+    ],
+    "title": "ContinuousWorkWaitView",
+    "type": "object"
+  }
+}

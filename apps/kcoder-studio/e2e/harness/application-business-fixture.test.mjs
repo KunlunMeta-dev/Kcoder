@@ -1,0 +1,47 @@
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
+import test from 'node:test';
+const {createBusinessFixture}=createRequire(import.meta.url)('./application-business-fixture.cjs');
+const sha=value=>createHash('sha256').update(value).digest('hex');
+test('owned business objects retain exact document, mail/attachment and bounded CSV receipts without replay',()=>{
+ const events=[],capture=event=>events.push(event);
+ const document=createBusinessFixture('tencent_docs','owned-application://document/original',capture);
+ const input={resourceUri:'owned-application://document/original',operationId:'owned-create',title:'Owned review',body:'Exact original body: 37 units.'};
+ const created=document.invoke('document_create',input);
+ assert.equal(created.bodySha256,sha(input.body));
+ assert.equal(document.invoke('document_read',{resourceUri:input.resourceUri,documentId:created.documentId}).body,input.body);
+ assert.deepEqual(document.invoke('document_create',input),created);
+ assert.throws(()=>document.invoke('document_create',{...input,body:'changed'}),/OPERATION_CHANGED/);
+ assert.throws(()=>document.invoke('document_create',{...input,resourceUri:'owned://unselected'}),/SCOPE_CHANGED/);
+ const mail=createBusinessFixture('agent_mail','owned-application://mailbox/original',capture),base={resourceUri:'owned-application://mailbox/original'};
+ const listed=mail.invoke('mail_list',{...base,limit:1});assert.equal(listed.items.length,1);
+ const message=mail.invoke('mail_read',{...base,messageId:listed.items[0].messageId});assert.match(message.body,/37 units/);
+ const attachment=mail.invoke('mail_attachment',{...base,messageId:message.messageId,attachmentId:message.attachmentIds[0]});assert.equal(sha(Buffer.from(attachment.base64,'base64')),attachment.sha256);
+ const sent=mail.invoke('mail_send',{...base,operationId:'owned-send',to:'owned-recipient@example.invalid',subject:'Owned review',body:'Explicit owned send'});assert.equal(sent.state,'sent');
+ assert.throws(()=>mail.invoke('mail_send',{...base,operationId:'owned-other',to:'other@example.invalid',subject:'Denied',body:'Denied'}),/SCOPE_CHANGED/);
+ const table=createBusinessFixture('feishu_bitable','owned-application://table/original',capture),query={resourceUri:'owned-application://table/original',limit:1,region:'all'};
+ assert.equal(table.invoke('table_query',query).rows.length,1);
+ const exported=table.invoke('table_export',{...query,operationId:'owned-export'});assert.equal(sha(Buffer.from(exported.base64,'base64')),exported.sha256);assert.equal(exported.rowCount,1);
+ assert.throws(()=>table.invoke('table_query',{...query,limit:11}),/BOUND_REQUIRED/);
+ assert.throws(()=>table.invoke('table_query',{...query,extra:true}),/ARGUMENTS_INVALID/);
+ assert.equal(events.filter(event=>event.event==='businessEffect').length,3);assert.equal(events.filter(event=>event.event==='businessReceiptRead').length,1);
+ assert.equal(document.tools.length+mail.tools.length+table.tools.length,8);
+});
+
+test('explicit reviewed platform lookup returns the object for its original idempotency key without another effect',()=>{
+ const events=[],uri='owned-application://document/original';
+ const original=createBusinessFixture('tencent_docs',uri,event=>events.push(event),{lookups:true});
+ const lookup=original.tools.find(tool=>tool.name==='document_lookup');assert.equal(lookup.annotations.readOnlyHint,true);
+ assert.equal(lookup._meta['io.kcoder.applicationBusiness'].operationIdInputPointer,'/operationId');
+ assert.equal(original.invoke('document_lookup',{resourceUri:uri,operationId:'original'}).state,'not_found');
+ const input={resourceUri:uri,operationId:'original',title:'Owned title',body:'Approved complete body'};
+ const created=original.invoke('document_create',input);
+ const observed=original.invoke('document_lookup',{resourceUri:uri,operationId:'original'});
+ assert.equal(observed.state,'found');assert.deepEqual(observed.object,created);
+ assert.deepEqual(original.invoke('document_lookup',{resourceUri:uri,operationId:'original'}),observed);
+ assert.equal(events.filter(event=>event.event==='businessEffect').length,1);
+ assert.equal(events.filter(event=>event.event==='businessLookup').length,3);
+ assert.equal(events.filter(event=>event.event==='businessReceiptRead').length,0);
+ assert.throws(()=>original.invoke('document_lookup',{resourceUri:uri,operationId:'original',body:'Changed'}),/ARGUMENTS_INVALID/);
+});

@@ -1,0 +1,865 @@
+{
+  "ContinuousWorkCapability": [
+    {
+      "decoded": "continuousWorkV1",
+      "name": "work",
+      "value": "continuousWorkV1"
+    },
+    {
+      "decoded": "continuousWorkReadV1",
+      "name": "read-only",
+      "value": "continuousWorkReadV1"
+    },
+    {
+      "decoded": "continuousWorkPartialListV1",
+      "name": "partial-list",
+      "value": "continuousWorkPartialListV1"
+    },
+    {
+      "decoded": "continuousWorkNoEphemeralV1",
+      "name": "no-ephemeral",
+      "value": "continuousWorkNoEphemeralV1"
+    }
+  ],
+  "ContinuousWorkChanged": [
+    {
+      "decoded": {
+        "eventId": "event-1",
+        "revision": 4,
+        "workId": "work-1"
+      },
+      "name": "change",
+      "value": {
+        "eventId": "event-1",
+        "revision": 4,
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkControlAction": [
+    {
+      "decoded": "pause",
+      "name": "pause",
+      "value": "pause"
+    },
+    {
+      "decoded": "reconcile",
+      "name": "reconcile",
+      "value": "reconcile"
+    }
+  ],
+  "ContinuousWorkControlParams": [
+    {
+      "decoded": {
+        "action": "pause",
+        "expectedRevision": 3,
+        "requestId": "control-1",
+        "target": {
+          "kind": "work"
+        },
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "pause",
+      "value": {
+        "action": "pause",
+        "expectedRevision": 3,
+        "requestId": "control-1",
+        "target": {
+          "kind": "work"
+        },
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkControlResult": [
+    {
+      "decoded": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "settling",
+        "target": {
+          "kind": "work"
+        },
+        "workId": "work-1"
+      },
+      "name": "settling",
+      "value": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "settling",
+        "target": {
+          "kind": "work"
+        },
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "future_state",
+        "target": {
+          "kind": "work"
+        },
+        "workId": "work-1"
+      },
+      "name": "future-state",
+      "value": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "future_state",
+        "target": {
+          "kind": "work"
+        },
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "superseded",
+        "target": {
+          "kind": "work"
+        },
+        "workId": "work-1"
+      },
+      "name": "superseded-intent",
+      "value": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "superseded",
+        "target": {
+          "kind": "work"
+        },
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "settling",
+        "target": {
+          "kind": "future_target",
+          "originalRef": {
+            "revision": 2
+          }
+        },
+        "workId": "work-1"
+      },
+      "name": "future-target-read-only",
+      "value": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "settling",
+        "target": {
+          "kind": "future_target",
+          "originalRef": {
+            "revision": 2
+          }
+        },
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "settling",
+        "target": {
+          "detail": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉",
+          "kind": "未来动作"
+        },
+        "workId": "work-1"
+      },
+      "name": "unicode-future-target",
+      "value": {
+        "action": "pause",
+        "controlEpoch": 2,
+        "requestId": "control-1",
+        "revision": 4,
+        "state": "settling",
+        "target": {
+          "detail": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉",
+          "kind": "未来动作"
+        },
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkControlTarget": [
+    {
+      "decoded": {
+        "kind": "work"
+      },
+      "name": "work",
+      "value": {
+        "kind": "work"
+      }
+    },
+    {
+      "decoded": {
+        "attemptId": "attempt-1",
+        "kind": "turn",
+        "threadId": "thread-1",
+        "turnId": "turn-1"
+      },
+      "name": "original-turn",
+      "value": {
+        "attemptId": "attempt-1",
+        "kind": "turn",
+        "threadId": "thread-1",
+        "turnId": "turn-1"
+      }
+    },
+    {
+      "decoded": {
+        "kind": "operation",
+        "operationId": "op-1"
+      },
+      "name": "operation",
+      "value": {
+        "kind": "operation",
+        "operationId": "op-1"
+      }
+    }
+  ],
+  "ContinuousWorkDeliveryRequirement": [
+    {
+      "decoded": "not_required",
+      "name": "not-required",
+      "value": "not_required"
+    },
+    {
+      "decoded": "required",
+      "name": "required",
+      "value": "required"
+    },
+    {
+      "decoded": "unknown",
+      "name": "unobserved",
+      "value": "unknown"
+    },
+    {
+      "decoded": "future_requirement",
+      "name": "future-label",
+      "value": "future_requirement"
+    }
+  ],
+  "ContinuousWorkInputReadParams": [
+    {
+      "decoded": {
+        "inputId": "input-1",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "lookup-original",
+      "value": {
+        "inputId": "input-1",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkInputReceiptView": [
+    {
+      "decoded": {
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "requirementsRevision": 2,
+        "sequence": 1,
+        "state": "queued",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "queued-not-applied",
+      "value": {
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "requirementsRevision": 2,
+        "sequence": 1,
+        "state": "queued",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "requirementsRevision": 2,
+        "sequence": 1,
+        "state": "future_pending",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "future-state",
+      "value": {
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "requirementsRevision": 2,
+        "sequence": 1,
+        "state": "future_pending",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkInputResult": [
+    {
+      "decoded": {
+        "receipt": {
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "requirementsRevision": 2,
+          "sequence": 1,
+          "state": "queued",
+          "threadId": "thread-1",
+          "workId": "work-1"
+        }
+      },
+      "name": "queued",
+      "value": {
+        "receipt": {
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "requirementsRevision": 2,
+          "sequence": 1,
+          "state": "queued",
+          "threadId": "thread-1",
+          "workId": "work-1"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "receipt": null
+      },
+      "name": "unknown-receipt",
+      "value": {
+        "receipt": null
+      }
+    }
+  ],
+  "ContinuousWorkInputSubmitParams": [
+    {
+      "decoded": {
+        "expectedRevision": 3,
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "text": "Continue the task",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "text",
+      "value": {
+        "expectedRevision": 3,
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "text": "Continue the task",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "expectedRevision": 3,
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "retention": {
+          "attachments": [
+            {
+              "entryId": "entry-1",
+              "filename": "report.txt",
+              "mimeType": "text/plain"
+            }
+          ],
+          "references": [
+            {
+              "entryIds": [
+                "entry-1"
+              ],
+              "expectedRevision": 1,
+              "retentionId": "r1.root.1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "retained-attachment",
+      "value": {
+        "expectedRevision": 3,
+        "inputId": "input-1",
+        "requestId": "request-1",
+        "retention": {
+          "attachments": [
+            {
+              "entryId": "entry-1",
+              "filename": "report.txt",
+              "mimeType": "text/plain"
+            }
+          ],
+          "references": [
+            {
+              "entryIds": [
+                "entry-1"
+              ],
+              "expectedRevision": 1,
+              "retentionId": "r1.root.1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            }
+          ]
+        },
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "expectedRevision": 3,
+        "inputId": "input-1",
+        "interaction": {
+          "attemptId": "attempt-1",
+          "selector": {
+            "appServerEpoch": "epoch-1",
+            "kind": "question",
+            "questionId": "question-1",
+            "requestId": 1,
+            "serverId": "server-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1"
+          }
+        },
+        "requestId": "request-1",
+        "text": "Continue the task",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "answer-original-question",
+      "value": {
+        "expectedRevision": 3,
+        "inputId": "input-1",
+        "interaction": {
+          "attemptId": "attempt-1",
+          "selector": {
+            "appServerEpoch": "epoch-1",
+            "kind": "question",
+            "questionId": "question-1",
+            "requestId": 1,
+            "serverId": "server-1",
+            "threadId": "thread-1",
+            "turnId": "turn-1"
+          }
+        },
+        "requestId": "request-1",
+        "text": "Continue the task",
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkListParams": [
+    {
+      "decoded": {},
+      "name": "default",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "allowPartial": true,
+        "cursor": "opaque",
+        "phase": "running",
+        "query": "report",
+        "updatedAfterMs": 123
+      },
+      "name": "bounded-filter",
+      "value": {
+        "allowPartial": true,
+        "cursor": "opaque",
+        "phase": "running",
+        "query": "report",
+        "updatedAfterMs": 123
+      }
+    }
+  ],
+  "ContinuousWorkListResult": [
+    {
+      "decoded": {
+        "items": [
+          {
+            "freshness": "current",
+            "phase": "running",
+            "requirementsRevision": 2,
+            "revision": 3,
+            "threadId": "thread-1",
+            "workId": "work-1"
+          }
+        ],
+        "nextCursor": "cursor-1",
+        "partial": true
+      },
+      "name": "single",
+      "value": {
+        "items": [
+          {
+            "freshness": "current",
+            "phase": "running",
+            "requirementsRevision": 2,
+            "revision": 3,
+            "threadId": "thread-1",
+            "workId": "work-1"
+          }
+        ],
+        "nextCursor": "cursor-1",
+        "partial": true
+      }
+    },
+    {
+      "decoded": {
+        "items": []
+      },
+      "name": "empty",
+      "value": {
+        "items": []
+      }
+    }
+  ],
+  "ContinuousWorkPresence": [
+    {
+      "decoded": "present",
+      "name": "present",
+      "value": "present"
+    },
+    {
+      "decoded": "confirmed_absent",
+      "name": "absent",
+      "value": "confirmed_absent"
+    },
+    {
+      "decoded": "unreadable",
+      "name": "unreadable",
+      "value": "unreadable"
+    },
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    },
+    {
+      "decoded": "future_observation",
+      "name": "future",
+      "value": "future_observation"
+    }
+  ],
+  "ContinuousWorkReadParams": [
+    {
+      "decoded": {
+        "workId": "work-1"
+      },
+      "name": "read",
+      "value": {
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkReadResult": [
+    {
+      "decoded": {
+        "work": {
+          "freshness": "current",
+          "phase": "running",
+          "requirementsRevision": 2,
+          "revision": 3,
+          "threadId": "thread-1",
+          "workId": "work-1"
+        }
+      },
+      "name": "found",
+      "value": {
+        "work": {
+          "freshness": "current",
+          "phase": "running",
+          "requirementsRevision": 2,
+          "revision": 3,
+          "threadId": "thread-1",
+          "workId": "work-1"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "work": null
+      },
+      "name": "not-observed",
+      "value": {
+        "work": null
+      }
+    },
+    {
+      "decoded": {
+        "presence": "present",
+        "work": {
+          "freshness": "current",
+          "phase": "running",
+          "requirementsRevision": 2,
+          "revision": 3,
+          "threadId": "thread-1",
+          "workId": "work-1"
+        }
+      },
+      "name": "proven-present",
+      "value": {
+        "presence": "present",
+        "work": {
+          "freshness": "current",
+          "phase": "running",
+          "requirementsRevision": 2,
+          "revision": 3,
+          "threadId": "thread-1",
+          "workId": "work-1"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "presence": "confirmed_absent",
+        "work": null
+      },
+      "name": "proven-absent",
+      "value": {
+        "presence": "confirmed_absent",
+        "work": null
+      }
+    },
+    {
+      "decoded": {
+        "presence": "unreadable",
+        "work": null
+      },
+      "name": "unreadable",
+      "value": {
+        "presence": "unreadable",
+        "work": null
+      }
+    },
+    {
+      "decoded": {
+        "presence": "future_observation",
+        "work": null
+      },
+      "name": "future",
+      "value": {
+        "presence": "future_observation",
+        "work": null
+      }
+    }
+  ],
+  "ContinuousWorkResultView": [
+    {
+      "decoded": {
+        "artifactRefs": [
+          "artifact-1"
+        ],
+        "ready": true,
+        "requiredDeliveryState": "unknown_outcome",
+        "resultId": "result-1"
+      },
+      "name": "ready-with-artifact",
+      "value": {
+        "artifactRefs": [
+          "artifact-1"
+        ],
+        "ready": true,
+        "requiredDeliveryState": "unknown_outcome",
+        "resultId": "result-1"
+      }
+    },
+    {
+      "decoded": {
+        "artifactRefs": [],
+        "ready": true,
+        "resultId": "result-1"
+      },
+      "name": "delivery-not-observed",
+      "value": {
+        "artifactRefs": [],
+        "ready": true,
+        "resultId": "result-1"
+      }
+    },
+    {
+      "decoded": {
+        "artifactRefs": [],
+        "deliveryRequirement": "not_required",
+        "ready": true,
+        "resultId": "result-2"
+      },
+      "name": "explicit-no-required-delivery",
+      "value": {
+        "artifactRefs": [],
+        "deliveryRequirement": "not_required",
+        "ready": true,
+        "resultId": "result-2"
+      }
+    },
+    {
+      "decoded": {
+        "artifactRefs": [],
+        "deliveryRequirement": "required",
+        "ready": true,
+        "resultId": "result-3"
+      },
+      "name": "required-delivery-unobserved",
+      "value": {
+        "artifactRefs": [],
+        "deliveryRequirement": "required",
+        "ready": true,
+        "resultId": "result-3"
+      }
+    },
+    {
+      "decoded": {
+        "artifactRefs": [],
+        "deliveryRequirement": "future_requirement",
+        "ready": true,
+        "resultId": "result-4"
+      },
+      "name": "future-delivery-requirement",
+      "value": {
+        "artifactRefs": [],
+        "deliveryRequirement": "future_requirement",
+        "ready": true,
+        "resultId": "result-4"
+      }
+    }
+  ],
+  "ContinuousWorkView": [
+    {
+      "decoded": {
+        "freshness": "current",
+        "phase": "running",
+        "requirementsRevision": 2,
+        "revision": 3,
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "running",
+      "value": {
+        "freshness": "current",
+        "phase": "running",
+        "requirementsRevision": 2,
+        "revision": 3,
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "freshness": "current",
+        "phase": "future_status",
+        "requirementsRevision": 2,
+        "revision": 3,
+        "threadId": "thread-1",
+        "workId": "work-1"
+      },
+      "name": "future-status",
+      "value": {
+        "freshness": "current",
+        "phase": "future_status",
+        "requirementsRevision": 2,
+        "revision": 3,
+        "threadId": "thread-1",
+        "workId": "work-1"
+      }
+    },
+    {
+      "decoded": {
+        "freshness": "partial",
+        "pendingInputs": [
+          {
+            "inputId": "input-1",
+            "sequence": 1,
+            "state": "queued"
+          },
+          {
+            "inputId": "input-2",
+            "sequence": 2,
+            "state": "rejected"
+          },
+          {
+            "inputId": "input-3",
+            "sequence": 3,
+            "state": "future_state"
+          }
+        ],
+        "phase": "running",
+        "requirementsRevision": 2,
+        "revision": 3,
+        "threadId": "thread-1",
+        "unconsumedInputs": 3,
+        "workId": "work-1"
+      },
+      "name": "pending-requirements",
+      "value": {
+        "freshness": "partial",
+        "pendingInputs": [
+          {
+            "inputId": "input-1",
+            "sequence": 1,
+            "state": "queued"
+          },
+          {
+            "inputId": "input-2",
+            "sequence": 2,
+            "state": "rejected"
+          },
+          {
+            "inputId": "input-3",
+            "sequence": 3,
+            "state": "future_state"
+          }
+        ],
+        "phase": "running",
+        "requirementsRevision": 2,
+        "revision": 3,
+        "threadId": "thread-1",
+        "unconsumedInputs": 3,
+        "workId": "work-1"
+      }
+    }
+  ],
+  "ContinuousWorkWaitView": [
+    {
+      "decoded": {
+        "kind": "user",
+        "reference": "question-1"
+      },
+      "name": "pending-user",
+      "value": {
+        "kind": "user",
+        "reference": "question-1"
+      }
+    }
+  ]
+}

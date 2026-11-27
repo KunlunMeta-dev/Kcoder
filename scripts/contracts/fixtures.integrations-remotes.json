@@ -1,0 +1,656 @@
+{
+  "RemoteCapabilityCatalogReadParams": {
+    "valid": [
+      {
+        "name": "initial-read",
+        "value": {}
+      },
+      {
+        "name": "opaque-cursor",
+        "value": {
+          "cursor": "owned-cursor"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "cannot-execute",
+        "value": {
+          "execute": true
+        }
+      }
+    ]
+  },
+  "RemoteCapabilityCatalog": {
+    "valid": [
+      {
+        "name": "unknown-total",
+        "value": {
+          "snapshotId": "owned",
+          "entries": [],
+          "nextCursor": null,
+          "total": null,
+          "observedAt": "2026-10-25T00:00:00.000Z"
+        }
+      }
+    ],
+    "invalid": []
+  },
+  "RemoteCapabilityObservationState": {
+    "valid": [
+      {
+        "name": "unknown-is-not-ready",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-ready-promise",
+        "value": "ready"
+      }
+    ]
+  },
+  "RemoteCapabilityTransport": {
+    "valid": [
+      {
+        "name": "relay-transport-only",
+        "value": "relay"
+      }
+    ],
+    "invalid": []
+  },
+  "RemoteCapabilitySchemaRef": {
+    "valid": [
+      {
+        "name": "no-producer-hash",
+        "value": {
+          "name": "IntegrationScope",
+          "protocolVersion": "2026-07-27",
+          "producerRevision": null
+        }
+      }
+    ],
+    "invalid": []
+  },
+  "RemoteCapabilityCatalogMethod": {
+    "valid": [
+      {
+        "name": "finite-read",
+        "value": "runtime.remotes.readCatalog"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "cannot-delegate",
+        "value": "runtime.remotes.execute"
+      }
+    ]
+  },
+  "RemoteCapabilityBoundary": {
+    "valid": [
+      {
+        "name": "unknown-without-execution-authority",
+        "value": {
+          "resource": null,
+          "location": "selected_native_target",
+          "authorization": "revalidate_native_policy_per_request",
+          "allowedModels": "not_observed",
+          "budget": "not_reserved",
+          "tools": "not_observed",
+          "confirmation": "native_request_policy",
+          "inputTransfer": "not_observed",
+          "resultTransfer": "not_observed"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "caller-authority-rejected",
+        "value": {
+          "resource": null,
+          "location": "selected_native_target",
+          "authorization": "revalidate_native_policy_per_request",
+          "allowedModels": "not_observed",
+          "budget": "not_reserved",
+          "tools": "not_observed",
+          "confirmation": "native_request_policy",
+          "inputTransfer": "not_observed",
+          "resultTransfer": "not_observed",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "RemoteCapabilityEntry": {
+    "valid": [
+      {
+        "name": "unknown-without-execution-authority",
+        "value": {
+          "id": "owned-target:native",
+          "capability": "native.protocol",
+          "purpose": "native_protocol",
+          "targetId": "owned-target",
+          "transport": "ssh",
+          "protocol": "kcoder_app_server",
+          "protocolVersion": null,
+          "implementationVersion": null,
+          "state": "unknown",
+          "businessState": "unknown",
+          "identityState": "unknown",
+          "nativeOwner": null,
+          "schemas": [],
+          "boundary": {
+            "resource": null,
+            "location": "selected_native_target",
+            "authorization": "revalidate_native_policy_per_request",
+            "allowedModels": "not_observed",
+            "budget": "not_reserved",
+            "tools": "not_observed",
+            "confirmation": "native_request_policy",
+            "inputTransfer": "not_observed",
+            "resultTransfer": "not_observed"
+          },
+          "observedAt": null,
+          "reasonCode": "REMOTE_CONNECTION_NOT_OBSERVED"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "caller-authority-rejected",
+        "value": {
+          "id": "owned-target:native",
+          "capability": "native.protocol",
+          "purpose": "native_protocol",
+          "targetId": "owned-target",
+          "transport": "ssh",
+          "protocol": "kcoder_app_server",
+          "protocolVersion": null,
+          "implementationVersion": null,
+          "state": "unknown",
+          "businessState": "unknown",
+          "identityState": "unknown",
+          "nativeOwner": null,
+          "schemas": [],
+          "boundary": {
+            "resource": null,
+            "location": "selected_native_target",
+            "authorization": "revalidate_native_policy_per_request",
+            "allowedModels": "not_observed",
+            "budget": "not_reserved",
+            "tools": "not_observed",
+            "confirmation": "native_request_policy",
+            "inputTransfer": "not_observed",
+            "resultTransfer": "not_observed"
+          },
+          "observedAt": null,
+          "reasonCode": "REMOTE_CONNECTION_NOT_OBSERVED",
+          "callerAuthority": true
+        }
+      }
+    ]
+  },
+  "RemoteOperationControlParams": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": {
+          "requestId": "observe-original",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          },
+          "operationId": "original-remote"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": {
+          "requestId": "observe-original",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          },
+          "operationId": "original-remote",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "RemoteOperationReceiverStatus": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": "interrupted"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": "not_a_contract_variant"
+      }
+    ]
+  },
+  "RemoteOperationCleanupStatus": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": "unconfirmed"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": "not_a_contract_variant"
+      }
+    ]
+  },
+  "RemoteOperationProtocolStatus": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": "not_a_contract_variant"
+      }
+    ]
+  },
+  "RemoteOperationProtocolStage": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": {
+          "stage": "prompt",
+          "status": "unknown"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": {
+          "stage": "prompt",
+          "status": "unknown",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "RemoteOperationReceiver": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": {
+          "status": "completed",
+          "identity": {
+            "threadId": "receiver-thread",
+            "turnId": "receiver-turn",
+            "attemptId": "receiver-attempt"
+          },
+          "terminalConfirmed": true,
+          "finishedAtMs": 1000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": {
+          "status": "completed",
+          "identity": {
+            "threadId": "receiver-thread",
+            "turnId": "receiver-turn",
+            "attemptId": "receiver-attempt"
+          },
+          "terminalConfirmed": true,
+          "finishedAtMs": 1000,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "RemoteOperationArtifact": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": {
+          "id": "remote-output-artifact",
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 815
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": {
+          "id": "remote-output-artifact",
+          "revision": 1,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bytes": 815,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "RemoteOperationSnapshot": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": {
+          "operationId": "original-remote",
+          "operationRevision": 2,
+          "operationPhase": "executing",
+          "journalRevision": 5,
+          "receiver": {
+            "status": "completed",
+            "identity": {
+              "threadId": "receiver-thread",
+              "turnId": "receiver-turn",
+              "attemptId": "receiver-attempt"
+            },
+            "terminalConfirmed": true,
+            "finishedAtMs": 1000
+          },
+          "cleanup": "confirmed",
+          "protocol": [
+            {
+              "stage": "prompt",
+              "status": "received"
+            }
+          ],
+          "artifact": {
+            "id": "remote-output-artifact",
+            "revision": 1,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 815
+          },
+          "businessCompleted": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": {
+          "operationId": "original-remote",
+          "operationRevision": 2,
+          "operationPhase": "executing",
+          "journalRevision": 5,
+          "receiver": {
+            "status": "completed",
+            "identity": {
+              "threadId": "receiver-thread",
+              "turnId": "receiver-turn",
+              "attemptId": "receiver-attempt"
+            },
+            "terminalConfirmed": true,
+            "finishedAtMs": 1000
+          },
+          "cleanup": "confirmed",
+          "protocol": [
+            {
+              "stage": "prompt",
+              "status": "received"
+            }
+          ],
+          "artifact": {
+            "id": "remote-output-artifact",
+            "revision": 1,
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 815
+          },
+          "businessCompleted": false,
+          "approved": true
+        }
+      }
+    ]
+  },
+  "RemoteOperationControlOutcome": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": "already_terminal"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": "not_a_contract_variant"
+      }
+    ]
+  },
+  "RemoteOperationControlReply": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": {
+          "requestId": "observe-original",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          },
+          "operationId": "original-remote",
+          "outcome": "observed",
+          "snapshot": {
+            "operationId": "original-remote",
+            "operationRevision": 2,
+            "operationPhase": "executing",
+            "journalRevision": 5,
+            "receiver": {
+              "status": "completed",
+              "identity": {
+                "threadId": "receiver-thread",
+                "turnId": "receiver-turn",
+                "attemptId": "receiver-attempt"
+              },
+              "terminalConfirmed": true,
+              "finishedAtMs": 1000
+            },
+            "cleanup": "confirmed",
+            "protocol": [
+              {
+                "stage": "prompt",
+                "status": "received"
+              }
+            ],
+            "artifact": {
+              "id": "remote-output-artifact",
+              "revision": 1,
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 815
+            },
+            "businessCompleted": false
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": {
+          "requestId": "observe-original",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          },
+          "operationId": "original-remote",
+          "outcome": "observed",
+          "snapshot": {
+            "operationId": "original-remote",
+            "operationRevision": 2,
+            "operationPhase": "executing",
+            "journalRevision": 5,
+            "receiver": {
+              "status": "completed",
+              "identity": {
+                "threadId": "receiver-thread",
+                "turnId": "receiver-turn",
+                "attemptId": "receiver-attempt"
+              },
+              "terminalConfirmed": true,
+              "finishedAtMs": 1000
+            },
+            "cleanup": "confirmed",
+            "protocol": [
+              {
+                "stage": "prompt",
+                "status": "received"
+              }
+            ],
+            "artifact": {
+              "id": "remote-output-artifact",
+              "revision": 1,
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "bytes": 815
+            },
+            "businessCompleted": false
+          },
+          "approved": true
+        }
+      }
+    ]
+  },
+  "RemoteOperationControlMethod": {
+    "valid": [
+      {
+        "name": "original-owned-native-projection",
+        "value": "integrations/remotes/readOperation"
+      },
+      {
+        "name": "read-only-own-originals",
+        "value": "integrations/remotes/listOperations"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-or-execution-marker",
+        "value": "not_a_contract_variant"
+      }
+    ]
+  },
+  "RemoteOperationListParams": {
+    "valid": [
+      {
+        "name": "own-namespace-observation",
+        "value": {
+          "requestId": "read-recent-originals",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "cannot-supply-launch-authority",
+        "value": {
+          "requestId": "read-recent-originals",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          },
+          "command": "new-runner"
+        }
+      }
+    ]
+  },
+  "RemoteOperationSummary": {
+    "valid": [
+      {
+        "name": "own-namespace-observation",
+        "value": {
+          "operationId": "original-remote",
+          "journalRevision": 5,
+          "receiverObserved": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "cannot-supply-launch-authority",
+        "value": {
+          "operationId": "original-remote",
+          "journalRevision": 5,
+          "receiverObserved": true,
+          "command": "new-runner"
+        }
+      }
+    ]
+  },
+  "RemoteOperationListReply": {
+    "valid": [
+      {
+        "name": "own-namespace-observation",
+        "value": {
+          "requestId": "read-recent-originals",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          },
+          "items": [
+            {
+              "operationId": "original-remote",
+              "journalRevision": 5,
+              "receiverObserved": true
+            }
+          ],
+          "total": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "cannot-supply-launch-authority",
+        "value": {
+          "requestId": "read-recent-originals",
+          "scope": {
+            "accountId": "account-1",
+            "targetId": "target-1",
+            "workspaceId": "workspace-1",
+            "identityGeneration": "generation-1",
+            "targetRevision": "configuration-1"
+          },
+          "items": [
+            {
+              "operationId": "original-remote",
+              "journalRevision": 5,
+              "receiverObserved": true
+            }
+          ],
+          "total": 1,
+          "command": "new-runner"
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,408 @@
+{
+  "TaskComparisonBindParams": [
+    {
+      "decoded": {
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "expectedRevision": 2,
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "path": "/managed/a",
+        "requirement": "Implement one requirement",
+        "sourcePath": "/source",
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      },
+      "name": "explicit_owned_record",
+      "value": {
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "expectedRevision": 2,
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "path": "/managed/a",
+        "requirement": "Implement one requirement",
+        "sourcePath": "/source",
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "TaskComparisonBinding": [
+    {
+      "decoded": {
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "branch": "comparison/a",
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selection": null,
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      },
+      "name": "explicit_owned_record",
+      "value": {
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "branch": "comparison/a",
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selection": null,
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      }
+    },
+    {
+      "decoded": {
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "branch": "comparison/a",
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selection": null,
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      },
+      "name": "omitted_optional_selection",
+      "value": {
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "branch": "comparison/a",
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      }
+    },
+    {
+      "decoded": {
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "branch": "comparison/a",
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selection": {
+          "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "selectedAtMs": 1
+        },
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      },
+      "name": "selected_existing_alternative",
+      "value": {
+        "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "branch": "comparison/a",
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "label": "Approach A",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selection": {
+          "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "selectedAtMs": 1
+        },
+        "taskId": "task-1",
+        "threadId": "thread-1"
+      }
+    }
+  ],
+  "TaskComparisonReadParams": [
+    {
+      "decoded": {
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "sourcePath": "/source"
+      },
+      "name": "explicit_owned_record",
+      "value": {
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "sourcePath": "/source"
+      }
+    }
+  ],
+  "TaskComparisonReadResult": [
+    {
+      "decoded": {
+        "candidates": [
+          {
+            "artifacts": [],
+            "binding": {
+              "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "comparison/a",
+              "comparisonId": "requirement-1",
+              "deviceId": "target-1",
+              "label": "Approach A",
+              "ownerThreadId": "owner-1",
+              "requirement": "Implement one requirement",
+              "selection": null,
+              "taskId": "task-1",
+              "threadId": "thread-1"
+            },
+            "checks": [
+              {
+                "attemptId": "attempt-1",
+                "command": "cargo test focused",
+                "cwd": "/managed/a",
+                "detailsTruncated": false,
+                "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "exitCode": 1,
+                "ordinal": 1,
+                "outcome": "failed",
+                "outputPreview": "CHECK_FAILED",
+                "turnId": "turn-1"
+              }
+            ],
+            "evidencePartial": false,
+            "git": {
+              "branch": "comparison/a",
+              "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "diffPreview": "+implementation",
+              "dirty": true,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "statusPreview": " M answer.txt",
+              "truncated": false
+            },
+            "path": "/managed/a",
+            "resultPreview": "Task report, not proof of correctness.",
+            "revision": 3,
+            "sourcePath": "/source",
+            "state": "active",
+            "unavailable": [],
+            "usage": {
+              "assistantMessages": 1,
+              "costMicrousd": null,
+              "inputTokens": 100,
+              "outputTokens": 20,
+              "usageSamples": 1
+            },
+            "worktreeId": "alternative-a"
+          }
+        ],
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selectedThreadId": null,
+        "sourcePath": "/source"
+      },
+      "name": "explicit_owned_record",
+      "value": {
+        "candidates": [
+          {
+            "artifacts": [],
+            "binding": {
+              "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "comparison/a",
+              "comparisonId": "requirement-1",
+              "deviceId": "target-1",
+              "label": "Approach A",
+              "ownerThreadId": "owner-1",
+              "requirement": "Implement one requirement",
+              "selection": null,
+              "taskId": "task-1",
+              "threadId": "thread-1"
+            },
+            "checks": [
+              {
+                "attemptId": "attempt-1",
+                "command": "cargo test focused",
+                "cwd": "/managed/a",
+                "detailsTruncated": false,
+                "evidenceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+                "exitCode": 1,
+                "ordinal": 1,
+                "outcome": "failed",
+                "outputPreview": "CHECK_FAILED",
+                "turnId": "turn-1"
+              }
+            ],
+            "evidencePartial": false,
+            "git": {
+              "branch": "comparison/a",
+              "contentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+              "diffPreview": "+implementation",
+              "dirty": true,
+              "headCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              "statusPreview": " M answer.txt",
+              "truncated": false
+            },
+            "path": "/managed/a",
+            "resultPreview": "Task report, not proof of correctness.",
+            "revision": 3,
+            "sourcePath": "/source",
+            "state": "active",
+            "unavailable": [],
+            "usage": {
+              "assistantMessages": 1,
+              "costMicrousd": null,
+              "inputTokens": 100,
+              "outputTokens": 20,
+              "usageSamples": 1
+            },
+            "worktreeId": "alternative-a"
+          }
+        ],
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selectedThreadId": null,
+        "sourcePath": "/source"
+      }
+    },
+    {
+      "decoded": {
+        "candidates": [],
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "requirement": null,
+        "selectedThreadId": null,
+        "sourcePath": "/source"
+      },
+      "name": "empty_comparison",
+      "value": {
+        "candidates": [],
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "requirement": null,
+        "selectedThreadId": null,
+        "sourcePath": "/source"
+      }
+    },
+    {
+      "decoded": {
+        "candidates": [
+          {
+            "artifacts": [],
+            "binding": {
+              "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "comparison/a",
+              "comparisonId": "requirement-1",
+              "deviceId": "target-1",
+              "label": "Approach A",
+              "ownerThreadId": "owner-1",
+              "requirement": "Implement one requirement",
+              "selection": null,
+              "taskId": "task-1",
+              "threadId": "thread-1"
+            },
+            "checks": [],
+            "evidencePartial": true,
+            "git": null,
+            "path": "/managed/a",
+            "resultPreview": null,
+            "revision": 3,
+            "sourcePath": "/source",
+            "state": "active",
+            "unavailable": [
+              "git_unavailable",
+              "transcript_unavailable"
+            ],
+            "usage": {
+              "assistantMessages": 0,
+              "costMicrousd": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "usageSamples": 0
+            },
+            "worktreeId": "alternative-a"
+          }
+        ],
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selectedThreadId": null,
+        "sourcePath": "/source"
+      },
+      "name": "honest_unknown_evidence_usage_cost",
+      "value": {
+        "candidates": [
+          {
+            "artifacts": [],
+            "binding": {
+              "baseCommit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "branch": "comparison/a",
+              "comparisonId": "requirement-1",
+              "deviceId": "target-1",
+              "label": "Approach A",
+              "ownerThreadId": "owner-1",
+              "requirement": "Implement one requirement",
+              "selection": null,
+              "taskId": "task-1",
+              "threadId": "thread-1"
+            },
+            "checks": [],
+            "evidencePartial": true,
+            "git": null,
+            "path": "/managed/a",
+            "resultPreview": null,
+            "revision": 3,
+            "sourcePath": "/source",
+            "state": "active",
+            "unavailable": [
+              "git_unavailable",
+              "transcript_unavailable"
+            ],
+            "usage": {
+              "assistantMessages": 0,
+              "costMicrousd": null,
+              "inputTokens": null,
+              "outputTokens": null,
+              "usageSamples": 0
+            },
+            "worktreeId": "alternative-a"
+          }
+        ],
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "ownerThreadId": "owner-1",
+        "requirement": "Implement one requirement",
+        "selectedThreadId": null,
+        "sourcePath": "/source"
+      }
+    }
+  ],
+  "TaskComparisonSelectParams": [
+    {
+      "decoded": {
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "expectedContentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "expectedHeadCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "expectedRevision": 3,
+        "ownerThreadId": "owner-1",
+        "sourcePath": "/source",
+        "threadId": "thread-1"
+      },
+      "name": "explicit_owned_record",
+      "value": {
+        "comparisonId": "requirement-1",
+        "deviceId": "target-1",
+        "expectedContentToken": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "expectedHeadCommit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "expectedRevision": 3,
+        "ownerThreadId": "owner-1",
+        "sourcePath": "/source",
+        "threadId": "thread-1"
+      }
+    }
+  ]
+}

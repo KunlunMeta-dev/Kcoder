@@ -1,0 +1,810 @@
+use super::{TuiDevScenario, daemon};
+use clap::{Parser, ValueEnum};
+use kcoder_config::{ConfigScope, PermissionMode};
+pub use kcoder_migration_client::cli_args::*;
+use std::path::PathBuf;
+#[path = "cli_args/peer_gateway.rs"]
+mod peer_gateway;
+pub use peer_gateway::PeerGatewayAction;
+#[path = "cli_args/peer_ssh.rs"]
+mod peer_ssh;
+pub use peer_ssh::PeerSshAction;
+// Parser tests for the migration arguments re-exported above; distinct names keep
+// the public glob re-export of `migration_budget`/`migration_resources` visible.
+#[cfg(test)]
+#[path = "cli_args/migration_budget.rs"]
+mod migration_budget_tests;
+#[cfg(test)]
+#[path = "cli_args/migration_resources.rs"]
+mod migration_resources_tests;
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum RetentionParentMode {
+    LocalOs,
+    Account,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+pub enum CliPermissionMode {
+    Ask,
+    Auto,
+    AcceptEdits,
+    DontAsk,
+    Bypass,
+    Yolo,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ToolProfile {
+    /// Follow tools.profile from settings (full by default).
+    Auto,
+    /// Expose every built-in tool.
+    Full,
+    /// Expose core development, multi-agent, task, goal, and web tools.
+    Core,
+    /// Expose the minimal development tool set without user-question tools.
+    Nano,
+    /// Send no tools to the model.
+    None,
+}
+
+impl ToolProfile {
+    pub fn effective(self, configured: kcoder_config::ToolProfile) -> kcoder_config::ToolProfile {
+        match self {
+            Self::Auto => configured,
+            Self::Full => kcoder_config::ToolProfile::Full,
+            Self::Core => kcoder_config::ToolProfile::Core,
+            Self::Nano => kcoder_config::ToolProfile::Nano,
+            Self::None => kcoder_config::ToolProfile::None,
+        }
+    }
+}
+
+impl From<CliPermissionMode> for PermissionMode {
+    fn from(mode: CliPermissionMode) -> Self {
+        match mode {
+            CliPermissionMode::Ask => PermissionMode::Ask,
+            CliPermissionMode::Auto => PermissionMode::Auto,
+            CliPermissionMode::AcceptEdits => PermissionMode::AcceptEdits,
+            CliPermissionMode::DontAsk => PermissionMode::DontAsk,
+            CliPermissionMode::Bypass => PermissionMode::Bypass,
+            CliPermissionMode::Yolo => PermissionMode::Yolo,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Parser)]
+#[command(name = "kcoder", version, about = "KCoder")]
+pub struct Cli {
+    /// Private ACP backend ownership policy; never a model tool argument.
+    #[arg(long, hide = true, global = true)]
+    pub internal_acp_backend: bool,
+    /// Optional single prompt to run in headless mode. Leading hyphens are
+    /// accepted so prompts like "- do X" are not misparsed as flags.
+    #[arg(allow_hyphen_values = true)]
+    pub prompt: Option<String>,
+
+    #[command(subcommand)]
+    pub command: Option<Commands>,
+
+    /// Attach this interactive Source to an already-paired Gateway catalog target.
+    #[arg(long, global = true)]
+    pub peer_gateway_server: Option<String>,
+    /// Legacy compatibility option; peer Gateway HTTP is accepted regardless of this value.
+    #[arg(long, global = true, hide = true)]
+    pub peer_gateway_allow_insecure: bool,
+
+    /// Read-only settings overlay. May be repeated; later files win.
+    #[arg(long = "settings-file", value_name = "PATH", global = true)]
+    pub settings_files: Vec<PathBuf>,
+
+    /// Dotenv file supplying credentials for this process only.
+    #[arg(long = "credential-env-file", value_name = "PATH", global = true)]
+    pub credential_env_file: Option<PathBuf>,
+
+    /// Compatibility alias for selecting a provider ID; prefer --provider.
+    #[arg(long, env = "KCODER_PROFILE", global = true)]
+    pub profile: Option<String>,
+
+    /// Model identifier to use.
+    #[arg(short, long, env = "KCODER_MODEL", global = true)]
+    pub model: Option<String>,
+
+    /// Maximum tokens to generate in a single model response.
+    #[arg(long, env = "KCODER_MAX_TOKENS", global = true)]
+    pub max_tokens: Option<u32>,
+
+    /// Maximum number of retries for transient provider/stream errors.
+    #[arg(long, env = "KCODER_MAX_RETRIES", global = true)]
+    pub max_retries: Option<usize>,
+
+    /// Wall-clock budget for a single turn in seconds (soft deadline).
+    #[arg(long, env = "KCODER_MAX_DURATION_SECS", global = true)]
+    pub max_duration_secs: Option<u64>,
+
+    /// Base retry delay in milliseconds for transient provider/stream errors.
+    #[arg(long, env = "KCODER_RETRY_BASE_DELAY_MS", global = true)]
+    pub retry_base_delay_ms: Option<u64>,
+
+    /// Provider used only for conversation compaction summaries. By default,
+    /// the active provider is reused.
+    #[arg(long, env = "KCODER_SUMMARY_PROVIDER", global = true)]
+    pub summary_provider: Option<String>,
+
+    /// Full provider configuration used for conversation compaction summaries.
+    #[arg(long, env = "KCODER_SUMMARY_PROFILE", global = true)]
+    pub summary_profile: Option<String>,
+
+    /// Model used only for conversation compaction summaries. By default, the
+    /// active model is reused.
+    #[arg(long, env = "KCODER_SUMMARY_MODEL", global = true)]
+    pub summary_model: Option<String>,
+
+    /// Maximum tokens generated by the summary model during compaction.
+    #[arg(long, env = "KCODER_SUMMARY_MAX_TOKENS", global = true)]
+    pub summary_max_tokens: Option<u32>,
+
+    /// Provider ID from settings.json, or a built-in transport identifier.
+    #[arg(long, env = "KCODER_PROVIDER", global = true)]
+    pub provider: Option<String>,
+
+    /// Explicit API key override for Anthropic-compatible providers.
+    #[arg(short, long, global = true, hide_env_values = true)]
+    pub api_key: Option<String>,
+
+    /// Explicit base URL override for Anthropic-compatible providers.
+    #[arg(long, global = true)]
+    pub base_url: Option<String>,
+
+    /// OpenAI API key (defaults to OPENAI_API_KEY env var).
+    #[arg(long, env = "OPENAI_API_KEY", global = true, hide_env_values = true)]
+    pub openai_api_key: Option<String>,
+
+    /// OpenAI base URL (defaults to OPENAI_BASE_URL env var). May be a /v1 base URL
+    /// or a full /v1/chat/completions URL.
+    #[arg(long, env = "OPENAI_BASE_URL", global = true)]
+    pub openai_base_url: Option<String>,
+
+    /// OpenAI-compatible User-Agent header (defaults to OPENAI_USER_AGENT env var).
+    #[arg(long, env = "OPENAI_USER_AGENT", global = true)]
+    pub openai_user_agent: Option<String>,
+
+    /// Local OpenAI-compatible base URL for vLLM/SGLang. May be a /v1 base URL
+    /// or a full /v1/chat/completions URL.
+    #[arg(long, env = "KCODER_LOCAL_BASE_URL", global = true)]
+    pub local_base_url: Option<String>,
+
+    /// Optional API key for local OpenAI-compatible servers that enforce auth.
+    #[arg(
+        long,
+        env = "KCODER_LOCAL_API_KEY",
+        global = true,
+        hide_env_values = true
+    )]
+    pub local_api_key: Option<String>,
+
+    /// Gemini API key (defaults to GEMINI_API_KEY env var).
+    #[arg(long, env = "GEMINI_API_KEY", global = true, hide_env_values = true)]
+    pub gemini_api_key: Option<String>,
+
+    /// Grok API key (defaults to GROK_API_KEY env var).
+    #[arg(long, env = "GROK_API_KEY", global = true, hide_env_values = true)]
+    pub grok_api_key: Option<String>,
+
+    /// Permission mode. Clean user configs start in yolo.
+    #[arg(short, long, value_enum, env = "KCODER_PERMISSION_MODE", global = true)]
+    pub permission_mode: Option<CliPermissionMode>,
+
+    /// Tool set override. `auto` follows settings tools.profile (full by default);
+    /// model provider and endpoint location never select a tool set.
+    #[arg(long, value_enum, default_value = "auto", global = true)]
+    pub tool_profile: ToolProfile,
+
+    /// Working directory.
+    #[arg(short, long, global = true)]
+    pub cwd: Option<PathBuf>,
+
+    /// Output headless events as newline-delimited JSON.
+    #[arg(long, global = true)]
+    pub json: bool,
+
+    /// Use legacy inline mode instead of full-screen terminal takeover.
+    #[arg(long = "no-alt-screen", default_value_t = false, global = true)]
+    pub no_alt_screen: bool,
+
+    /// Enable background skill self-improvement review for this session.
+    /// This can spend additional model tokens after completed turns.
+    #[arg(long = "skill-review", alias = "auto-skill-review", global = true)]
+    pub skill_review: bool,
+
+    /// Run as a trajectory-training harness. Disables plugins, the built-in
+    /// kcoder-settings skill, automatic summaries, the memory observer,
+    /// maintenance, retries, and other background model requests.
+    #[arg(long, env = "KCODER_TRAINING_MODE", global = true)]
+    pub training_mode: bool,
+
+    /// Resume a previous session in headless mode: by session id, unique id
+    /// prefix, or `latest` for the most recent session in this directory.
+    #[arg(long, env = "KCODER_RESUME", global = true)]
+    pub resume: Option<String>,
+
+    /// Start session-level read-only orchestration before the first message.
+    #[arg(long, global = true)]
+    pub orchestrate: bool,
+
+    /// Skill that must be loaded and authorized before a headless model request.
+    /// May be specified more than once.
+    #[arg(long = "require-skill", value_name = "NAME", global = true)]
+    pub required_skills: Vec<String>,
+}
+
+#[derive(Debug, Clone, Parser)]
+pub enum Commands {
+    /// Manage this profile's authenticated Gateway peer device.
+    PeerGateway {
+        #[command(subcommand)]
+        action: PeerGatewayAction,
+    },
+    /// Explicitly manage this OS profile's dedicated SSH peer pins.
+    PeerSsh {
+        #[command(subcommand)]
+        action: PeerSshAction,
+    },
+    /// Inspect external configurations and migrate selected Providers without source execution.
+    Migrate {
+        #[command(subcommand)]
+        action: MigrationAction,
+    },
+    /// Run the experimental ACP v1 stdio agent with private sessions and MCP.
+    Acp,
+    /// Print a health check of the environment.
+    Doctor {
+        /// Remove retired channel domain data (bots, events, chat bindings,
+        /// credentials, secret contexts) left by older installs. Asks for
+        /// confirmation on a terminal; never runs automatically.
+        #[arg(long)]
+        clean_legacy_channel_data: bool,
+        /// Confirm the cleanup without prompting (required when not interactive).
+        #[arg(long, requires = "clean_legacy_channel_data")]
+        yes: bool,
+    },
+    /// Generate one plan from independent model drafts and a final synthesis.
+    MoaPlan {
+        /// Planning request passed unchanged to every planner.
+        prompt: String,
+    },
+    /// Manage provider credentials.
+    Auth {
+        #[command(subcommand)]
+        action: Option<AuthAction>,
+    },
+    /// Inspect or modify trust for an explicit project root.
+    Trust {
+        #[command(subcommand)]
+        action: TrustAction,
+    },
+    /// Inspect or update layered settings.
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+    /// Start the interactive TUI with deterministic mock model responses.
+    TuiDev {
+        /// Deterministic mock scenario to stream through the real engine/TUI.
+        #[arg(long, value_enum, default_value = "full-turn")]
+        scenario: TuiDevScenario,
+    },
+    /// MCP server management (stub).
+    Mcp {
+        #[command(subcommand)]
+        action: McpAction,
+    },
+    /// Manage local plugins.
+    Plugin {
+        #[command(subcommand)]
+        action: PluginAction,
+    },
+    /// Manage local plugin marketplaces.
+    Marketplace {
+        #[command(subcommand)]
+        action: MarketplaceAction,
+    },
+    /// Manage tmux-backed background sessions (bg/ps/attach/kill/logs).
+    Daemon {
+        #[command(subcommand)]
+        action: daemon::DaemonAction,
+    },
+    /// Run the machine-readable app server for desktop and SSH clients.
+    AppServer {
+        /// Transport URL. The first release supports stdio:// only.
+        #[arg(long, default_value = "stdio://")]
+        listen: String,
+        /// Use a deterministic provider for client development and tests.
+        #[arg(long, value_enum)]
+        scenario: Option<TuiDevScenario>,
+        /// Private source-transfer parent declaration; grants no retention authority.
+        #[arg(long, hide = true, conflicts_with_all = ["retention_parent_v1", "retention_account_principal_id", "retention_account_uid"])]
+        migration_source_parent_local_v1: bool,
+        /// Peer-only SSH launch nonce; actual kernel parent capture is mandatory.
+        #[arg(long, hide = true, conflicts_with_all = ["migration_source_parent_local_v1", "retention_parent_v1", "retention_account_principal_id", "retention_account_uid"])]
+        peer_router_parent_ssh_v1: Option<String>,
+        /// A stored explicit enrollment selector; a fresh mutual proof is still mandatory.
+        #[arg(long, hide = true, conflicts_with_all = ["peer_router_parent_ssh_v1", "migration_source_parent_local_v1", "retention_parent_v1", "retention_account_principal_id", "retention_account_uid"])]
+        peer_router_parent_ssh_v2: Option<String>,
+        #[arg(long, value_enum, hide = true)]
+        retention_parent_v1: Option<RetentionParentMode>,
+        #[arg(long, hide = true)]
+        retention_account_principal_id: Option<String>,
+        #[arg(long, hide = true)]
+        retention_account_uid: Option<u32>,
+    },
+}
+
+#[derive(Debug, Clone, Parser)]
+pub enum TrustAction {
+    /// Show the effective trust decision for a project root.
+    Status {
+        #[arg(long, value_name = "PATH")]
+        path: PathBuf,
+    },
+    /// Persist trust for this project root and its descendants.
+    Add {
+        #[arg(long, value_name = "PATH")]
+        path: PathBuf,
+    },
+    /// Revoke the persisted trust decision for this project root.
+    Revoke {
+        #[arg(long, value_name = "PATH")]
+        path: PathBuf,
+    },
+    /// Persist a never-trust decision for this project root.
+    Never {
+        #[arg(long, value_name = "PATH")]
+        path: PathBuf,
+    },
+}
+
+#[derive(Debug, Clone, Parser)]
+pub enum AuthAction {
+    /// Store an API key in the user-only credentials file.
+    Login {
+        /// Provider/profile/credential ID. Custom configured providers are accepted.
+        #[arg(long = "provider")]
+        provider: String,
+        /// API key. Omit this option to enter it without terminal echo.
+        #[arg(long, hide_env_values = true)]
+        api_key: Option<String>,
+        /// Read the provider API key from this dotenv file.
+        #[arg(long, value_name = "PATH")]
+        env_file: Option<PathBuf>,
+        /// Where to keep the secret; `auto` prefers the operating-system credential store.
+        #[arg(long, value_name = "MODE", value_parser = ["auto", "keyring", "file"])]
+        store: Option<String>,
+    },
+    /// Move stored API keys between the operating-system credential store and the file.
+    Migrate {
+        /// Destination: `keyring` stores secrets in the OS store, `file` keeps them plaintext.
+        #[arg(long = "to", value_name = "DESTINATION", value_parser = ["keyring", "file"])]
+        to: String,
+    },
+    /// Import credentials for every configured provider found in a dotenv file.
+    Import {
+        /// Dotenv file containing keys named by provider `credential_env` fields.
+        #[arg(long, value_name = "PATH")]
+        env_file: PathBuf,
+    },
+    /// Remove a stored API key.
+    Logout {
+        #[arg(long = "provider")]
+        provider: String,
+    },
+    /// Show credential availability without revealing secret values.
+    Status,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ConfigScopeArg {
+    User,
+    Project,
+    Local,
+}
+
+impl From<ConfigScopeArg> for ConfigScope {
+    fn from(scope: ConfigScopeArg) -> Self {
+        match scope {
+            ConfigScopeArg::User => ConfigScope::User,
+            ConfigScopeArg::Project => ConfigScope::Project,
+            ConfigScopeArg::Local => ConfigScope::Local,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Parser)]
+pub enum ConfigAction {
+    /// Report actual persistent/cache paths and sources as JSON without initializing storage.
+    StoragePaths,
+    /// List connection templates without reading or writing configuration.
+    Templates,
+    /// Preview an unverified connection template; the model must be chosen explicitly.
+    Template { name: String },
+    /// Print configuration file paths.
+    Path {
+        #[arg(long, value_enum)]
+        scope: Option<ConfigScopeArg>,
+    },
+    /// Create a settings file without overwriting an existing one.
+    Init {
+        #[arg(long, value_enum, default_value = "user")]
+        scope: ConfigScopeArg,
+    },
+    /// Add newly shipped deployment profiles without overwriting user values.
+    Migrate,
+    /// Merge a settings document into a writable configuration layer.
+    Import {
+        #[arg(long, value_name = "PATH")]
+        file: PathBuf,
+        #[arg(long, value_enum, default_value = "user")]
+        scope: ConfigScopeArg,
+    },
+    /// Print the effective merged settings.
+    List {
+        /// Include loaded files and per-field source annotations.
+        #[arg(long)]
+        sources: bool,
+    },
+    /// Read one effective setting using a dotted path.
+    Get {
+        key: String,
+        #[arg(long)]
+        source: bool,
+    },
+    /// Set one setting in a selected configuration layer.
+    Set {
+        key: String,
+        value: String,
+        #[arg(long, value_enum, default_value = "user")]
+        scope: ConfigScopeArg,
+    },
+    /// Remove one setting from a selected configuration layer.
+    Unset {
+        key: String,
+        #[arg(long, value_enum, default_value = "user")]
+        scope: ConfigScopeArg,
+    },
+    /// Parse and merge every active configuration layer.
+    Validate,
+}
+
+#[derive(Debug, Clone, Parser)]
+pub enum McpAction {
+    /// List configured MCP servers.
+    List,
+    /// Add a new stdio MCP server.
+    Add {
+        /// Display name for the server.
+        name: String,
+        /// Command to execute.
+        #[arg(long)]
+        command: String,
+        /// Arguments for the command.
+        #[arg(long, num_args = 0..)]
+        args: Vec<String>,
+        /// Environment variables as KEY=VALUE.
+        #[arg(long, value_delimiter = ',', num_args = 0..)]
+        env: Vec<String>,
+    },
+    /// Remove an MCP server by name.
+    Remove {
+        /// Name of the server to remove.
+        name: String,
+    },
+    /// Connect to an MCP server and list its tools.
+    Test {
+        /// Name of the server to test.
+        name: String,
+    },
+}
+
+#[derive(Debug, Clone, Parser)]
+pub enum PluginAction {
+    /// List discovered plugins and their compatibility status.
+    List {
+        /// Include disabled plugins.
+        #[arg(long)]
+        all: bool,
+        /// Emit stable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Read detailed status for a managed plugin.
+    Read {
+        plugin_id: String,
+        /// Emit stable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect a plugin manifest, contributions, and managed state.
+    Doctor {
+        plugin_id: Option<String>,
+        /// Emit stable JSON output.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Safely copy and install a plugin from a local directory.
+    Install {
+        #[arg(
+            long,
+            value_name = "DIR",
+            required_unless_present = "marketplace",
+            conflicts_with = "marketplace"
+        )]
+        path: Option<PathBuf>,
+        #[arg(long, value_name = "ID", requires = "name")]
+        marketplace: Option<String>,
+        #[arg(long, value_name = "NAME", requires = "marketplace")]
+        name: Option<String>,
+    },
+    /// Uninstall a managed plugin; retain its data directory by default.
+    Uninstall {
+        plugin_id: String,
+        #[arg(long)]
+        purge_data: bool,
+    },
+    /// Enable a managed plugin.
+    Enable { plugin_id: String },
+    /// Disable a managed plugin.
+    Disable { plugin_id: String },
+}
+
+#[derive(Debug, Clone, Parser)]
+pub enum MarketplaceAction {
+    /// List local marketplaces from configuration and trusted projects.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add a local marketplace manifest to user configuration.
+    Add {
+        marketplace_id: String,
+        #[arg(long, value_name = "PATH")]
+        path: PathBuf,
+    },
+    /// Remove a marketplace from user configuration.
+    Remove { marketplace_id: String },
+    /// Reload one or all local marketplaces.
+    Refresh {
+        marketplace_id: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn peer_ssh_explicit_admin_and_v2_selector_remain_separate_from_other_parent_modes() {
+        let parsed = Cli::try_parse_from(["kcoder", "peer-ssh", "observe"]).unwrap();
+        assert!(matches!(
+            parsed.command,
+            Some(Commands::PeerSsh {
+                action: PeerSshAction::Observe
+            })
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "kcoder",
+                "peer-ssh",
+                "apply",
+                "--confirm",
+                "--input",
+                "file",
+                "--command-stdin"
+            ])
+            .is_err()
+        );
+        let parsed = Cli::try_parse_from([
+            "kcoder",
+            "app-server",
+            "--peer-router-parent-ssh-v2",
+            "explicit-enrollment",
+        ])
+        .unwrap();
+        assert!(
+            matches!(parsed.command, Some(Commands::AppServer { peer_router_parent_ssh_v2: Some(id), .. }) if id == "explicit-enrollment")
+        );
+        for other in [
+            "--migration-source-parent-local-v1",
+            "--peer-router-parent-ssh-v1",
+        ] {
+            let mut args = vec![
+                "kcoder",
+                "app-server",
+                "--peer-router-parent-ssh-v2",
+                "explicit-enrollment",
+                other,
+            ];
+            if other.ends_with("ssh-v1") {
+                args.push("nonce");
+            }
+            assert!(Cli::try_parse_from(args).is_err());
+        }
+    }
+
+    #[test]
+    fn peer_ssh_parent_has_its_own_hidden_nonce_and_conflicts_with_other_parent_purposes() {
+        let nonce = "a".repeat(64);
+        let parsed = Cli::try_parse_from([
+            "kcoder",
+            "app-server",
+            "--peer-router-parent-ssh-v1",
+            &nonce,
+        ])
+        .unwrap();
+        assert!(matches!(parsed.command, Some(Commands::AppServer {
+            peer_router_parent_ssh_v1: Some(value), migration_source_parent_local_v1: false,
+            retention_parent_v1: None, ..
+        }) if value == nonce));
+        assert!(
+            Cli::try_parse_from([
+                "kcoder",
+                "app-server",
+                "--peer-router-parent-ssh-v1",
+                &nonce,
+                "--migration-source-parent-local-v1"
+            ])
+            .is_err()
+        );
+        assert!(
+            Cli::try_parse_from([
+                "kcoder",
+                "app-server",
+                "--peer-router-parent-ssh-v1",
+                &nonce,
+                "--retention-parent-v1",
+                "local-os"
+            ])
+            .is_err()
+        );
+        use clap::CommandFactory;
+        let mut command = Cli::command();
+        assert!(
+            !command
+                .find_subcommand_mut("app-server")
+                .unwrap()
+                .render_help()
+                .to_string()
+                .contains("peer-router-parent")
+        );
+    }
+
+    #[test]
+    fn source_only_parent_flag_is_explicit_hidden_and_conflicts_with_retention_claims() {
+        let ordinary = Cli::try_parse_from(["kcoder", "app-server"]).unwrap();
+        assert!(matches!(
+            ordinary.command,
+            Some(Commands::AppServer {
+                migration_source_parent_local_v1: false,
+                ..
+            })
+        ));
+        let source =
+            Cli::try_parse_from(["kcoder", "app-server", "--migration-source-parent-local-v1"])
+                .unwrap();
+        assert!(matches!(
+            source.command,
+            Some(Commands::AppServer {
+                migration_source_parent_local_v1: true,
+                retention_parent_v1: None,
+                ..
+            })
+        ));
+        assert!(
+            Cli::try_parse_from([
+                "kcoder",
+                "app-server",
+                "--migration-source-parent-local-v1",
+                "--retention-parent-v1",
+                "local-os"
+            ])
+            .is_err()
+        );
+        use clap::CommandFactory;
+        let mut command = Cli::command();
+        let help = command
+            .find_subcommand_mut("app-server")
+            .unwrap()
+            .render_help()
+            .to_string();
+        assert!(!help.contains("migration-source-parent"));
+    }
+
+    #[test]
+    fn tool_profile_auto_follows_settings_and_explicit_cli_wins() {
+        use kcoder_config::ToolProfile as ConfigProfile;
+        for configured in [
+            ConfigProfile::Full,
+            ConfigProfile::Core,
+            ConfigProfile::Nano,
+            ConfigProfile::None,
+        ] {
+            assert_eq!(ToolProfile::Auto.effective(configured), configured);
+            assert_eq!(ToolProfile::Full.effective(configured), ConfigProfile::Full);
+            assert_eq!(ToolProfile::Core.effective(configured), ConfigProfile::Core);
+            assert_eq!(ToolProfile::Nano.effective(configured), ConfigProfile::Nano);
+            assert_eq!(ToolProfile::None.effective(configured), ConfigProfile::None);
+        }
+        let cli = Cli::try_parse_from(["kcoder"]).unwrap();
+        assert_eq!(cli.tool_profile, ToolProfile::Auto);
+        let cli = Cli::try_parse_from(["kcoder", "--tool-profile", "core"]).unwrap();
+        assert_eq!(cli.tool_profile, ToolProfile::Core);
+    }
+
+    #[test]
+    fn plugin_lifecycle_commands_parse_stable_ids_and_paths() {
+        let install =
+            Cli::try_parse_from(["kcoder", "plugin", "install", "--path", "/tmp/demo"]).unwrap();
+        assert!(matches!(
+            install.command,
+            Some(Commands::Plugin {
+                action: PluginAction::Install { path: Some(_), .. }
+            })
+        ));
+
+        let uninstall = Cli::try_parse_from([
+            "kcoder",
+            "plugin",
+            "uninstall",
+            "demo@local",
+            "--purge-data",
+        ])
+        .unwrap();
+        assert!(matches!(
+            uninstall.command,
+            Some(Commands::Plugin {
+                action: PluginAction::Uninstall {
+                    purge_data: true,
+                    ..
+                }
+            })
+        ));
+
+        let marketplace_install = Cli::try_parse_from([
+            "kcoder",
+            "plugin",
+            "install",
+            "--marketplace",
+            "team-tools",
+            "--name",
+            "demo",
+        ])
+        .unwrap();
+        assert!(matches!(
+            marketplace_install.command,
+            Some(Commands::Plugin {
+                action: PluginAction::Install {
+                    path: None,
+                    marketplace: Some(_),
+                    name: Some(_),
+                }
+            })
+        ));
+
+        let marketplace_add = Cli::try_parse_from([
+            "kcoder",
+            "marketplace",
+            "add",
+            "team-tools",
+            "--path",
+            "/tmp/marketplace",
+        ])
+        .unwrap();
+        assert!(matches!(
+            marketplace_add.command,
+            Some(Commands::Marketplace {
+                action: MarketplaceAction::Add { .. }
+            })
+        ));
+    }
+}

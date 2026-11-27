@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 1,
+  "inspectedOn": "2026-10-16",
+  "fixtureKind": "synthetic-structural-regressions",
+  "nativeSourceAcceptance": false,
+  "codex": {
+    "version": "0.163.0",
+    "releaseTag": "rust-v0.163.0",
+    "repository": "https://github.com/openai/codex",
+    "commit": "83086188ae0614bd882818ff1aa23f3194962012",
+    "files": [
+      {
+        "path": "codex-rs/protocol/src/protocol.rs",
+        "sha256": "8a586a54d3ce19e3eaa5410e08c6724b7554f9a70126b3eb309180e54da98655"
+      },
+      {
+        "path": "codex-rs/protocol/src/models.rs",
+        "sha256": "df9a3da250376d86203a8a1219b2e4b5353a62274d094bb36998560433bd58eb"
+      },
+      {
+        "path": "codex-rs/core/src/session/rollout_reconstruction.rs",
+        "sha256": "1f4827c0f383641f2b407d7b40bca671d5d80a73412a1ccc9702ba4181d3d501"
+      },
+      {
+        "path": "codex-rs/core/src/context_manager/history.rs",
+        "sha256": "15ccb88b3df2c8f72f6e6bbdd5788b6d96a1fdf6c00a1f1631679048ba7ca8ca"
+      },
+      {
+        "path": "codex-rs/core/src/event_mapping.rs",
+        "sha256": "39d31853d2ac22df6b96ac22bc5637b5e50e2503e6dab0c3228a5af0759ea1f0"
+      },
+      {
+        "path": "codex-rs/core/src/context_manager/history_user_authorization.rs",
+        "sha256": "f6020fba9fd125682c85895ca44a78500b357b7096691b228d84cf184fb29065"
+      },
+      {
+        "path": "codex-rs/core/src/compact.rs",
+        "sha256": "28363b56f58b999358b3f2fbf9953a1633818c0a74f5a71a3d7f3d813144355a"
+      },
+      {
+        "path": "codex-rs/core/src/context/user_instructions.rs",
+        "sha256": "fd331f381cd81c788c50b951fb7f5641581cdd5593ff1cc92dd47428b42ea7b9"
+      },
+      {
+        "path": "codex-rs/core/src/context/agent_message_board_notification.rs",
+        "sha256": "2be43431555ee221015eb36cd13530c8b98b046850e87fc82273537e34d7380a"
+      },
+      {
+        "path": "codex-rs/core/src/context/user_shell_command.rs",
+        "sha256": "da53ea5b48e3bfce73130e8fa531eb08592838c740e15ed4fbe078acb9dc15da"
+      },
+      {
+        "path": "codex-rs/core/src/context/turn_aborted.rs",
+        "sha256": "d9450f4e3e0f7e6ed81b38dd5cad8e91f21e9fdfc0297778843bec0eefa858c1"
+      },
+      {
+        "path": "codex-rs/core/src/context/subagent_notification.rs",
+        "sha256": "e4824dfe4e6602039fcd27626993985714936b1a6855daa07c221b73a40380d0"
+      },
+      {
+        "path": "codex-rs/core/src/context/internal_model_context.rs",
+        "sha256": "f5cf87835ffad3de6a8ece56aa218ecd8d3444b9878e79fed88f620bcf110a3d"
+      },
+      {
+        "path": "codex-rs/core/src/context/recommended_plugins_instructions.rs",
+        "sha256": "42cedd51b837c6e0d101172978201273502e6747deda2b4224207823c08b59d2"
+      },
+      {
+        "path": "codex-rs/core/src/context/legacy_unified_exec_process_limit_warning.rs",
+        "sha256": "9a42ce8c54031b7e5b9eed59bafd5cfacdf2a7d3b6be12b4cf4fae8b37ca8950"
+      },
+      {
+        "path": "codex-rs/core/src/context/legacy_apply_patch_exec_command_warning.rs",
+        "sha256": "6198c619ff05df5a9dc3fdd3ea78035b24124d2ab4f6d70bfbeacf9ba1869ba3"
+      },
+      {
+        "path": "codex-rs/core/src/context/legacy_model_mismatch_warning.rs",
+        "sha256": "9eba5d2fdde56ae5169565485357b6269d18fe2fac4038bc85e6aa38c88df379"
+      },
+      {
+        "path": "codex-rs/context-fragments/src/lib.rs",
+        "sha256": "af2281a84d62524be3804838783bd4fa35960db0bc31b8e47093d27a1f4dd145"
+      },
+      {
+        "path": "codex-rs/prompts/src/lib.rs",
+        "sha256": "ee859a547cd53708cdd487f6ae5f5b8302e9ec7398a295836cc73b03f88823c6"
+      },
+      {
+        "path": "codex-rs/context-fragments/src/fragment.rs",
+        "sha256": "682ba51fae012019ed71c2fc8d6b9d64ade6457ffd21930847b49f907adb1362"
+      },
+      {
+        "path": "codex-rs/context-fragments/src/additional_context.rs",
+        "sha256": "2a837d023deec9416dff460789555b015892d3dc714a0888e1d1135cb1a5e760"
+      },
+      {
+        "path": "codex-rs/prompts/src/compact.rs",
+        "sha256": "e312a185459a54a6e44ca9021afe933219d5c19f7f8ec4f452dc8f8e16fe242d"
+      },
+      {
+        "path": "codex-rs/core/src/context/world_state/mod.rs",
+        "sha256": "296d38eadb5fe6b256e95c0f4259c1dacfb91732eee80e1ad4d36ee365cbab4c"
+      },
+      {
+        "path": "codex-rs/protocol/src/items.rs",
+        "sha256": "9756af28ceac8e04ff371c55e663f2495da79132087dec65630d359eadcbe248"
+      },
+      {
+        "path": "codex-rs/core/src/context/world_state/environment.rs",
+        "sha256": "49f906ed08cde4a749a407ec58be0aec19b893f83d7032e162bbbfd294289397"
+      },
+      {
+        "path": "codex-rs/ext/skills/src/lib.rs",
+        "sha256": "0d6bb22bd1786d763668ea0df54f729a2f535ad5fd14270491278db8068aac7b"
+      },
+      {
+        "path": "codex-rs/prompts/templates/compact/summary_prefix.md",
+        "sha256": "e9b088e794a6bb9082ac053fcc760bd818d7e720ee4bcdc72c6e480de7b7cb0e"
+      },
+      {
+        "path": "codex-rs/ext/skills/src/fragments.rs",
+        "sha256": "4e61b21994402a08554ae02352a3eb5c99f13f7a7f974ec656a22a3b5eb05a42"
+      },
+      {
+        "path": "codex-rs/protocol/src/agent_path.rs",
+        "sha256": "18ddefda817a89b299cfbec14ea8e95ff4248e9fe5aca616656f39f7d5cfb045"
+      },
+      {
+        "path": "codex-rs/history/src/lib.rs",
+        "sha256": "ce3bcde62a47eebc0a0d63fde6aff96ee5ba3c36a7c594d31acc170ecd8f50c2"
+      },
+      {
+        "path": "codex-rs/history/src/rollout_payload.rs",
+        "sha256": "1f549f4e3f6dc02d31c3360ecd6817ecf6f80f99c263c1f93c625ad1be3164f7"
+      },
+      {
+        "path": "codex-rs/core/src/context/approved_command_prefix_saved.rs",
+        "sha256": "5723d9d246f0f04639148d10a654add82e083447aa94ad0494a341805f1503de"
+      },
+      {
+        "path": "codex-rs/rollout/src/recorder.rs",
+        "sha256": "42a973710d6eb7e6731b3774cdf30dba89f56fd7685cdeac2857825c08b83612"
+      },
+      {
+        "path": "codex-rs/rollout/src/ordinal.rs",
+        "sha256": "a637b3e82ff992cc4d6980fe8b26a07e0595e5d585a808659132d646041198df"
+      },
+      {
+        "path": "codex-rs/rollout/src/rollout_file_name.rs",
+        "sha256": "c3ef4b386fcbb28f8b8a9235e685ece9f9c4bc42931ba1e84d38d11826f19112"
+      },
+      {
+        "path": "codex-rs/rollout/src/metadata.rs",
+        "sha256": "ea04fb804a717722db62d9384f9a13752187c8b7ef8c160484c0f5d6e542f711"
+      },
+      {
+        "path": "codex-rs/rollout/src/seekable_reader.rs",
+        "sha256": "dee3d9e24b880669a8dfb986800a86f0aca08558b1368c99b4aa998bff330b9b"
+      },
+      {
+        "path": "codex-rs/thread-store/src/local/rollout_lineage.rs",
+        "sha256": "f379d3715e0cd3316e6833e57874fb34c3c2ae0a2f492f4dbb3f428b848355ea"
+      },
+      {
+        "path": "codex-rs/thread-store/src/local/paginated_fork.rs",
+        "sha256": "6ac306f8f8ddb83e977467f778cd18a7f67c083793784f4d70e9df13d24fd85c"
+      },
+      {
+        "path": "codex-rs/thread-store/src/local/rollout_lineage_tests.rs",
+        "sha256": "e7da8fd3d3cc754883da1d9934224da215e7c792269e0ec21da723893a7f9bd4"
+      },
+      {
+        "path": "codex-rs/thread-store/src/local/model_context.rs",
+        "sha256": "a6273a9d0194b37e270ef4ce06dbbfe1ec8ba9f20de6f4bc61ef71e89e2fb7f7"
+      }
+    ],
+    "observedContracts": [
+      "Response items are payload fields, with optional root harness metadata.",
+      "FunctionCallOutputPayload does not serialize the internal success flag.",
+      "Rollback counts actual user turns; inherited context and compacted replacements require separate reconstruction.",
+      "Unknown response variants stay archived and do not authorize continuation.",
+      "history_base.thread_id identifies an immutable rollout file; both the exclusive ordinal and byte offset are required and are distinct from the logical fork boundary.",
+      "Compaction replacement_history contains plain ResponseItems with a separate parallel replacement_history_metadata array.",
+      "Only the newest complete compaction can bound input replay; a checkpoint belonging to a rolled-back turn cannot replace a surviving older checkpoint.",
+      "Context-only user fragments and synthetic compaction summaries do not consume rollback turns; queued assistant messages and function calls also follow user_input_order.",
+      "Raw system messages stay in the archive and do not enter the selected model window; historical configuration and approvals are not current authority.",
+      "Canonical reverted rollout filenames contain both a stable thread ID and an immutable physical rollout ID.",
+      "Paginated lineage omits each physical file's metadata record; child content starts one ordinal after the inherited cutoff.",
+      "Inherited cutoff bytes address logical JSONL bytes, and compressed sources require a separate bounded decoder."
+    ]
+  },
+  "claudeCode": {
+    "version": "2.1.301",
+    "sdkReleaseTag": "v0.2.168",
+    "repository": "https://github.com/anthropics/claude-agent-sdk-python",
+    "commit": "a39c96edf8cc414e640620ff3360f17475db0bd9",
+    "files": [
+      {
+        "path": "src/claude_agent_sdk/_internal/sessions.py",
+        "sha256": "d5323963daf711c8bcc684057fd48d0cb786ee04d8329be6dec82444ec505662"
+      },
+      {
+        "path": "src/claude_agent_sdk/_internal/session_resume.py",
+        "sha256": "0dd9ab8d14b7641a46d166423844cf11adbfa7b8e1f1bf63c696f581f91e8726"
+      },
+      {
+        "path": "src/claude_agent_sdk/_cli_version.py",
+        "sha256": "370ddef0d1fe851fd81356ae97d13e1599eb4a539752958eecbdf813a3af58be"
+      }
+    ],
+    "observedContracts": [
+      "Message uuid, not message.id, identifies persisted transcript entries.",
+      "parentUuid selects the message chain; logicalParentUuid is a distinct compaction association.",
+      "Sidechain, meta and team entries are separate from the main visible chain.",
+      "The user-role envelope may contain tool results instead of a human prompt."
+    ]
+  }
+}

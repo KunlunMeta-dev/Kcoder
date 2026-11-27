@@ -1,0 +1,2224 @@
+{
+  "OfficeAssistantDefinition": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "schemaVersion": 1,
+          "id": "meeting",
+          "scope": "personal",
+          "title": "会议纪要",
+          "description": "根据材料形成纪要",
+          "language": "zh-CN",
+          "inputSchema": {
+            "type": "object"
+          },
+          "instructions": "保留来源和待确认字段",
+          "modelSelection": {
+            "kind": "inherit_current"
+          },
+          "outputKinds": [
+            "document",
+            "action_items"
+          ],
+          "acceptanceCriteria": [
+            "来源可以追溯"
+          ],
+          "externalSend": "ask"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "id": "meeting",
+          "scope": "personal",
+          "title": "会议纪要",
+          "description": "根据材料形成纪要",
+          "language": "zh-CN",
+          "inputSchema": {
+            "type": "object"
+          },
+          "instructions": "保留来源和待确认字段",
+          "modelSelection": {
+            "kind": "inherit_current"
+          },
+          "outputKinds": [
+            "document",
+            "action_items"
+          ],
+          "acceptanceCriteria": [
+            "来源可以追溯"
+          ],
+          "externalSend": "ask",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantDraft": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "revision": 1,
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "updatedAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "revision": 1,
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "updatedAtMs": 1,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantVersion": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "version": "1.0.0",
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "createdAtMs": 1,
+          "archived": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "version": "1.0.0",
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "createdAtMs": 1,
+          "archived": false,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantAdoption": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "operationId": "adopt-case",
+          "scope": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case",
+            "identityGeneration": "generation-1",
+            "targetRevision": "revision-1"
+          },
+          "assistant": {
+            "owner": {
+              "accountId": "account-case",
+              "targetId": "Target-Case",
+              "workspaceId": "workspace-case"
+            },
+            "version": "1.0.0",
+            "definition": {
+              "schemaVersion": 1,
+              "id": "meeting",
+              "scope": "personal",
+              "title": "会议纪要",
+              "description": "根据材料形成纪要",
+              "language": "zh-CN",
+              "inputSchema": {
+                "type": "object"
+              },
+              "instructions": "保留来源和待确认字段",
+              "modelSelection": {
+                "kind": "inherit_current"
+              },
+              "outputKinds": [
+                "document",
+                "action_items"
+              ],
+              "acceptanceCriteria": [
+                "来源可以追溯"
+              ],
+              "externalSend": "ask"
+            },
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "createdAtMs": 1,
+            "archived": false
+          },
+          "inputs": {},
+          "createdAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "operationId": "adopt-case",
+          "scope": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case",
+            "identityGeneration": "generation-1",
+            "targetRevision": "revision-1"
+          },
+          "assistant": {
+            "owner": {
+              "accountId": "account-case",
+              "targetId": "Target-Case",
+              "workspaceId": "workspace-case"
+            },
+            "version": "1.0.0",
+            "definition": {
+              "schemaVersion": 1,
+              "id": "meeting",
+              "scope": "personal",
+              "title": "会议纪要",
+              "description": "根据材料形成纪要",
+              "language": "zh-CN",
+              "inputSchema": {
+                "type": "object"
+              },
+              "instructions": "保留来源和待确认字段",
+              "modelSelection": {
+                "kind": "inherit_current"
+              },
+              "outputKinds": [
+                "document",
+                "action_items"
+              ],
+              "acceptanceCriteria": [
+                "来源可以追溯"
+              ],
+              "externalSend": "ask"
+            },
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "createdAtMs": 1,
+            "archived": false
+          },
+          "inputs": {},
+          "createdAtMs": 1,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeArtifactManifest": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "schemaVersion": 1,
+          "id": "artifact-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "kind": "document",
+          "title": "核对结果",
+          "format": "docx",
+          "bytes": 1024,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceRefs": [],
+          "verification": {
+            "status": "partial",
+            "completedChecks": [
+              "OOXML structure"
+            ],
+            "pendingChecks": [
+              "reader verification"
+            ],
+            "readerStatus": "pending",
+            "formulaCalculation": "not_performed"
+          },
+          "createdAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "id": "artifact-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "kind": "document",
+          "title": "核对结果",
+          "format": "docx",
+          "bytes": 1024,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceRefs": [],
+          "verification": {
+            "status": "partial",
+            "completedChecks": [
+              "OOXML structure"
+            ],
+            "pendingChecks": [
+              "reader verification"
+            ],
+            "readerStatus": "pending",
+            "formulaCalculation": "not_performed"
+          },
+          "createdAtMs": 1,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeDataset": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "schemaVersion": 1,
+          "id": "dataset-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "sourceRefs": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "id": "dataset-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "sourceRefs": [],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeDatasetQuery": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "limit": 10
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "limit": 10,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeDatasetPage": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "dataset": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "totalRows": 2,
+          "matchedRows": 2,
+          "nextCursor": null,
+          "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceRefs": [],
+          "numberText": [
+            [
+              null,
+              "1234.56"
+            ]
+          ],
+          "aggregates": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "dataset": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "kind": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ],
+            [
+              null
+            ]
+          ],
+          "totalRows": 2,
+          "matchedRows": 2,
+          "nextCursor": null,
+          "querySha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sourceRefs": [],
+          "arbitraryAuthority": true,
+          "numberText": [
+            [
+              null,
+              "1234.56"
+            ]
+          ],
+          "aggregates": []
+        }
+      }
+    ]
+  },
+  "OfficeListParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "limit": 10
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "limit": 10,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantReadParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "id": "meeting"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "id": "meeting",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSaveDraftParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSaveVersionParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAdoptParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0",
+          "inputs": {},
+          "startTask": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0",
+          "inputs": {},
+          "startTask": false,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeArtifactReadParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeArtifactListParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "threadId": "thread-case",
+          "limit": 10
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "threadId": "thread-case",
+          "limit": 10,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeExportParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "format": "docx"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "format": "docx",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeDatasetPageParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "query": {
+            "limit": 10
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "query": {
+            "limit": 10
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeGenerateParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "specification": {
+            "schemaVersion": 1,
+            "kind": "docx",
+            "title": "示例",
+            "paragraphs": []
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "specification": {
+            "schemaVersion": 1,
+            "kind": "docx",
+            "title": "示例",
+            "paragraphs": []
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeArtifactActionParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "action": "download"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "action": "download",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAggregateFunction": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": "sum"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": "invalid-function"
+      }
+    ]
+  },
+  "OfficeAggregate": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "column": "amount",
+          "function": "sum",
+          "key": "total"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "column": "amount",
+          "function": "sum",
+          "key": "total",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAggregateResult": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "key": "total",
+          "value": "0.3",
+          "nonNullCount": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "key": "total",
+          "value": "0.3",
+          "nonNullCount": 2,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeContextProjection": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "schemaVersion": 1,
+          "id": "projection-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "artifactRefs": [],
+          "datasetRefs": [
+            {
+              "id": "dataset-case",
+              "revision": 1
+            }
+          ],
+          "sourceRefs": [],
+          "summary": "Exact bounded preview; remaining rows require authorized page reads.",
+          "columns": [],
+          "previewRows": [],
+          "totalRows": 5000,
+          "omittedRows": 5000,
+          "querySha256": null,
+          "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "id": "projection-case",
+          "revision": 1,
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "artifactRefs": [],
+          "datasetRefs": [
+            {
+              "id": "dataset-case",
+              "revision": 1
+            }
+          ],
+          "sourceRefs": [],
+          "summary": "Exact bounded preview; remaining rows require authorized page reads.",
+          "columns": [],
+          "previewRows": [],
+          "totalRows": 5000,
+          "omittedRows": 5000,
+          "querySha256": null,
+          "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeGenerationKind": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": "docx"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": "arbitrary-value"
+      }
+    ]
+  },
+  "OfficeGenerationSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "schemaVersion": 1,
+          "kind": "docx",
+          "title": "已核对报告",
+          "template": "report",
+          "paragraphs": [
+            {
+              "text": "金额1234.56元；日期待确认。"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "kind": "docx",
+          "title": "已核对报告",
+          "template": "report",
+          "paragraphs": [
+            {
+              "text": "金额1234.56元；日期待确认。"
+            }
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeParagraphSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "text": "确认事项",
+          "heading": 1,
+          "bullet": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "text": "确认事项",
+          "heading": 1,
+          "bullet": false,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeTextTableSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "headers": [
+            "事项",
+            "金额"
+          ],
+          "rows": [
+            [
+              "A",
+              "1234.56"
+            ]
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "headers": [
+            "事项",
+            "金额"
+          ],
+          "rows": [
+            [
+              "A",
+              "1234.56"
+            ]
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSheetColumnSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "key": "amount",
+          "title": "金额",
+          "type": "number",
+          "unit": "元"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "key": "amount",
+          "title": "金额",
+          "type": "number",
+          "unit": "元",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeFormulaSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "cell": "A3",
+          "formula": "SUM(A2:A2)"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "cell": "A3",
+          "formula": "SUM(A2:A2)",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSheetSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "name": "金额",
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "type": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ]
+          ],
+          "formulas": [
+            {
+              "cell": "A3",
+              "formula": "SUM(A2:A2)"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "name": "金额",
+          "columns": [
+            {
+              "key": "amount",
+              "title": "金额",
+              "type": "number",
+              "unit": "元"
+            }
+          ],
+          "rows": [
+            [
+              1234.56
+            ]
+          ],
+          "formulas": [
+            {
+              "cell": "A3",
+              "formula": "SUM(A2:A2)"
+            }
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeChartType": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": "bar"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": "arbitrary-value"
+      }
+    ]
+  },
+  "OfficeChartSeriesSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "name": "金额",
+          "values": [
+            1234.56,
+            200
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "name": "金额",
+          "values": [
+            1234.56,
+            200
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSlideChartSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "type": "bar",
+          "labels": [
+            "A",
+            "B"
+          ],
+          "series": [
+            {
+              "name": "金额",
+              "values": [
+                1234.56,
+                200
+              ]
+            }
+          ],
+          "unit": "元"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "type": "bar",
+          "labels": [
+            "A",
+            "B"
+          ],
+          "series": [
+            {
+              "name": "金额",
+              "values": [
+                1234.56,
+                200
+              ]
+            }
+          ],
+          "unit": "元",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficePngSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwSpn2HwAEJAIsVIWyawAAAABJRU5ErkJggg==",
+          "alt": "合成测试标记"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "data": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMwSpn2HwAEJAIsVIWyawAAAABJRU5ErkJggg==",
+          "alt": "合成测试标记",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSlideSpec": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "title": "金额核对",
+          "paragraphs": [
+            "金额1234.56元"
+          ],
+          "chart": {
+            "type": "bar",
+            "labels": [
+              "A",
+              "B"
+            ],
+            "series": [
+              {
+                "name": "金额",
+                "values": [
+                  1234.56,
+                  200
+                ]
+              }
+            ],
+            "unit": "元"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "title": "金额核对",
+          "paragraphs": [
+            "金额1234.56元"
+          ],
+          "chart": {
+            "type": "bar",
+            "labels": [
+              "A",
+              "B"
+            ],
+            "series": [
+              {
+                "name": "金额",
+                "values": [
+                  1234.56,
+                  200
+                ]
+              }
+            ],
+            "unit": "元"
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeActionItemStatus": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": "unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": "arbitrary-value"
+      }
+    ]
+  },
+  "OfficeActionItem": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "id": "action-1",
+          "text": "复核材料",
+          "status": "unknown",
+          "assignee": null,
+          "due": null,
+          "sourceRefs": [
+            {
+              "kind": "office_input",
+              "id": "input-case",
+              "revision": "1"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "id": "action-1",
+          "text": "复核材料",
+          "status": "unknown",
+          "assignee": null,
+          "due": null,
+          "sourceRefs": [
+            {
+              "kind": "office_input",
+              "id": "input-case",
+              "revision": "1"
+            }
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeResearchFinding": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "text": "可核对来源",
+          "sourceRefs": [
+            {
+              "kind": "office_input",
+              "id": "input-case",
+              "revision": "1"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "text": "可核对来源",
+          "sourceRefs": [
+            {
+              "kind": "office_input",
+              "id": "input-case",
+              "revision": "1"
+            }
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeArtifactPresentation": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "kind": "document",
+          "paragraphs": [
+            "金额1234.56元；待确认日期。"
+          ]
+        }
+      },
+      {
+        "name": "fixed-table",
+        "value": {
+          "kind": "table",
+          "dataset": {
+            "id": "data-case",
+            "revision": 1
+          }
+        }
+      },
+      {
+        "name": "fixed-chart",
+        "value": {
+          "kind": "chart",
+          "dataset": {
+            "id": "data-case",
+            "revision": 1
+          },
+          "chartType": "bar",
+          "labelColumn": "name",
+          "valueColumns": [
+            "amount"
+          ]
+        }
+      },
+      {
+        "name": "fixed-action_items",
+        "value": {
+          "kind": "action_items",
+          "items": [
+            {
+              "id": "action-1",
+              "text": "复核材料",
+              "status": "unknown",
+              "assignee": null,
+              "due": null,
+              "sourceRefs": [
+                {
+                  "kind": "office_input",
+                  "id": "input-case",
+                  "revision": "1"
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "name": "fixed-research",
+        "value": {
+          "kind": "research",
+          "summary": "来源可核对",
+          "findings": [
+            {
+              "text": "可核对来源",
+              "sourceRefs": [
+                {
+                  "kind": "office_input",
+                  "id": "input-case",
+                  "revision": "1"
+                }
+              ]
+            }
+          ],
+          "observedAt": "2026-10-24T00:00:00Z"
+        }
+      },
+      {
+        "name": "fixed-operation_receipt",
+        "value": {
+          "kind": "operation_receipt",
+          "operationId": "operation-case",
+          "phase": "unknown",
+          "detail": "等待原生回执核对"
+        }
+      },
+      {
+        "name": "fixed-file_collection",
+        "value": {
+          "kind": "file_collection",
+          "items": [
+            {
+              "id": "artifact-case",
+              "revision": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "fixed-form",
+        "value": {
+          "kind": "form",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "title"
+            ]
+          },
+          "initialValues": {},
+          "purpose": "创建跟进任务"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "kind": "document",
+          "paragraphs": [
+            "金额1234.56元；待确认日期。"
+          ],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeExportReceipt": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "schemaVersion": 1,
+          "exportId": "export-case",
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "filename": "report.docx",
+          "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "bytes": 1234,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "leaseRevision": "lease-case",
+          "expiresAtMs": 1792814400000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "exportId": "export-case",
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "filename": "report.docx",
+          "mediaType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "bytes": 1234,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "leaseRevision": "lease-case",
+          "expiresAtMs": 1792814400000,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeVerificationObservation": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "observedAtMs": 1792814400000,
+          "verification": {
+            "status": "partial",
+            "completedChecks": [
+              "ooxml_structure"
+            ],
+            "pendingChecks": [
+              "reader"
+            ],
+            "readerStatus": "pending",
+            "formulaCalculation": "not_performed"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "reference": {
+            "id": "artifact-case",
+            "revision": 1
+          },
+          "contentSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "observedAtMs": 1792814400000,
+          "verification": {
+            "status": "partial",
+            "completedChecks": [
+              "ooxml_structure"
+            ],
+            "pendingChecks": [
+              "reader"
+            ],
+            "readerStatus": "pending",
+            "formulaCalculation": "not_performed"
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeCreateCardParams": {
+    "valid": [
+      {
+        "name": "bounded-office-contract",
+        "value": {
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "title": "真实数据预览",
+          "presentation": {
+            "kind": "table",
+            "dataset": {
+              "id": "dataset-case",
+              "revision": 1
+            }
+          },
+          "sourceRefs": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "task": {
+            "threadId": "thread-case",
+            "turnId": "turn-case"
+          },
+          "title": "真实数据预览",
+          "presentation": {
+            "kind": "table",
+            "dataset": {
+              "id": "dataset-case",
+              "revision": 1
+            }
+          },
+          "sourceRefs": [],
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeExecuteArtifactActionParams": {
+    "valid": [
+      {
+        "name": "native-prepared-intent",
+        "value": {
+          "preparedOperationId": "prepared-native-operation"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "page-bool-is-not-approval",
+        "value": {
+          "preparedOperationId": "prepared-native-operation",
+          "approved": true
+        }
+      }
+    ]
+  },
+  "OfficeGeneratorIdentity": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "component": "@kcoder/office-components",
+          "version": "0.1.0",
+          "schemaRevision": "office-generation/v1",
+          "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "component": "@kcoder/office-components",
+          "version": "0.1.0",
+          "schemaRevision": "office-generation/v1",
+          "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalInputIdentity": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "reference": {
+            "kind": "input",
+            "id": "accepted-input",
+            "revision": "1"
+          },
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "reference": {
+            "kind": "input",
+            "id": "accepted-input",
+            "revision": "1"
+          },
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalSourceDescriptor": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "schemaVersion": 1,
+          "id": "generation-source-fixture",
+          "revision": 1,
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "operationId": "original-generation",
+          "task": {
+            "threadId": "thread",
+            "turnId": "turn"
+          },
+          "artifact": {
+            "id": "artifact",
+            "revision": 1
+          },
+          "outputSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "specificationSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "specificationBytes": 128,
+          "generator": {
+            "component": "@kcoder/office-components",
+            "version": "0.1.0",
+            "schemaRevision": "office-generation/v1",
+            "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "inputs": [],
+          "createdAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "schemaVersion": 1,
+          "id": "generation-source-fixture",
+          "revision": 1,
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "operationId": "original-generation",
+          "task": {
+            "threadId": "thread",
+            "turnId": "turn"
+          },
+          "artifact": {
+            "id": "artifact",
+            "revision": 1
+          },
+          "outputSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "specificationSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "specificationBytes": 128,
+          "generator": {
+            "component": "@kcoder/office-components",
+            "version": "0.1.0",
+            "schemaRevision": "office-generation/v1",
+            "implementationSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "dependencyLockSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+          },
+          "inputs": [],
+          "createdAtMs": 1,
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalSourceAvailability": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": "not_recorded"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": "made_up_state"
+      }
+    ]
+  },
+  "OfficeCanonicalSourceReadResult": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "availability": "not_recorded",
+          "source": null,
+          "chunk": null,
+          "offset": 0,
+          "nextOffset": null,
+          "complete": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "availability": "not_recorded",
+          "source": null,
+          "chunk": null,
+          "offset": 0,
+          "nextOffset": null,
+          "complete": false,
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeCanonicalSourceReadParams": {
+    "valid": [
+      {
+        "name": "bounded-canonical-source-contract",
+        "value": {
+          "reference": {
+            "id": "artifact",
+            "revision": 1
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-field-or-state-rejected",
+        "value": {
+          "reference": {
+            "id": "artifact",
+            "revision": 1
+          },
+          "arbitraryPath": "/not-an-input"
+        }
+      }
+    ]
+  },
+  "OfficeMethod": {
+    "valid": [
+      {
+        "name": "public-ListAssistants",
+        "value": "integrations/assistant/list"
+      },
+      {
+        "name": "public-ReadAssistant",
+        "value": "integrations/assistant/read"
+      },
+      {
+        "name": "public-AssistantVersions",
+        "value": "integrations/assistant/versions"
+      },
+      {
+        "name": "public-ValidateAssistant",
+        "value": "integrations/assistant/validate"
+      },
+      {
+        "name": "public-SaveAssistantDraft",
+        "value": "integrations/assistant/saveDraft"
+      },
+      {
+        "name": "public-SaveAssistantVersion",
+        "value": "integrations/assistant/saveVersion"
+      },
+      {
+        "name": "public-AdoptAssistant",
+        "value": "integrations/assistant/adopt"
+      },
+      {
+        "name": "public-ArchiveAssistant",
+        "value": "integrations/assistant/archive"
+      },
+      {
+        "name": "public-ExportAssistant",
+        "value": "integrations/assistant/export"
+      },
+      {
+        "name": "public-ImportAssistant",
+        "value": "integrations/assistant/import"
+      },
+      {
+        "name": "public-ListArtifacts",
+        "value": "integrations/artifact/list"
+      },
+      {
+        "name": "public-CreateArtifactCard",
+        "value": "integrations/artifact/createCard"
+      },
+      {
+        "name": "public-ReadArtifact",
+        "value": "integrations/artifact/read"
+      },
+      {
+        "name": "public-ReadCanonicalSource",
+        "value": "integrations/artifact/source"
+      },
+      {
+        "name": "public-ReadArtifactVerification",
+        "value": "integrations/artifact/verification"
+      },
+      {
+        "name": "public-ExportArtifact",
+        "value": "integrations/artifact/export"
+      },
+      {
+        "name": "public-VerifyArtifact",
+        "value": "integrations/artifact/verify"
+      },
+      {
+        "name": "public-PrepareArtifactAction",
+        "value": "integrations/artifact/prepareAction"
+      },
+      {
+        "name": "public-ExecuteArtifactAction",
+        "value": "integrations/artifact/executeAction"
+      },
+      {
+        "name": "public-DatasetSchema",
+        "value": "integrations/dataset/schema"
+      },
+      {
+        "name": "public-DatasetPage",
+        "value": "integrations/dataset/page"
+      },
+      {
+        "name": "public-DatasetQuery",
+        "value": "integrations/dataset/query"
+      },
+      {
+        "name": "public-DatasetExport",
+        "value": "integrations/dataset/export"
+      },
+      {
+        "name": "public-CreateDataset",
+        "value": "integrations/dataset/create"
+      },
+      {
+        "name": "public-GenerateOffice",
+        "value": "integrations/office/generate"
+      },
+      {
+        "name": "public-GeneratorReadiness",
+        "value": "integrations/office/readiness"
+      },
+      {
+        "name": "public-ReadOfficeOperation",
+        "value": "integrations/office/readOperation"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private-byte-channel",
+        "value": "office/artifact/chunk"
+      },
+      {
+        "name": "arbitrary-port",
+        "value": "integrations/office/callPort"
+      }
+    ]
+  },
+  "OfficeMaterialReceipt": {
+    "valid": [
+      {
+        "name": "opaque-empty-material",
+        "value": {
+          "kind": "office_input",
+          "inputId": "native-input",
+          "revision": 1,
+          "operationId": "original-accept",
+          "owner": {
+            "accountId": "native-account",
+            "targetId": "native-target",
+            "workspaceId": "native-workspace",
+            "organizationId": null
+          },
+          "filename": "材料.txt",
+          "mediaType": "text/plain",
+          "bytes": 0,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "accepted"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-path",
+        "value": {
+          "kind": "office_input",
+          "inputId": "native-input",
+          "revision": 1,
+          "operationId": "original-accept",
+          "owner": {
+            "accountId": "native-account",
+            "targetId": "native-target",
+            "workspaceId": "native-workspace",
+            "organizationId": null
+          },
+          "filename": "材料.txt",
+          "mediaType": "text/plain",
+          "bytes": 0,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "accepted",
+          "path": "not-a-permission"
+        }
+      },
+      {
+        "name": "reject-revision",
+        "value": {
+          "kind": "office_input",
+          "inputId": "native-input",
+          "revision": 2,
+          "operationId": "original-accept",
+          "owner": {
+            "accountId": "native-account",
+            "targetId": "native-target",
+            "workspaceId": "native-workspace",
+            "organizationId": null
+          },
+          "filename": "材料.txt",
+          "mediaType": "text/plain",
+          "bytes": 0,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "accepted"
+        }
+      },
+      {
+        "name": "reject-status",
+        "value": {
+          "kind": "office_input",
+          "inputId": "native-input",
+          "revision": 1,
+          "operationId": "original-accept",
+          "owner": {
+            "accountId": "native-account",
+            "targetId": "native-target",
+            "workspaceId": "native-workspace",
+            "organizationId": null
+          },
+          "filename": "材料.txt",
+          "mediaType": "text/plain",
+          "bytes": 0,
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "status": "pending"
+        }
+      }
+    ]
+  },
+  "OfficeSettingsReadResult": {
+    "valid": [
+      {
+        "name": "disabled-source-and-current-connection",
+        "value": {
+          "persistedEnabled": null,
+          "effectiveEnabled": false,
+          "connectionEnabled": false,
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "restartRequired": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unowned-path",
+        "value": {
+          "persistedEnabled": null,
+          "effectiveEnabled": false,
+          "connectionEnabled": false,
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "restartRequired": false,
+          "path": "/other"
+        }
+      }
+    ]
+  },
+  "OfficeSettingsSaveParams": {
+    "valid": [
+      {
+        "name": "explicit-cas-switch",
+        "value": {
+          "enabled": true,
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unowned-path",
+        "value": {
+          "enabled": true,
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "/other"
+        }
+      },
+      {
+        "name": "require-original-revision",
+        "value": {
+          "enabled": true
+        }
+      }
+    ]
+  }
+}

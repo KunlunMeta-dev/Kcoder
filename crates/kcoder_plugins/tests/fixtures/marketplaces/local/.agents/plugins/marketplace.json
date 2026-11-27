@@ -1,0 +1,23 @@
+{
+  "name": "fixture-market",
+  "interface": {
+    "displayName": "Fixture Marketplace"
+  },
+  "plugins": [
+    {
+      "name": "fixture-one",
+      "source": {
+        "source": "local",
+        "path": "./plugins/fixture-one"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      }
+    },
+    {
+      "name": "fixture-two",
+      "source": "./plugins/fixture-two"
+    }
+  ]
+}

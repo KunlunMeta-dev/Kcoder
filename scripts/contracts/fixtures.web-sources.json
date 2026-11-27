@@ -1,0 +1,86 @@
+{
+  "WebSourcesToolResultV1": {
+    "valid": [
+      {
+        "name": "legacy-absent",
+        "value": {}
+      },
+      {
+        "name": "native-summary",
+        "value": {
+          "webSources": {
+            "schemaVersion": 1,
+            "identity": {
+              "threadId": "thread-1",
+              "turnId": "turn-1",
+              "attemptId": "attempt-1"
+            },
+            "toolCallId": "search-1",
+            "operation": "search",
+            "status": "partial",
+            "provider": "exa-public",
+            "attempts": [
+              {
+                "provider": "exa-public",
+                "elapsedMs": 12,
+                "status": "partial",
+                "requestSent": true
+              }
+            ],
+            "sources": [
+              {
+                "sourceId": "web-native-1",
+                "title": "Official release",
+                "url": "https://example.com/release",
+                "publishedAt": "2026-10-30",
+                "author": "Publisher",
+                "retrievedAt": "2026-10-31T00:00:00Z",
+                "readStatus": "summary_only",
+                "cacheHit": false,
+                "cacheAgeMs": 0
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-read-status",
+        "value": {
+          "webSources": {
+            "schemaVersion": 1,
+            "identity": {
+              "threadId": "thread-1",
+              "turnId": "turn-1",
+              "attemptId": "attempt-1"
+            },
+            "toolCallId": "search-1",
+            "operation": "fetch",
+            "status": "success",
+            "sources": [
+              {
+                "sourceId": "web-native-1",
+                "title": "Page",
+                "url": "https://example.com",
+                "retrievedAt": "2026-10-31",
+                "readStatus": "verified"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "missing-identity",
+        "value": {
+          "webSources": {
+            "schemaVersion": 1,
+            "toolCallId": "search-1",
+            "operation": "search",
+            "status": "success"
+          }
+        }
+      }
+    ]
+  }
+}

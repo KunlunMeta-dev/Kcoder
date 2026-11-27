@@ -1,0 +1,87 @@
+{
+  "skill_name": "xlsx",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "用 openpyxl 帮我做一个 2025 年 1-12 月的销售汇总表：A 列月份，B 列销售额（输入），C 列环比增长率，最后一行合计。给出 Python 脚本和后续检查步骤。",
+      "expected_output": "An openpyxl script that writes inputs and live formulas, sets number formats, then recalculates with recalc.py and checks for errors.",
+      "expectations": [
+        "Writes totals and growth as Excel formulas such as =SUM(...) rather than values computed in Python",
+        "Sets a percentage number_format on the growth formulas",
+        "Guards the growth formula against a zero or empty previous month",
+        "Runs scripts/recalc.py after saving and treats errors_found as not done",
+        "Uses a professional font such as Arial"
+      ],
+      "assertions": [
+        {
+          "contains": "recalc.py"
+        },
+        {
+          "contains": "=SUM("
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "In my budget.xlsx I need a lookup of each department's headcount from the 'Staff List' sheet into the Summary sheet. Which formula should I write with openpyxl so that it verifies cleanly?",
+      "expected_output": "INDEX/MATCH with a quoted sheet name, not XLOOKUP, followed by recalc verification.",
+      "expectations": [
+        "Uses INDEX and MATCH (or another Excel-2007-era function) rather than XLOOKUP",
+        "Quotes the sheet name containing a space, as in 'Staff List'!",
+        "Says to recalculate with recalc.py and check the result values, not only the absence of errors"
+      ],
+      "assertions": [
+        {
+          "contains": "MATCH"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "我有一个别人做好的财务模型 model.xlsx，想同时拿到每个单元格的公式和计算结果用来审阅，代码怎么写？千万别破坏原文件。",
+      "expected_output": "Two load_workbook passes (default and data_only=True) and never saving the data_only workbook.",
+      "expectations": [
+        "Loads the workbook twice: once for formulas and once with data_only=True for cached values",
+        "Warns that saving the data_only=True workbook would replace formulas with literals",
+        "Does not save over model.xlsx"
+      ],
+      "assertions": [
+        {
+          "contains": "data_only=True"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Build a three-year revenue projection sheet: growth rate assumption 12%, base revenue $4.2mm. Follow normal financial-model conventions.",
+      "expected_output": "A model with the assumption in its own labeled input cell referenced by formulas, blue inputs, black formulas, and $ and % formats.",
+      "expectations": [
+        "Places the 12% growth assumption in its own labeled cell and references it (for example $B$3) instead of hardcoding 1.12",
+        "Colors hardcoded inputs blue and formulas black",
+        "Stores the percentage as 0.12 with a 0.0% format",
+        "Writes years as text labels and uses a currency format with the unit in the header",
+        "Recalculates with recalc.py"
+      ],
+      "assertions": [
+        {
+          "contains": "recalc.py"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "这个表 orders.xlsx 里有个合并单元格 A1:D1 是标题，我想把标题改成『2025 订单明细』，用 openpyxl 怎么改？",
+      "expected_output": "Write the new title to the top-left anchor A1 of the merged range only.",
+      "expectations": [
+        "Writes only to the top-left anchor cell A1 of the merged range",
+        "Explains that the other cells of the merged range are read-only MergedCell objects",
+        "Keeps the existing formatting and formulas of the file untouched"
+      ],
+      "assertions": [
+        {
+          "contains": "A1"
+        }
+      ]
+    }
+  ]
+}

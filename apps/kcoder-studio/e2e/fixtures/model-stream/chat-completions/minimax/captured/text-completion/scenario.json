@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "id": "captured-minimax-text-completion",
+  "protocol": "openai_chat_completions",
+  "source": {
+    "kind": "captured",
+    "provider": "MiniMax",
+    "model": "MiniMax-M3.1-Flash",
+    "description": "One authorized synthetic MiniMax Chat Completions request. All free-text values and response identifiers were redacted before persistence.",
+    "requestCount": 1,
+    "retries": 0,
+    "httpStatus": 200,
+    "responseBytes": 1303,
+    "endpointClass": "private-network",
+    "apiFormat": "openai_chat_completions",
+    "replay": "Sanitized SSE data frames retain event order, response field names, finish reason, and token usage where returned.",
+    "sampleSummary": {
+      "frameCount": 6,
+      "observedDeltaFields": [
+        "content",
+        "role"
+      ],
+      "finishReasons": [
+        "stop"
+      ],
+      "usagePresent": true,
+      "doneSentinelPresent": true,
+      "freeTextRedacted": true,
+      "identifiersNormalized": true
+    }
+  },
+  "requests": [
+    {
+      "id": "initial",
+      "match": {
+        "lastMessageRole": "user",
+        "lastMessageIncludes": "KCODER_E2E:captured-minimax-sample"
+      },
+      "frames": [
+        "data: {\"id\":\"chatcmpl-captured-redacted\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M3.1-Flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"[REDACTED_SAMPLE_TEXT]\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-captured-redacted\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M3.1-Flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"[REDACTED_SAMPLE_TEXT]\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-captured-redacted\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M3.1-Flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"[REDACTED_SAMPLE_TEXT]\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-captured-redacted\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M3.1-Flash\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"[REDACTED_SAMPLE_TEXT]\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-captured-redacted\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M3.1-Flash\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":232,\"completion_tokens\":12,\"total_tokens\":244,\"prompt_tokens_details\":{\"cached_tokens\":192}}}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    }
+  ]
+}

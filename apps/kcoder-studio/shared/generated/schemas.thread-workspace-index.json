@@ -1,0 +1,137 @@
+{
+  "ThreadWorkspaceHintV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "workspacePath": {
+        "maxLength": 4096,
+        "minLength": 1,
+        "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "workspacePath"
+    ],
+    "title": "ThreadWorkspaceHintV1",
+    "type": "object"
+  },
+  "ThreadWorkspaceLookupCompleteness": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "complete",
+      "partial"
+    ],
+    "title": "ThreadWorkspaceLookupCompleteness",
+    "type": "string"
+  },
+  "ThreadWorkspaceLookupParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "cursor": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "limit": {
+        "format": "uint32",
+        "maximum": 64,
+        "minimum": 1,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "ThreadWorkspaceLookupParams",
+    "type": "object"
+  },
+  "ThreadWorkspaceLookupResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadWorkspaceHintV1": {
+        "additionalProperties": false,
+        "properties": {
+          "workspacePath": {
+            "maxLength": 4096,
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001F\\u007F-\\u009F]+$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "workspacePath"
+        ],
+        "type": "object"
+      },
+      "ThreadWorkspaceLookupCompleteness": {
+        "enum": [
+          "complete",
+          "partial"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "candidates": {
+        "items": {
+          "$ref": "#/definitions/ThreadWorkspaceHintV1"
+        },
+        "maxItems": 64,
+        "type": "array"
+      },
+      "completeness": {
+        "$ref": "#/definitions/ThreadWorkspaceLookupCompleteness"
+      },
+      "issueCount": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "nextCursor": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "scannedProjects": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "candidates",
+      "completeness",
+      "issueCount",
+      "scannedProjects",
+      "threadId"
+    ],
+    "title": "ThreadWorkspaceLookupResult",
+    "type": "object"
+  }
+}

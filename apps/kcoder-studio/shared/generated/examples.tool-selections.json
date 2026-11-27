@@ -1,0 +1,598 @@
+{
+  "SelectableStudioTool": [
+    {
+      "decoded": {
+        "available": true,
+        "name": "read",
+        "supportedModes": [
+          "kcoder",
+          "kworker"
+        ],
+        "ui": {
+          "description": "Reads a file from the selected target.",
+          "displayName": "Read file",
+          "group": "files",
+          "icon": "file"
+        },
+        "unavailableReason": null
+      },
+      "name": "target_owned_tool_selection",
+      "value": {
+        "available": true,
+        "name": "read",
+        "supportedModes": [
+          "kcoder",
+          "kworker"
+        ],
+        "ui": {
+          "description": "Reads a file from the selected target.",
+          "displayName": "Read file",
+          "group": "files",
+          "icon": "file"
+        },
+        "unavailableReason": null
+      }
+    }
+  ],
+  "StudioModeToolSelection": [
+    {
+      "decoded": {
+        "allowedTools": [
+          "read"
+        ],
+        "editable": true,
+        "mode": "kcoder"
+      },
+      "name": "target_owned_tool_selection",
+      "value": {
+        "allowedTools": [
+          "read"
+        ],
+        "editable": true,
+        "mode": "kcoder"
+      }
+    }
+  ],
+  "ToolSelectionsReadParams": [
+    {
+      "decoded": {},
+      "name": "target_owned_tool_selection",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "includeLunaBaseline": true
+      },
+      "name": "explicit_luna_baseline_read",
+      "value": {
+        "includeLunaBaseline": true
+      }
+    },
+    {
+      "decoded": {
+        "includeResolution": true
+      },
+      "name": "explicit_resolution_preview",
+      "value": {
+        "includeResolution": true
+      }
+    },
+    {
+      "decoded": {
+        "includeExpertToolSelection": true
+      },
+      "name": "independent_expert_selection_opt_in",
+      "value": {
+        "includeExpertToolSelection": true
+      }
+    }
+  ],
+  "ToolSelectionsResult": [
+    {
+      "decoded": {
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      },
+      "name": "target_owned_tool_selection",
+      "value": {
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      }
+    },
+    {
+      "decoded": {
+        "lunaAllowedTools": [
+          "bash",
+          "UnlistedTool"
+        ],
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      },
+      "name": "luna_baseline_distinct_from_studio_defaults",
+      "value": {
+        "lunaAllowedTools": [
+          "bash",
+          "UnlistedTool"
+        ],
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      }
+    },
+    {
+      "decoded": {
+        "lunaAllowedTools": [],
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      },
+      "name": "explicit_empty_luna_baseline",
+      "value": {
+        "lunaAllowedTools": [],
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      }
+    },
+    {
+      "decoded": {
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "resolution": [
+          {
+            "mode": "kcoder",
+            "tools": [
+              {
+                "effective": false,
+                "name": "read",
+                "restrictions": [
+                  {
+                    "skill": "read-only",
+                    "source": "skill_selection"
+                  },
+                  {
+                    "source": "mode_selection"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      },
+      "name": "resolved_tool_restrictions",
+      "value": {
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "resolution": [
+          {
+            "mode": "kcoder",
+            "tools": [
+              {
+                "effective": false,
+                "name": "read",
+                "restrictions": [
+                  {
+                    "skill": "read-only",
+                    "source": "skill_selection"
+                  },
+                  {
+                    "source": "mode_selection"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      }
+    },
+    {
+      "decoded": {
+        "expertToolsIndependent": true,
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "resolution": [
+          {
+            "mode": "kcoder",
+            "tools": [
+              {
+                "effective": false,
+                "name": "read",
+                "restrictions": [
+                  {
+                    "skill": "read-only",
+                    "source": "skill_selection"
+                  },
+                  {
+                    "source": "mode_selection"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      },
+      "name": "independent_expert_selection",
+      "value": {
+        "expertToolsIndependent": true,
+        "modes": [
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kcoder"
+          },
+          {
+            "allowedTools": [
+              "read"
+            ],
+            "editable": true,
+            "mode": "kworker"
+          }
+        ],
+        "resolution": [
+          {
+            "mode": "kcoder",
+            "tools": [
+              {
+                "effective": false,
+                "name": "read",
+                "restrictions": [
+                  {
+                    "skill": "read-only",
+                    "source": "skill_selection"
+                  },
+                  {
+                    "source": "mode_selection"
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "tools": [
+          {
+            "available": true,
+            "name": "read",
+            "supportedModes": [
+              "kcoder",
+              "kworker"
+            ],
+            "ui": {
+              "description": "Reads a file from the selected target.",
+              "displayName": "Read file",
+              "group": "files",
+              "icon": "file"
+            },
+            "unavailableReason": null
+          }
+        ],
+        "total": 1,
+        "truncated": false
+      }
+    }
+  ],
+  "ToolSelectionsSaveParams": [
+    {
+      "decoded": {
+        "allowedTools": [
+          "read"
+        ],
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mode": "kcoder"
+      },
+      "name": "target_owned_tool_selection",
+      "value": {
+        "allowedTools": [
+          "read"
+        ],
+        "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mode": "kcoder"
+      }
+    }
+  ]
+}

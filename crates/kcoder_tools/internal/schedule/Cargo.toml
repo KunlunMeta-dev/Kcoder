@@ -1,0 +1,21 @@
+[package]
+name = "kcoder_schedule"
+description = "Read-only calendar calculations shared by scheduler and automation previews."
+version.workspace = true
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+chrono-tz.workspace = true
+kcoder_types = { path = "../../../kcoder_types" }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lib]
+path = "../../src/internal/schedule/lib.rs"

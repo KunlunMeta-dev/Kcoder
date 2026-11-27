@@ -1,0 +1,11 @@
+Natural Earth vector map data, version 4.1.0
+Redistributed as countries-110m.json by world-atlas 2.0.2
+Admin 0 country boundaries; small scale 1:110m.
+
+Natural Earth raster and vector map data are public domain.
+Data authors include Tom Patterson, Nathaniel Vaughn Kelso and contributors.
+
+Terms and attribution source:
+https://www.naturalearthdata.com/about/terms-of-use/
+Package data provenance:
+https://github.com/topojson/world-atlas/tree/v2.0.2

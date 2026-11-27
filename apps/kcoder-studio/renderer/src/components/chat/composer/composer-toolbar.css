@@ -1,0 +1,115 @@
+.composer-toolbar [data-composer-overflow-group] {
+  display: contents;
+}
+
+.composer-toolbar [data-composer-overflow-group][popover]:not(:popover-open) {
+  display: none;
+}
+
+.composer-toolbar [data-composer-label] {
+  display: var(--composer-label-display, inline);
+}
+
+.composer-toolbar[data-compact='true'] {
+  --composer-label-display: none;
+}
+
+.composer-toolbar[data-compact='true'] [data-composer-action] {
+  width: 32px;
+  padding-inline: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+.composer-toolbar[data-density='3'] [data-testid='model-selector-button'] {
+  width: 32px !important;
+  justify-content: center;
+}
+
+.composer-toolbar[data-density='3'] [data-composer-model-icon] {
+  display: block;
+}
+
+.composer-toolbar[data-density='3'] [data-composer-model-label] {
+  display: none;
+}
+
+.composer-toolbar[data-density='4'] {
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.composer-toolbar[data-density='4'] > [data-testid='composer-toolbar-actions'],
+.composer-toolbar[data-density='4'] > [data-testid='composer-toolbar-model-controls'] {
+  flex: 1 1 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.composer-toolbar[data-density='4'] [data-testid='composer-toolbar-actions'],
+.composer-toolbar[data-density='4'] [data-testid='composer-toolbar-model-controls'] {
+  flex-wrap: wrap;
+}
+
+.composer-toolbar[data-density='4'] [data-testid='composer-toolbar-model-controls'] {
+  justify-content: flex-end;
+}
+
+.composer-toolbar [data-composer-overflow-group]:popover-open {
+  --composer-label-display: inline;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  width: min(256px, calc(100vw - 16px));
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: 12px;
+  color: rgb(var(--color-text-primary));
+  background: rgb(var(--color-popover));
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.12);
+}
+
+.composer-toolbar [data-composer-overflow-group]:popover-open [data-composer-action] {
+  width: 100%;
+  justify-content: flex-start;
+  padding-inline: 8px;
+  gap: 8px;
+}
+
+.composer-toolbar [data-composer-overflow-group]:popover-open > * {
+  flex-shrink: 0;
+}
+
+.composer-toolbar [data-composer-action][aria-pressed='true'] {
+  background: rgb(var(--color-muted));
+  color: rgb(var(--color-text-primary));
+}
+
+.composer-toolbar:has([popover] [aria-pressed='true']) [data-testid='composer-more-button']::after {
+  content: '';
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+@media (max-width: 767px) {
+  .composer-toolbar [data-testid='add-context-button'],
+  .composer-toolbar [data-testid='composer-permission-selector'],
+  .composer-toolbar [data-testid='model-selector-button'],
+  .composer-toolbar [data-testid='send-message-button'],
+  .composer-toolbar [data-testid='pause-response-button'],
+  .composer-toolbar [data-composer-action],
+  .composer-toolbar[data-compact='true'] [data-composer-action] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

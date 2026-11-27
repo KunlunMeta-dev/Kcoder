@@ -1,0 +1,39 @@
+[package]
+name = "kcoder_session_configuration"
+description = "Session settings, model sources, and CLI and App Server MCP configuration."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[lib]
+path = "../../src/app_server/session_configuration.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+kcoder_api = { path = "../../../kcoder_api" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_cli_commands = { path = "../cli_commands" }
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_mcp = { path = "../../../kcoder_mcp" }
+kcoder_plugin_rpc = { path = "../plugin_rpc" }
+kcoder_plugins = { path = "../../../kcoder_plugins" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+kcoder_config = { path = "../../../kcoder_config", features = ["provider-test-fixtures"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+futures = { workspace = true }
+tempfile = { workspace = true }
+
+[target."cfg(any(target_os = \"linux\", windows))".dependencies]
+futures = { workspace = true }

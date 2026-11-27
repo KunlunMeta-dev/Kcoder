@@ -1,0 +1,127 @@
+{
+  "$schema": "./settings.schema.jsonc",
+  "permission_mode": "yolo",
+  "cross_session_messages": { "enabled": false, "wake_idle": false, "message_ttl_seconds": 86400, "max_messages_per_minute": 32, "max_source_messages_per_minute": 8 },
+  // Configure model services in the target's own settings.
+  // Omitted selections retain mode defaults; [] explicitly selects no tools.
+  "tools": { "studio": {} },
+  "web": { "search": { "mode": "auto" }, "fetch": { "networkPolicy": "public", "proxyMode": "inherit" } },
+  "tui": {
+    "alternate_screen": "auto"
+  },
+  "default_subagent_max_turns": 80,
+  "goal_pro": {
+    "verifier_max_turns": 30,
+    "verification": {
+      "require_tests": true,
+      "minimum_test_scope": "target_suite",
+      "require_raw_exit_code": true,
+      "allow_workspace_changes": false,
+      "isolate_environment": true,
+      "allow_dependency_changes": false,
+      "allow_network_only_failures": true
+    }
+  },
+  "summary_max_tokens": 262144,
+  "moa": {
+    "enabled": true,
+    "default_preset": "default",
+    "max_reference_workers": 8,
+    "presets": {
+      "default": {
+        "enabled": true,
+        "reference_models": [
+          {
+            "provider": "current",
+            "model": "current"
+          }
+        ],
+        "aggregator": {
+          "provider": "current",
+          "model": "current"
+        },
+        "reference_max_tokens": 262144,
+        "aggregator_max_tokens": 262144
+      }
+    }
+  },
+  "moa_plan": {
+    "enabled": true,
+    "preset": "default",
+    "draft_max_turns": 80,
+    "draft_max_tokens": 262144,
+    "synthesis_max_tokens": 262144,
+    "draft_timeout_secs": 300,
+    "max_planner_workers": 3
+  },
+  "tool_limits": {
+    "doom_loop": {
+      "default_repetitions": 6,
+      "tools": {
+        "TaskOutput": -1
+      }
+    },
+    "foreground_budget_ms": {
+      "default_ms": 120000,
+      "tools": {}
+    },
+    "execution_timeout_ms": {
+      "bash": 1800000,
+      "PowerShell": 1800000
+    },
+    "task_output_timeout_ms": {
+      "default_ms": 5000,
+      "min_ms": 1000,
+      "max_ms": 15000
+    },
+    "permission_denials": {
+      "consecutive_limit": 2
+    }
+  },
+  // Expert and channel management are available by default; platform connections remain explicit.
+  // Settings contain no credentials or grants.
+  "integrations": {
+    "remotes": { "enabled": false, "nativeAcpPeers": [], "nativeSshPeers": [], "outbound": { "enabled": false, "maximumTotalTokens": 16384, "maximumModelCalls": 1, "maximumDurationSeconds": 120 }, "receiver": { "enabled": false, "allowSameAccountAcp": false, "allowedSenderAccounts": [], "acceptMaterials": false, "maximumMaterialBytes": 0, "office": { "enabled": false, "allowedFormats": [], "allowedTools": [], "startupConfiguration": null }, "maximumTotalTokens": 16384, "maximumModelCalls": 1, "maximumDurationSeconds": 120 } },
+    // Optional channelTaskBudget is omitted to preserve existing task limits.
+    "core": { "modelPolicies": [] },
+    "office": {
+      "enabled": true,
+      "allowOrganizationTemplates": false,
+      "allowExternalDelivery": false,
+      "allowedFormats": [
+        "docx",
+        "xlsx",
+        "pptx",
+        "csv",
+        "json"
+      ],
+      "maxOutputBytes": 20971520,
+      "maxDatasetRows": 10000,
+      "datasetPageRows": 100,
+      "projectionPreviewChars": 2000,
+      "generationTimeoutMs": 30000
+    },
+    "connectivity": {
+      "enabled": true,
+      "maxConnections": 16,
+      "maxPendingEvents": 1000,
+      "maxMetadataBytes": 67108864,
+      "maxAttachmentBytes": 104857600,
+      "replayRetentionMs": 2592000000
+    },
+    "knowledge": {
+      "memory_center_enabled": false,
+      "publications_enabled": false,
+      "business_automation_enabled": false,
+      "observer_candidates_enabled": false,
+      "auxiliary_extraction_enabled": false,
+      "extraction_maximum_tokens": 2000,
+      "extraction_maximum_input_bytes": 65536,
+      "extraction_maximum_candidates": 8
+    }
+  },
+  "memory": {
+    "legacy_prompt_enabled": false,
+    "structured_enabled": false
+  }
+}

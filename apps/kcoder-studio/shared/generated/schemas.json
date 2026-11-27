@@ -1,0 +1,1611 @@
+{
+  "ApprovalRequestParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ApprovalAction": {
+        "oneOf": [
+          {
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "command"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "command",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "file_change"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "path",
+              "type"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "input": true,
+              "name": {
+                "type": "string"
+              },
+              "type": {
+                "enum": [
+                  "tool"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "input",
+              "name",
+              "type"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "action": {
+        "$ref": "#/definitions/ApprovalAction"
+      },
+      "appServerEpoch": {
+        "description": "Opaque app-server lifetime that prevents a transport id from being reused after restart.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "approvalId": {
+        "type": "string"
+      },
+      "reason": {
+        "type": "string"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "toolCallId": {
+        "description": "Present only when approvalToolCallIdentityV1 was negotiated.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "turnId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "approvalId",
+      "reason",
+      "serverId",
+      "threadId",
+      "turnId"
+    ],
+    "title": "ApprovalRequestParams",
+    "type": "object"
+  },
+  "ApprovalResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ApprovalDecision": {
+        "enum": [
+          "accept",
+          "accept_for_session",
+          "decline",
+          "cancel"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "approvalId": {
+        "description": "Interaction this reply answers. Required once the connection negotiated [`CAPABILITY_INTERACTION_BINDING_V1`].",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "decision": {
+        "$ref": "#/definitions/ApprovalDecision"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "turnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "decision"
+    ],
+    "title": "ApprovalResponse",
+    "type": "object"
+  },
+  "ComputerUseTurnStatusParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId",
+      "turnId"
+    ],
+    "title": "ComputerUseTurnStatusParams",
+    "type": "object"
+  },
+  "ComputerUseTurnStatusResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ComputerUseAuthorizationState": {
+        "enum": [
+          "valid",
+          "revoked",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ComputerUseChannelState": {
+        "enum": [
+          "available",
+          "unavailable",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ComputerUseCleanupState": {
+        "enum": [
+          "pending",
+          "confirmed",
+          "failed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "ComputerUseDiagnostic": {
+        "additionalProperties": false,
+        "description": "Sanitized operation metadata. Never contains screenshots or window text.",
+        "properties": {
+          "authorization": {
+            "$ref": "#/definitions/ComputerUseAuthorizationState"
+          },
+          "channel": {
+            "$ref": "#/definitions/ComputerUseChannelState"
+          },
+          "cleanup": {
+            "$ref": "#/definitions/ComputerUseCleanupState"
+          },
+          "elapsedMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "failureCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "hostPid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "operationId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "tool": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "workerPid": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "authorization",
+          "channel",
+          "cleanup"
+        ],
+        "type": "object"
+      },
+      "ComputerUseStateChanged": {
+        "additionalProperties": false,
+        "description": "Host lifecycle notification, scoped by the standard server/thread/turn envelope. Contains no bootstrap secret, lease credential or desktop content.",
+        "properties": {
+          "diagnostic": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ComputerUseDiagnostic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recoveryAvailable": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/definitions/DesktopSessionState"
+          },
+          "target": {
+            "$ref": "#/definitions/ComputerUseTarget"
+          }
+        },
+        "required": [
+          "state",
+          "target"
+        ],
+        "type": "object"
+      },
+      "ComputerUseTarget": {
+        "enum": [
+          "local_windows_desktop"
+        ],
+        "type": "string"
+      },
+      "DesktopSessionState": {
+        "description": "Observable client lifecycle. Stopped requires a confirmed worker cleanup; StopFailed must never be rendered as successful release of control.",
+        "enum": [
+          "active",
+          "stopping",
+          "stopped",
+          "stop_failed"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A point-in-time read of the exact turn's desktop host observation. `observation: None` means the host state cannot currently be observed; it is not evidence that desktop cleanup completed or that the turn used no desktop.",
+    "properties": {
+      "observation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ComputerUseStateChanged"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "sequence": {
+        "description": "Watermark in the same outbound sequence as computerUse/stateChanged.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "sequence",
+      "threadId",
+      "turnId"
+    ],
+    "title": "ComputerUseTurnStatusResult",
+    "type": "object"
+  },
+  "ExecutionDefaultsReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ExecutionPermissionMode": {
+        "description": "Permission policy that can be configured as a target's new-session default.",
+        "enum": [
+          "ask",
+          "auto",
+          "accept_edits",
+          "dont_ask",
+          "bypass",
+          "yolo"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "cliPermissionModeOverride": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ExecutionPermissionMode"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "A command-line permission override, when one was supplied."
+      },
+      "effectivePermissionMode": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/ExecutionPermissionMode"
+          }
+        ],
+        "description": "Value currently resolved for a newly created conversation."
+      },
+      "persistedPermissionMode": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ExecutionPermissionMode"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Explicit value from the target user's settings file, if present."
+      }
+    },
+    "required": [
+      "effectivePermissionMode"
+    ],
+    "title": "ExecutionDefaultsReadResult",
+    "type": "object"
+  },
+  "ExecutionDefaultsSaveParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ExecutionPermissionMode": {
+        "description": "Permission policy that can be configured as a target's new-session default.",
+        "enum": [
+          "ask",
+          "auto",
+          "accept_edits",
+          "dont_ask",
+          "bypass",
+          "yolo"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "permissionMode": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ExecutionPermissionMode"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "`null` removes the explicit target-user setting and follows lower layers."
+      }
+    },
+    "required": [
+      "permissionMode"
+    ],
+    "title": "ExecutionDefaultsSaveParams",
+    "type": "object"
+  },
+  "ExecutionPermissionMode": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "description": "Permission policy that can be configured as a target's new-session default.",
+    "enum": [
+      "ask",
+      "auto",
+      "accept_edits",
+      "dont_ask",
+      "bypass",
+      "yolo"
+    ],
+    "title": "ExecutionPermissionMode",
+    "type": "string"
+  },
+  "InitializeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ClientCapabilities": {
+        "properties": {
+          "experimental": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "default": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "ImplementationInfo": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "capabilities": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/ClientCapabilities"
+          }
+        ],
+        "default": {
+          "experimental": {}
+        }
+      },
+      "clientInfo": {
+        "$ref": "#/definitions/ImplementationInfo"
+      },
+      "protocolVersion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientInfo",
+      "protocolVersion"
+    ],
+    "title": "InitializeParams",
+    "type": "object"
+  },
+  "InteractionStatusReadParamsV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Identifies one request without carrying its text, answers, or decision.",
+    "properties": {
+      "appServerEpoch": {
+        "type": "string"
+      },
+      "approvalId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "kind": {
+        "$ref": "#/definitions/InteractionStatusKindV1"
+      },
+      "questionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "requestId": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "appServerEpoch",
+      "kind",
+      "requestId",
+      "serverId",
+      "threadId",
+      "turnId"
+    ],
+    "title": "InteractionStatusReadParamsV1",
+    "type": "object"
+  },
+  "InteractionStatusReadResultV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusV1": {
+        "enum": [
+          "pending",
+          "resolved",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Echoes the exact selector so callers can reject a mismatched response.",
+    "properties": {
+      "appServerEpoch": {
+        "type": "string"
+      },
+      "approvalId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "kind": {
+        "$ref": "#/definitions/InteractionStatusKindV1"
+      },
+      "questionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "requestId": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/definitions/InteractionStatusV1"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "turnId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "appServerEpoch",
+      "kind",
+      "requestId",
+      "serverId",
+      "status",
+      "threadId",
+      "turnId"
+    ],
+    "title": "InteractionStatusReadResultV1",
+    "type": "object"
+  },
+  "ModelConfigurationBoundary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "next_turn",
+      "session_snapshot"
+    ],
+    "title": "ModelConfigurationBoundary",
+    "type": "string"
+  },
+  "ModelConfigurationSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ModelConfigurationBoundary": {
+        "enum": [
+          "next_turn",
+          "session_snapshot"
+        ],
+        "type": "string"
+      },
+      "ModelReasoningPolicy": {
+        "additionalProperties": false,
+        "description": "User-declared controls, not a claim that an upstream model was verified.",
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/definitions/ReasoningControlMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModelToolRegistryScope": {
+        "enum": [
+          "profile_configuration",
+          "session_registry",
+          "session_role",
+          "wiki_worker"
+        ],
+        "type": "string"
+      },
+      "ModelToolSetSummary": {
+        "additionalProperties": false,
+        "description": "The count describes registered tools at this scope, before request permissions.",
+        "properties": {
+          "exposedToolCount": {
+            "description": "Only populated when the actual provider request definitions are captured.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registeredToolCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registryScope": {
+            "$ref": "#/definitions/ModelToolRegistryScope"
+          }
+        },
+        "required": [
+          "registryScope"
+        ],
+        "type": "object"
+      },
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Public effective model metadata. Deliberately excludes URLs, credentials, arbitrary extra-body keys/values and filesystem paths.",
+    "properties": {
+      "apiFormat": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "boundary": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/ModelConfigurationBoundary"
+          }
+        ],
+        "description": "Whether this describes newly resolved settings or a pinned running snapshot."
+      },
+      "chatProtocol": {
+        "type": "string"
+      },
+      "contextWindowTokens": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "extraBodyConfigured": {
+        "type": "boolean"
+      },
+      "maxOutputTokens": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "modelId": {
+        "type": "string"
+      },
+      "outputHeadroomTokens": {
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "providerId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reasoning": {
+        "type": "boolean"
+      },
+      "reasoningEffort": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reasoningPolicy": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ModelReasoningPolicy"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "requestOutputLimits": {
+        "additionalProperties": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "type": "object"
+      },
+      "requestOverrideFields": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "revision": {
+        "description": "Opaque revision of the private semantics; never an encoding of their value.",
+        "type": "string"
+      },
+      "sources": {
+        "additionalProperties": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "description": "Predefined field names and authority labels only.",
+        "type": "object"
+      },
+      "structuredOutput": {
+        "type": "boolean"
+      },
+      "text": {
+        "type": "boolean"
+      },
+      "toolSet": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ModelToolSetSummary"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Actual host composition; missing in older records, never inferred from capability."
+      },
+      "tools": {
+        "type": "boolean"
+      },
+      "vision": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "boundary",
+      "chatProtocol",
+      "extraBodyConfigured",
+      "modelId",
+      "reasoning",
+      "requestOutputLimits",
+      "requestOverrideFields",
+      "revision",
+      "sources",
+      "structuredOutput",
+      "text",
+      "tools",
+      "vision"
+    ],
+    "title": "ModelConfigurationSummary",
+    "type": "object"
+  },
+  "ModelReasoningPolicy": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "User-declared controls, not a claim that an upstream model was verified.",
+    "properties": {
+      "efforts": {
+        "default": [],
+        "items": {
+          "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "mode": {
+        "$ref": "#/definitions/ReasoningControlMode"
+      }
+    },
+    "required": [
+      "mode"
+    ],
+    "title": "ModelReasoningPolicy",
+    "type": "object"
+  },
+  "NativeStartupDiagnosticV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "NativeStartupDiagnosticCodeV1": {
+        "enum": [
+          "settings_parse_failed",
+          "settings_schema_invalid",
+          "settings_overlay_unavailable",
+          "config_private_access",
+          "model_limits_missing",
+          "provider_unconfigured"
+        ],
+        "type": "string"
+      },
+      "NativeStartupDiagnosticPhaseV1": {
+        "enum": [
+          "launch",
+          "initialize"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "code": {
+        "$ref": "#/definitions/NativeStartupDiagnosticCodeV1"
+      },
+      "phase": {
+        "$ref": "#/definitions/NativeStartupDiagnosticPhaseV1"
+      },
+      "version": {
+        "format": "uint32",
+        "maximum": 1,
+        "minimum": 1,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "code",
+      "phase",
+      "version"
+    ],
+    "title": "NativeStartupDiagnosticV1",
+    "type": "object",
+    "x-stderr-prefix": "KCODER_STARTUP_DIAGNOSTIC_V1:"
+  },
+  "ProviderDiscoverModelsParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ProviderAuthentication": {
+        "description": "Explicit per-deployment transport authentication, independent of stored keys.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "api_key"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "enum": [
+                  "none"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "description": "Discover an unsaved deployment without requiring a model or persisting credentials.",
+    "properties": {
+      "apiFormat": {
+        "type": "string"
+      },
+      "apiKey": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "authentication": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/ProviderAuthentication"
+          }
+        ],
+        "default": {
+          "mode": "api_key"
+        }
+      },
+      "endpoint": {
+        "type": "string"
+      },
+      "id": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "apiFormat",
+      "endpoint"
+    ],
+    "title": "ProviderDiscoverModelsParams",
+    "type": "object"
+  },
+  "ProviderDiscoveredModels": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "models": {
+        "description": "Advertised identifiers, not a per-model inference or entitlement probe.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "models"
+    ],
+    "title": "ProviderDiscoveredModels",
+    "type": "object"
+  },
+  "ProviderProbeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "checkOllamaContextWindow": {
+        "description": "Query only Ollama loaded-model metadata instead of generating a response. Omission retains the ordinary bounded connection test.",
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "expectedConfigurationRevision": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "expectedRevision": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "id",
+      "model"
+    ],
+    "title": "ProviderProbeParams",
+    "type": "object"
+  },
+  "ProviderProbeResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ProviderContextWindowObservation": {
+        "properties": {
+          "configuredTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "observedTokens": {
+            "description": "A unique loaded runner's endpoint-reported window at query time, not training metadata or proof of the node serving a generation request.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "configuredTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "checkedAtMs": {
+        "description": "Start time of this explicit check, not a continuous health guarantee.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "configurationRevision": {
+        "type": "string"
+      },
+      "errorType": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "latencyMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "model": {
+        "type": "string"
+      },
+      "ollamaContextWindow": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ProviderContextWindowObservation"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Present only for an explicit window-only probe; missing observedTokens means unverified. Older/ordinary connection results omit this field."
+      },
+      "provider": {
+        "type": "string"
+      },
+      "revision": {
+        "type": "string"
+      },
+      "success": {
+        "description": "Normal mode: connection test succeeded. Window-only mode: a runtime observation was available; it does not assert model-call success.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "configurationRevision",
+      "model",
+      "provider",
+      "revision",
+      "success"
+    ],
+    "title": "ProviderProbeResult",
+    "type": "object"
+  },
+  "QuestionResponse": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "QuestionAnswer": {
+        "properties": {
+          "answers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "annotations": true,
+      "answers": {
+        "additionalProperties": {
+          "$ref": "#/definitions/QuestionAnswer"
+        },
+        "type": "object"
+      },
+      "questionId": {
+        "description": "Interaction this reply answers. Required once the connection negotiated [`CAPABILITY_INTERACTION_BINDING_V1`].",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "turnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "answers"
+    ],
+    "title": "QuestionResponse",
+    "type": "object"
+  },
+  "TaskStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "TaskStatus",
+    "type": "string",
+    "x-known-values": [
+      "pending",
+      "running",
+      "paused",
+      "halted",
+      "completed",
+      "failed",
+      "cancelled"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "TerminalKcoderTui": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Launch the target's interactive KCoder with one slash command.",
+    "properties": {
+      "command": {
+        "type": "string"
+      },
+      "thread_id": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "command"
+    ],
+    "title": "TerminalKcoderTui",
+    "type": "object"
+  },
+  "TerminalStartParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "TerminalKcoderTui": {
+        "additionalProperties": false,
+        "description": "Launch the target's interactive KCoder with one slash command.",
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "thread_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "cols": {
+        "default": 80,
+        "format": "uint16",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "cwd": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "kcoder_tui": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TerminalKcoderTui"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "rows": {
+        "default": 24,
+        "format": "uint16",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "title": "TerminalStartParams",
+    "type": "object"
+  },
+  "TurnAttemptStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "TurnAttemptStatus",
+    "type": "string",
+    "x-known-values": [
+      "accepted",
+      "completed",
+      "failed",
+      "interrupted"
+    ],
+    "x-max-utf8-bytes": 256
+  },
+  "WorkflowAgentConfigurationSummary": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AgentModelSelectionSource": {
+        "enum": [
+          "inherited_session",
+          "explicit_runtime"
+        ],
+        "type": "string"
+      },
+      "ModelConfigurationBoundary": {
+        "enum": [
+          "next_turn",
+          "session_snapshot"
+        ],
+        "type": "string"
+      },
+      "ModelConfigurationSummary": {
+        "additionalProperties": false,
+        "description": "Public effective model metadata. Deliberately excludes URLs, credentials, arbitrary extra-body keys/values and filesystem paths.",
+        "properties": {
+          "apiFormat": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "boundary": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/ModelConfigurationBoundary"
+              }
+            ],
+            "description": "Whether this describes newly resolved settings or a pinned running snapshot."
+          },
+          "chatProtocol": {
+            "type": "string"
+          },
+          "contextWindowTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "extraBodyConfigured": {
+            "type": "boolean"
+          },
+          "maxOutputTokens": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "modelId": {
+            "type": "string"
+          },
+          "outputHeadroomTokens": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "providerId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoning": {
+            "type": "boolean"
+          },
+          "reasoningEffort": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasoningPolicy": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelReasoningPolicy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "requestOutputLimits": {
+            "additionalProperties": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": "object"
+          },
+          "requestOverrideFields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "revision": {
+            "description": "Opaque revision of the private semantics; never an encoding of their value.",
+            "type": "string"
+          },
+          "sources": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "description": "Predefined field names and authority labels only.",
+            "type": "object"
+          },
+          "structuredOutput": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "boolean"
+          },
+          "toolSet": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ModelToolSetSummary"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actual host composition; missing in older records, never inferred from capability."
+          },
+          "tools": {
+            "type": "boolean"
+          },
+          "vision": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "boundary",
+          "chatProtocol",
+          "extraBodyConfigured",
+          "modelId",
+          "reasoning",
+          "requestOutputLimits",
+          "requestOverrideFields",
+          "revision",
+          "sources",
+          "structuredOutput",
+          "text",
+          "tools",
+          "vision"
+        ],
+        "type": "object"
+      },
+      "ModelReasoningPolicy": {
+        "additionalProperties": false,
+        "description": "User-declared controls, not a claim that an upstream model was verified.",
+        "properties": {
+          "efforts": {
+            "default": [],
+            "items": {
+              "pattern": "[^\\u{9}\\u{a}\\u{b}\\u{c}\\u{d}\\u{20}\\u{85}\\u{a0}\\u{1680}\\u{2000}\\u{2001}\\u{2002}\\u{2003}\\u{2004}\\u{2005}\\u{2006}\\u{2007}\\u{2008}\\u{2009}\\u{200a}\\u{2028}\\u{2029}\\u{202f}\\u{205f}\\u{3000}]",
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "$ref": "#/definitions/ReasoningControlMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModelToolRegistryScope": {
+        "enum": [
+          "profile_configuration",
+          "session_registry",
+          "session_role",
+          "wiki_worker"
+        ],
+        "type": "string"
+      },
+      "ModelToolSetSummary": {
+        "additionalProperties": false,
+        "description": "The count describes registered tools at this scope, before request permissions.",
+        "properties": {
+          "exposedToolCount": {
+            "description": "Only populated when the actual provider request definitions are captured.",
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "profile": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "registeredToolCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "registryScope": {
+            "$ref": "#/definitions/ModelToolRegistryScope"
+          }
+        },
+        "required": [
+          "registryScope"
+        ],
+        "type": "object"
+      },
+      "ReasoningControlMode": {
+        "enum": [
+          "hidden",
+          "optional",
+          "always_on",
+          "always_off"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Runtime facts owned by one workflow verification attempt.",
+    "properties": {
+      "agentId": {
+        "type": "string"
+      },
+      "artifactAttempt": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "configuration": {
+        "$ref": "#/definitions/ModelConfigurationSummary"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "selectionSource": {
+        "$ref": "#/definitions/AgentModelSelectionSource"
+      }
+    },
+    "required": [
+      "agentId",
+      "artifactAttempt",
+      "configuration",
+      "runId",
+      "selectionSource"
+    ],
+    "title": "WorkflowAgentConfigurationSummary",
+    "type": "object"
+  }
+}

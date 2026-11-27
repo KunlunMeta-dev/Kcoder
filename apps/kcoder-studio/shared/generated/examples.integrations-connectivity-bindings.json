@@ -1,0 +1,452 @@
+{
+  "ConnectivityChatKind": [
+    {
+      "decoded": "group",
+      "name": "minimal_valid",
+      "value": "group"
+    }
+  ],
+  "ConnectivityChatObservationState": [
+    {
+      "decoded": "observed",
+      "name": "minimal_valid",
+      "value": "observed"
+    }
+  ],
+  "ConnectivityChatTaskBinding": [
+    {
+      "decoded": {
+        "boundAfterSequence": 7,
+        "changedAtMs": 100,
+        "changedBy": "native-user",
+        "connection": {
+          "connectionId": "connection",
+          "namespaceId": "native-original-namespace",
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          }
+        },
+        "generation": 1,
+        "id": "chat-task-id",
+        "operationId": "original-op",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": null,
+          "version": 1
+        },
+        "revision": "1",
+        "sourceRevision": "original-source",
+        "state": "active",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      },
+      "name": "minimal_valid",
+      "value": {
+        "boundAfterSequence": 7,
+        "changedAtMs": 100,
+        "changedBy": "native-user",
+        "connection": {
+          "connectionId": "connection",
+          "namespaceId": "native-original-namespace",
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          }
+        },
+        "generation": 1,
+        "id": "chat-task-id",
+        "operationId": "original-op",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": null,
+          "version": 1
+        },
+        "revision": "1",
+        "sourceRevision": "original-source",
+        "state": "active",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      }
+    }
+  ],
+  "ConnectivityChatTaskBindingReceipt": [
+    {
+      "decoded": {
+        "binding": {
+          "boundAfterSequence": 7,
+          "changedAtMs": 100,
+          "changedBy": "native-user",
+          "connection": {
+            "connectionId": "connection",
+            "namespaceId": "native-original-namespace",
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            }
+          },
+          "generation": 1,
+          "id": "chat-task-id",
+          "operationId": "original-op",
+          "range": {
+            "chatId": "chat",
+            "chatKind": "group",
+            "connectionId": "connection",
+            "platform": "feishu",
+            "tenantId": "tenant",
+            "topicId": null,
+            "version": 1
+          },
+          "revision": "1",
+          "sourceRevision": "original-source",
+          "state": "active",
+          "task": {
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            },
+            "threadId": "original-task"
+          }
+        },
+        "operationId": "original-op",
+        "previousTask": null
+      },
+      "name": "minimal_valid",
+      "value": {
+        "binding": {
+          "boundAfterSequence": 7,
+          "changedAtMs": 100,
+          "changedBy": "native-user",
+          "connection": {
+            "connectionId": "connection",
+            "namespaceId": "native-original-namespace",
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            }
+          },
+          "generation": 1,
+          "id": "chat-task-id",
+          "operationId": "original-op",
+          "range": {
+            "chatId": "chat",
+            "chatKind": "group",
+            "connectionId": "connection",
+            "platform": "feishu",
+            "tenantId": "tenant",
+            "topicId": null,
+            "version": 1
+          },
+          "revision": "1",
+          "sourceRevision": "original-source",
+          "state": "active",
+          "task": {
+            "scope": {
+              "accountId": "owner",
+              "identityGeneration": "1",
+              "targetId": "target",
+              "targetRevision": "1",
+              "workspaceId": "project"
+            },
+            "threadId": "original-task"
+          }
+        },
+        "operationId": "original-op",
+        "previousTask": null
+      }
+    }
+  ],
+  "ConnectivityChatTaskBindingState": [
+    {
+      "decoded": "active",
+      "name": "minimal_valid",
+      "value": "active"
+    }
+  ],
+  "ConnectivityExternalChatObservation": [
+    {
+      "decoded": {
+        "botId": "app",
+        "firstObservedAt": 1,
+        "id": "chat-ref",
+        "lastObservedAt": 2,
+        "lastOperatorId": "member",
+        "observationState": "observed",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": "topic",
+          "version": 1
+        },
+        "revision": "1"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "botId": "app",
+        "firstObservedAt": 1,
+        "id": "chat-ref",
+        "lastObservedAt": 2,
+        "lastOperatorId": "member",
+        "observationState": "observed",
+        "range": {
+          "chatId": "chat",
+          "chatKind": "group",
+          "connectionId": "connection",
+          "platform": "feishu",
+          "tenantId": "tenant",
+          "topicId": "topic",
+          "version": 1
+        },
+        "revision": "1"
+      }
+    }
+  ],
+  "ConnectivityExternalChatRange": [
+    {
+      "decoded": {
+        "chatId": "chat",
+        "chatKind": "group",
+        "connectionId": "connection",
+        "platform": "feishu",
+        "tenantId": "tenant",
+        "topicId": "topic",
+        "version": 1
+      },
+      "name": "minimal_valid",
+      "value": {
+        "chatId": "chat",
+        "chatKind": "group",
+        "connectionId": "connection",
+        "platform": "feishu",
+        "tenantId": "tenant",
+        "topicId": "topic",
+        "version": 1
+      }
+    }
+  ],
+  "ConnectivityTaskBindingMutation": [
+    {
+      "decoded": {
+        "action": "bindTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": null,
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "2"
+        },
+        "taskThreadId": "original-task"
+      },
+      "name": "bind_existing_task",
+      "value": {
+        "action": "bindTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": null,
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "2"
+        },
+        "taskThreadId": "original-task"
+      }
+    },
+    {
+      "decoded": {
+        "action": "switchTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": "1",
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "3"
+        },
+        "taskThreadId": "other-original-task"
+      },
+      "name": "switch_current_chat",
+      "value": {
+        "action": "switchTask",
+        "connectionId": "connection",
+        "expectedBindingRevision": "1",
+        "externalChatRef": {
+          "id": "actual-chat",
+          "revision": "3"
+        },
+        "taskThreadId": "other-original-task"
+      }
+    },
+    {
+      "decoded": {
+        "action": "unbindTask",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "2"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      },
+      "name": "unbind_without_online_sdk",
+      "value": {
+        "action": "unbindTask",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "2"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      }
+    },
+    {
+      "decoded": {
+        "action": "prepareTaskRuntime",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "1"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      },
+      "name": "prepare_original_runtime_without_execution",
+      "value": {
+        "action": "prepareTaskRuntime",
+        "bindingRef": {
+          "id": "binding",
+          "revision": "1"
+        },
+        "connectionId": "connection",
+        "taskThreadId": "original-task"
+      }
+    }
+  ],
+  "ConnectivityTaskBindingQuery": [
+    {
+      "decoded": {
+        "operationId": "original-operation",
+        "taskThreadId": "task"
+      },
+      "name": "read_original_receipt",
+      "value": {
+        "operationId": "original-operation",
+        "taskThreadId": "task"
+      }
+    }
+  ],
+  "ConnectivityTaskBindingSummaryQuery": [
+    {
+      "decoded": {
+        "taskThreadIds": [
+          "original-task"
+        ]
+      },
+      "name": "visible_original_tasks",
+      "value": {
+        "taskThreadIds": [
+          "original-task"
+        ]
+      }
+    }
+  ],
+  "ConnectivityTaskLocator": [
+    {
+      "decoded": {
+        "scope": {
+          "accountId": "owner",
+          "identityGeneration": "1",
+          "targetId": "target",
+          "targetRevision": "1",
+          "workspaceId": "project"
+        },
+        "threadId": "original-task"
+      },
+      "name": "minimal_valid",
+      "value": {
+        "scope": {
+          "accountId": "owner",
+          "identityGeneration": "1",
+          "targetId": "target",
+          "targetRevision": "1",
+          "workspaceId": "project"
+        },
+        "threadId": "original-task"
+      }
+    }
+  ],
+  "ConnectivityTaskRuntimeOwner": [
+    {
+      "decoded": {
+        "phase": "prepared",
+        "sourceOperationId": "original-operation",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      },
+      "name": "original_passive_owner",
+      "value": {
+        "phase": "prepared",
+        "sourceOperationId": "original-operation",
+        "task": {
+          "scope": {
+            "accountId": "owner",
+            "identityGeneration": "1",
+            "targetId": "target",
+            "targetRevision": "1",
+            "workspaceId": "project"
+          },
+          "threadId": "original-task"
+        }
+      }
+    }
+  ],
+  "ConnectivityTaskRuntimePhase": [
+    {
+      "decoded": "prepared",
+      "name": "passive",
+      "value": "prepared"
+    }
+  ]
+}

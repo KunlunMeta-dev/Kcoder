@@ -1,0 +1,22 @@
+[package]
+name = "kcoder_integration_types"
+description = "Native integration, task capability scope and continuous work contracts."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+path = "../../src/integration_types.rs"
+
+[features]
+json-schema = ["dep:schemars", "kcoder_common_types/json-schema"]
+
+[dependencies]
+schemars = { version = "0.8", optional = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+kcoder_common_types = { path = "../common_types" }

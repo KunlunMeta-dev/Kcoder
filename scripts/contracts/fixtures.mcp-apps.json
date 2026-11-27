@@ -1,0 +1,624 @@
+{
+  "McpAppReadParams": {
+    "valid": [
+      {
+        "name": "bound-view",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-connection",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1
+        }
+      },
+      {
+        "name": "caller-owner",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "owner": "peer"
+        }
+      }
+    ]
+  },
+  "McpAppReadResult": {
+    "valid": [
+      {
+        "name": "live-ui-data",
+        "value": {
+          "widget": {
+            "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "attemptId": "attempt-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "title": "Sales",
+            "summary": "Quarterly sales",
+            "format": "html",
+            "executionMode": "isolated_html",
+            "libraries": [],
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 128,
+            "createdAtMs": 1,
+            "mcpApp": {
+              "serverName": "owned",
+              "connectionId": "cccccccccccccccccccccccccccccccc",
+              "pluginId": null,
+              "toolName": "chart",
+              "resourceUri": "ui://owned/chart",
+              "mimeType": "text/html;profile=mcp-app"
+            }
+          },
+          "live": true,
+          "protocolVersion": "2026-01-26",
+          "csp": {},
+          "requestedPermissions": {},
+          "toolInput": {},
+          "toolContent": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "structuredContent": {
+            "series": [
+              1,
+              2
+            ]
+          },
+          "resultMeta": {
+            "revision": 1
+          },
+          "allowedTools": [
+            "chart",
+            "refresh"
+          ],
+          "resourcesEnabled": true,
+          "toolInfo": {
+            "name": "chart",
+            "description": "Bound chart",
+            "inputSchema": {
+              "type": "object"
+            },
+            "_meta": {
+              "ui": {
+                "resourceUri": "ui://owned/chart",
+                "visibility": [
+                  "model",
+                  "app"
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "historical-ui-data",
+        "value": {
+          "widget": {
+            "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "attemptId": "attempt-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "title": "Sales",
+            "summary": "Quarterly sales",
+            "format": "html",
+            "executionMode": "isolated_html",
+            "libraries": [],
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 128,
+            "createdAtMs": 1,
+            "mcpApp": {
+              "serverName": "owned",
+              "connectionId": "cccccccccccccccccccccccccccccccc",
+              "pluginId": null,
+              "toolName": "chart",
+              "resourceUri": "ui://owned/chart",
+              "mimeType": "text/html;profile=mcp-app"
+            }
+          },
+          "live": false,
+          "protocolVersion": "2026-01-26",
+          "csp": {},
+          "requestedPermissions": {},
+          "toolInput": {},
+          "toolContent": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "structuredContent": {
+            "series": [
+              1,
+              2
+            ]
+          },
+          "resultMeta": {
+            "revision": 1
+          },
+          "allowedTools": [],
+          "resourcesEnabled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "html-in-metadata",
+        "value": {
+          "widget": {
+            "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "threadId": "thread-1",
+            "turnId": "turn-1",
+            "attemptId": "attempt-1",
+            "toolCallId": "call-1",
+            "revision": 1,
+            "title": "Sales",
+            "summary": "Quarterly sales",
+            "format": "html",
+            "executionMode": "isolated_html",
+            "libraries": [],
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bytes": 128,
+            "createdAtMs": 1,
+            "mcpApp": {
+              "serverName": "owned",
+              "connectionId": "cccccccccccccccccccccccccccccccc",
+              "pluginId": null,
+              "toolName": "chart",
+              "resourceUri": "ui://owned/chart",
+              "mimeType": "text/html;profile=mcp-app"
+            }
+          },
+          "live": true,
+          "protocolVersion": "2026-01-26",
+          "csp": {},
+          "requestedPermissions": {},
+          "toolInput": {},
+          "toolContent": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "structuredContent": {
+            "series": [
+              1,
+              2
+            ]
+          },
+          "resultMeta": {
+            "revision": 1
+          },
+          "html": "<html></html>"
+        }
+      },
+      {
+        "name": "missing-widget",
+        "value": {
+          "live": true,
+          "protocolVersion": "2026-01-26",
+          "csp": {},
+          "requestedPermissions": {},
+          "toolInput": {},
+          "toolContent": [
+            {
+              "type": "text",
+              "text": "ready"
+            }
+          ],
+          "structuredContent": {
+            "series": [
+              1,
+              2
+            ]
+          },
+          "resultMeta": {
+            "revision": 1
+          }
+        }
+      }
+    ]
+  },
+  "McpAppToolCallParams": {
+    "valid": [
+      {
+        "name": "scoped-action",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "operationId": "operation-1",
+          "name": "refresh",
+          "arguments": {
+            "city": "Shanghai"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "caller-server",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "operationId": "operation-1",
+          "name": "refresh",
+          "arguments": {
+            "city": "Shanghai"
+          },
+          "server": "other"
+        }
+      },
+      {
+        "name": "no-operation",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "name": "refresh",
+          "arguments": {
+            "city": "Shanghai"
+          }
+        }
+      }
+    ]
+  },
+  "McpAppOperationReadParams": {
+    "valid": [
+      {
+        "name": "receipt-only",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "operationId": "operation-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "query-cannot-call",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "operationId": "operation-1",
+          "arguments": {}
+        }
+      }
+    ]
+  },
+  "McpAppOperationStatus": {
+    "valid": [
+      {
+        "name": "prepared",
+        "value": "prepared"
+      },
+      {
+        "name": "executing",
+        "value": "executing"
+      },
+      {
+        "name": "completed",
+        "value": "completed"
+      },
+      {
+        "name": "denied",
+        "value": "denied"
+      },
+      {
+        "name": "not_sent",
+        "value": "not_sent"
+      },
+      {
+        "name": "outcome_unknown",
+        "value": "outcome_unknown"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-not-success",
+        "value": "passed"
+      },
+      {
+        "name": "cancel-not-rollback",
+        "value": "cancelled"
+      }
+    ]
+  },
+  "McpAppToolCallResult": {
+    "valid": [
+      {
+        "name": "authoritative-result",
+        "value": {
+          "operationId": "operation-1",
+          "status": "completed",
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "ready"
+              }
+            ],
+            "structuredContent": {
+              "count": 1
+            },
+            "_meta": {
+              "revision": 1
+            }
+          },
+          "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      },
+      {
+        "name": "unresolved-result",
+        "value": {
+          "operationId": "operation-1",
+          "status": "outcome_unknown",
+          "errorCode": "outcome_unknown"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "result-is-not-authority",
+        "value": {
+          "operationId": "operation-1",
+          "status": "completed",
+          "result": {
+            "content": [
+              {
+                "type": "text",
+                "text": "ready"
+              }
+            ],
+            "structuredContent": {
+              "count": 1
+            },
+            "_meta": {
+              "revision": 1
+            }
+          },
+          "resultSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "authorized": true
+        }
+      }
+    ]
+  },
+  "McpAppResourceReadParams": {
+    "valid": [
+      {
+        "name": "same-peer-resource",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "uri": "data://owned/report"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "cannot-route-host",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "uri": "data://owned/report",
+          "url": "https://other.example.test"
+        }
+      }
+    ]
+  },
+  "McpAppResourceRef": {
+    "valid": [
+      {
+        "name": "retained-result-ref",
+        "value": {
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "bytes": 100,
+          "uri": "data://owned/report",
+          "contentCount": 1,
+          "mimeType": "application/json",
+          "encoding": "json"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-digest",
+        "value": {
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "bytes": 100,
+          "uri": "data://owned/report",
+          "contentCount": 1,
+          "mimeType": "application/json",
+          "encoding": "json"
+        }
+      }
+    ]
+  },
+  "McpAppResourceReadResult": {
+    "valid": [
+      {
+        "name": "resource-ref-only",
+        "value": {
+          "resource": {
+            "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "bytes": 100,
+            "uri": "data://owned/report",
+            "contentCount": 1,
+            "mimeType": "application/json",
+            "encoding": "json"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-body-in-ref",
+        "value": {
+          "resource": {
+            "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "bytes": 100,
+            "uri": "data://owned/report",
+            "contentCount": 1,
+            "mimeType": "application/json",
+            "encoding": "json"
+          },
+          "html": "<html></html>"
+        }
+      }
+    ]
+  },
+  "McpAppResourceContentReadParams": {
+    "valid": [
+      {
+        "name": "immutable-chunk",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "offset": 0
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "offset-unsigned",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "offset": -1
+        }
+      },
+      {
+        "name": "caller-file",
+        "value": {
+          "threadId": "thread-1",
+          "widgetId": "waaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "revision": 1,
+          "connectionId": "cccccccccccccccccccccccccccccccc",
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "offset": 0,
+          "path": "/tmp/file"
+        }
+      }
+    ]
+  },
+  "McpAppResourceContentReadResult": {
+    "valid": [
+      {
+        "name": "base64-json-chunk",
+        "value": {
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "bytes": 100,
+          "offset": 0,
+          "nextOffset": 2,
+          "dataBase64": "e30="
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no-caller-url",
+        "value": {
+          "resourceId": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "bytes": 100,
+          "offset": 0,
+          "nextOffset": 2,
+          "dataBase64": "e30=",
+          "url": "https://other.example.test"
+        }
+      }
+    ]
+  },
+  "McpAppRevokeParams": {
+    "valid": [
+      {
+        "name": "owned-thread-lifecycle",
+        "value": {
+          "threadId": "thread-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-thread",
+        "value": {}
+      },
+      {
+        "name": "caller-owner-injection",
+        "value": {
+          "threadId": "thread-1",
+          "owner": "peer"
+        }
+      },
+      {
+        "name": "caller-connection-injection",
+        "value": {
+          "threadId": "thread-1",
+          "connectionId": "peer"
+        }
+      }
+    ]
+  },
+  "McpAppRevokeResult": {
+    "valid": [
+      {
+        "name": "revoked-or-already-closed",
+        "value": {
+          "revoked": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-outcome",
+        "value": {}
+      },
+      {
+        "name": "string-outcome",
+        "value": {
+          "revoked": "true"
+        }
+      }
+    ]
+  }
+}

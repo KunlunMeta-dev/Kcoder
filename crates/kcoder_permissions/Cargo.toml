@@ -1,0 +1,21 @@
+[package]
+name = "kcoder_permissions"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+kcoder_config = { path = "../kcoder_config" }
+kcoder_native_delegation = { path = "internal/native_delegation" }
+kcoder_permission_rules = { path = "internal/permission_rules" }
+kcoder_tools = { path = "../kcoder_tools" }
+kcoder_types = { path = "../kcoder_types" }
+async-trait = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tempfile = { workspace = true }

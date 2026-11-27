@@ -1,0 +1,20 @@
+{
+  "menu": "SSH · {{label}}",
+  "manage": "配置 SSH 连接…",
+  "loadFailed": "读取 SSH 连接失败，请进入设置重试。",
+  "connect": "连接",
+  "reconnect": "重新连接",
+  "disconnect": "断开连接",
+  "cancel": "取消",
+  "connecting": "连接中…",
+  "connected": "已连接",
+  "disconnected": "已断开",
+  "password": "SSH 密码",
+  "passphrase": "密钥口令（可选）",
+  "failed": "SSH 连接失败",
+  "gatewayNote": "由 Gateway 发起 SSH。密码留空可使用设置中保存的密码；在此输入仅覆盖当次连接。终端输出不会发送给 Agent。",
+  "savedPassword": "使用已保存的密码",
+  "hostKeyPrompt": "确认 {{host}}:{{port}} 的主机指纹",
+  "hostKeyHelp": "请先向服务器管理员核对指纹，再确认信任。已记录的指纹发生变化时将拒绝连接。",
+  "trustConnect": "信任此主机并连接"
+}

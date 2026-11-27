@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "id": "rust-project",
+  "version": 2,
+  "description": "无外部 crate 的 Rust 库，用于代码理解、修改和 cargo test 行为。",
+  "tags": ["rust", "cargo", "code-edit", "real-model"],
+  "materializer": "copy"
+}

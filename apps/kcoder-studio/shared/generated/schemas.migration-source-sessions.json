@@ -1,0 +1,1001 @@
+{
+  "MigrationSourceSessionCloseResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionReleaseState": {
+        "enum": [
+          "released",
+          "pending",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "status": {
+        "$ref": "#/definitions/MigrationSourceSessionReleaseState"
+      }
+    },
+    "required": [
+      "status"
+    ],
+    "title": "MigrationSourceSessionCloseResult",
+    "type": "object"
+  },
+  "MigrationSourceSessionOpenParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "purpose": {
+        "$ref": "#/definitions/MigrationSourceSessionPurpose"
+      },
+      "sessionId": {
+        "description": "Stable wizard identity; retrying must not create a second owned process.",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "targetId": {
+        "description": "Gateway resolves this selector against the authenticated target ACL.",
+        "type": "string"
+      },
+      "workspacePath": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "purpose",
+      "sessionId",
+      "targetId"
+    ],
+    "title": "MigrationSourceSessionOpenParams",
+    "type": "object"
+  },
+  "MigrationSourceSessionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "purpose": {
+        "$ref": "#/definitions/MigrationSourceSessionPurpose"
+      },
+      "sessionId": {
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        "type": "string"
+      },
+      "targetId": {
+        "description": "Must resolve to the original session scope; this cannot retarget a child.",
+        "type": "string"
+      },
+      "workspacePath": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "purpose",
+      "sessionId",
+      "targetId"
+    ],
+    "title": "MigrationSourceSessionParams",
+    "type": "object"
+  },
+  "MigrationSourceSessionQueryParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InstructionCaptureFormat": {
+        "enum": [
+          "static_v2"
+        ],
+        "type": "string"
+      },
+      "InstructionRepresentation": {
+        "enum": [
+          "original",
+          "compiled"
+        ],
+        "type": "string"
+      },
+      "MigrationCodexLayersSelectParams": {
+        "additionalProperties": false,
+        "properties": {
+          "includeProject": {
+            "type": "boolean"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "includeProject",
+          "sourceId"
+        ],
+        "type": "object"
+      },
+      "MigrationDefinitionsDiscoverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "catalogId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "includeProject": {
+            "default": false,
+            "type": "boolean"
+          },
+          "pageIndex": {
+            "default": 0,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/MigrationSourceKind"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MigrationDiscoverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "includeProject": {
+            "default": false,
+            "type": "boolean"
+          },
+          "sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/MigrationSourceKind"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MigrationHistoryDiscoverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "MigrationHistorySourcesParams": {
+        "additionalProperties": false,
+        "properties": {
+          "catalogId": {
+            "type": "string"
+          },
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "catalogId"
+        ],
+        "type": "object"
+      },
+      "MigrationInstructionCaptureParams": {
+        "additionalProperties": false,
+        "properties": {
+          "captureId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "confirmStaticSubset": {
+            "enum": [
+              true
+            ],
+            "type": "boolean"
+          },
+          "format": {
+            "$ref": "#/definitions/InstructionCaptureFormat"
+          },
+          "includeDescendants": {
+            "default": false,
+            "type": "boolean"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceCwd": {
+            "minLength": 1,
+            "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+            "type": "string",
+            "x-max-utf8-bytes": 4096
+          },
+          "sourceRoot": {
+            "minLength": 1,
+            "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+            "type": "string",
+            "x-max-utf8-bytes": 4096
+          }
+        },
+        "required": [
+          "captureId",
+          "confirmStaticSubset",
+          "format",
+          "source",
+          "sourceCwd",
+          "sourceRoot"
+        ],
+        "type": "object"
+      },
+      "MigrationMemoryDiscoverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "MigrationMemorySourcesParams": {
+        "additionalProperties": false,
+        "properties": {
+          "catalogId": {
+            "type": "string"
+          },
+          "cursor": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "catalogId"
+        ],
+        "type": "object"
+      },
+      "MigrationPluginDiscoverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "cursor": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "includeProject": {
+            "type": "boolean"
+          },
+          "includeUploaded": {
+            "type": "boolean"
+          },
+          "sources": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/MigrationSourceKind"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "MigrationProjectSourceRootsParams": {
+        "additionalProperties": false,
+        "properties": {
+          "catalogId": {
+            "type": "string"
+          },
+          "pageIndex": {
+            "default": 0,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceHandle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "catalogId",
+          "sourceHandle"
+        ],
+        "type": "object"
+      },
+      "MigrationProjectsDiscoverParams": {
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "MigrationProjectsSourcesParams": {
+        "additionalProperties": false,
+        "properties": {
+          "catalogId": {
+            "type": "string"
+          },
+          "pageIndex": {
+            "default": 0,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "catalogId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceBindingsParams": {
+        "additionalProperties": false,
+        "properties": {
+          "sourceIds": {
+            "items": {
+              "minLength": 1,
+              "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+              "type": "string",
+              "x-max-utf8-bytes": 256
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "type": "array",
+            "uniqueItems": true
+          }
+        },
+        "required": [
+          "sourceIds"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceCodexLayersReadParams": {
+        "additionalProperties": false,
+        "description": "A source child may inspect only a previously discovered source, never a saved target job.",
+        "properties": {
+          "pageIndex": {
+            "default": 0,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceConfigurationLayersReadParams": {
+        "additionalProperties": false,
+        "description": "A source-only configuration report cannot select a target job or filesystem path.",
+        "properties": {
+          "pageIndex": {
+            "default": 0,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sourceId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceDirectorySelectParams": {
+        "additionalProperties": false,
+        "properties": {
+          "directory": {
+            "description": "Absolute path on the selected source runtime, never a browser-local path.",
+            "minLength": 1,
+            "pattern": "^(?=.*\\S)[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+            "type": "string",
+            "x-max-utf8-bytes": 4096
+          },
+          "selectionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          }
+        },
+        "required": [
+          "directory",
+          "selectionId",
+          "source"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceInstructionBodyParams": {
+        "additionalProperties": false,
+        "properties": {
+          "captureId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "itemId": {
+            "minLength": 1,
+            "pattern": "^[^\\u0000-\\u001f\\u007f-\\u009f]+$",
+            "type": "string",
+            "x-max-utf8-bytes": 256
+          },
+          "offset": {
+            "default": 0,
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "representation": {
+            "$ref": "#/definitions/InstructionRepresentation"
+          }
+        },
+        "required": [
+          "captureId",
+          "itemId",
+          "representation"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceInstructionPageParams": {
+        "additionalProperties": false,
+        "properties": {
+          "captureId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "pageIndex": {
+            "default": 0,
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "captureId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceProductParams": {
+        "additionalProperties": false,
+        "properties": {
+          "manifestSha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          },
+          "operationId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "manifestSha256",
+          "operationId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionParams": {
+        "additionalProperties": false,
+        "properties": {
+          "purpose": {
+            "$ref": "#/definitions/MigrationSourceSessionPurpose"
+          },
+          "sessionId": {
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            "type": "string"
+          },
+          "targetId": {
+            "description": "Must resolve to the original session scope; this cannot retarget a child.",
+            "type": "string"
+          },
+          "workspacePath": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "purpose",
+          "sessionId",
+          "targetId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceSessionPurpose": {
+        "enum": [
+          "source",
+          "target",
+          "target_recovery"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceSessionQuery": {
+        "description": "Only reviewed discovery operations can enter the owned source process.",
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "projects"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationProjectsDiscoverParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "projects_page"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationProjectsSourcesParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "project_roots"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationProjectSourceRootsParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "instructions_capture"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationInstructionCaptureParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "instructions_page"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationSourceInstructionPageParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "instructions_body"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationSourceInstructionBodyParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "plugins"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationPluginDiscoverParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "configuration"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationDiscoverParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "definitions"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationDefinitionsDiscoverParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "source_bindings"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationSourceBindingsParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "directory_select"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationSourceDirectorySelectParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "uploaded_select"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationSourceProductParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "codex_layers_select"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationCodexLayersSelectParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "codex_layers_read"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationSourceCodexLayersReadParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "configuration_layers_read"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationSourceConfigurationLayersReadParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "memory"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationMemoryDiscoverParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "memory_page"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationMemorySourcesParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "history"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationHistoryDiscoverParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "history_families"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationHistoryDiscoverParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "history_page"
+                ],
+                "type": "string"
+              },
+              "params": {
+                "$ref": "#/definitions/MigrationHistorySourcesParams"
+              }
+            },
+            "required": [
+              "kind",
+              "params"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "query": {
+        "$ref": "#/definitions/MigrationSourceSessionQuery"
+      },
+      "session": {
+        "$ref": "#/definitions/MigrationSourceSessionParams"
+      }
+    },
+    "required": [
+      "query",
+      "session"
+    ],
+    "title": "MigrationSourceSessionQueryParams",
+    "type": "object"
+  },
+  "MigrationSourceSessionStateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceSessionState": {
+        "enum": [
+          "opening",
+          "ready",
+          "closing",
+          "released"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "launching": {
+        "type": "boolean"
+      },
+      "ownedChildren": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "status": {
+        "$ref": "#/definitions/MigrationSourceSessionState"
+      }
+    },
+    "required": [
+      "launching",
+      "ownedChildren",
+      "status"
+    ],
+    "title": "MigrationSourceSessionStateResult",
+    "type": "object"
+  }
+}

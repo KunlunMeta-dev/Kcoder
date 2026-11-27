@@ -1,0 +1,411 @@
+{
+  "NativeCodeCurrentOsState": [
+    {
+      "decoded": "unknown",
+      "name": "structural-native-code-example",
+      "value": "unknown"
+    }
+  ],
+  "NativeCodeOwnerObservation": [
+    {
+      "decoded": "last_persisted",
+      "name": "structural-native-code-example",
+      "value": "last_persisted"
+    }
+  ],
+  "NativeCodeServiceGrantView": [
+    {
+      "decoded": {
+        "expiresAtMs": 123456789,
+        "reference": {
+          "id": "original-code-grant",
+          "revision": "1"
+        },
+        "status": "active"
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "expiresAtMs": 123456789,
+        "reference": {
+          "id": "original-code-grant",
+          "revision": "1"
+        },
+        "status": "active"
+      }
+    }
+  ],
+  "NativeCodeServiceIntent": [
+    {
+      "decoded": {
+        "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "definitionId": "saved-code-fixture",
+        "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "definitionVersion": 1,
+        "expiresAtMs": 123456789,
+        "leaseId": "native-code-fixture",
+        "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "operationId": "explicit-native-code-fixture",
+        "scope": {
+          "accountId": "fixture-owner",
+          "identityGeneration": "fixture-identity",
+          "targetId": "fixture-target",
+          "targetRevision": "fixture-configuration",
+          "workspaceId": "fixture-workspace"
+        },
+        "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "template": "native-saved-code-service-v1"
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "definitionId": "saved-code-fixture",
+        "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "definitionVersion": 1,
+        "expiresAtMs": 123456789,
+        "leaseId": "native-code-fixture",
+        "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "operationId": "explicit-native-code-fixture",
+        "scope": {
+          "accountId": "fixture-owner",
+          "identityGeneration": "fixture-identity",
+          "targetId": "fixture-target",
+          "targetRevision": "fixture-configuration",
+          "workspaceId": "fixture-workspace"
+        },
+        "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "template": "native-saved-code-service-v1"
+      }
+    }
+  ],
+  "NativeCodeServiceLocator": [
+    {
+      "decoded": {
+        "leaseId": "native-code-fixture"
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "leaseId": "native-code-fixture"
+      }
+    }
+  ],
+  "NativeCodeServiceMethod": [
+    {
+      "decoded": "integrations/services/code/read",
+      "name": "structural-native-code-example",
+      "value": "integrations/services/code/read"
+    }
+  ],
+  "NativeCodeServiceMutationResult": [
+    {
+      "decoded": {
+        "cancellationRequested": false,
+        "cancellationSettled": false,
+        "ready": {
+          "acceptance": null,
+          "leaseId": "native-code-fixture",
+          "modelCalls": 0,
+          "operationId": "native-code-task-fixture"
+        },
+        "reconciled": false,
+        "record": {
+          "enabled": false,
+          "grantRef": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "intent": {
+            "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "definitionId": "saved-code-fixture",
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "definitionVersion": 1,
+            "expiresAtMs": 123456789,
+            "leaseId": "native-code-fixture",
+            "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "operationId": "explicit-native-code-fixture",
+            "scope": {
+              "accountId": "fixture-owner",
+              "identityGeneration": "fixture-identity",
+              "targetId": "fixture-target",
+              "targetRevision": "fixture-configuration",
+              "workspaceId": "fixture-workspace"
+            },
+            "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "template": "native-saved-code-service-v1"
+          },
+          "observedAtMs": 123450000,
+          "revision": 1,
+          "schemaVersion": 1,
+          "state": "approved"
+        }
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "cancellationRequested": false,
+        "cancellationSettled": false,
+        "ready": {
+          "acceptance": null,
+          "leaseId": "native-code-fixture",
+          "modelCalls": 0,
+          "operationId": "native-code-task-fixture"
+        },
+        "reconciled": false,
+        "record": {
+          "enabled": false,
+          "grantRef": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "intent": {
+            "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "definitionId": "saved-code-fixture",
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "definitionVersion": 1,
+            "expiresAtMs": 123456789,
+            "leaseId": "native-code-fixture",
+            "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "operationId": "explicit-native-code-fixture",
+            "scope": {
+              "accountId": "fixture-owner",
+              "identityGeneration": "fixture-identity",
+              "targetId": "fixture-target",
+              "targetRevision": "fixture-configuration",
+              "workspaceId": "fixture-workspace"
+            },
+            "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "template": "native-saved-code-service-v1"
+          },
+          "observedAtMs": 123450000,
+          "revision": 1,
+          "schemaVersion": 1,
+          "state": "approved"
+        }
+      }
+    }
+  ],
+  "NativeCodeServicePreparePayload": [
+    {
+      "decoded": {
+        "codeWorkflow": {
+          "args": {
+            "value": 6
+          },
+          "definitionId": "saved-code-fixture",
+          "version": 1
+        },
+        "expiresInMs": 60000,
+        "explicitBackgroundConsent": true,
+        "purpose": "native_saved_code_service"
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "codeWorkflow": {
+          "args": {
+            "value": 6
+          },
+          "definitionId": "saved-code-fixture",
+          "version": 1
+        },
+        "expiresInMs": 60000,
+        "explicitBackgroundConsent": true,
+        "purpose": "native_saved_code_service"
+      }
+    }
+  ],
+  "NativeCodeServicePurpose": [
+    {
+      "decoded": "native_saved_code_service",
+      "name": "structural-native-code-example",
+      "value": "native_saved_code_service"
+    }
+  ],
+  "NativeCodeServiceReadResult": [
+    {
+      "decoded": {
+        "currentOsState": "unknown",
+        "grant": {
+          "expiresAtMs": 123456789,
+          "reference": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "status": "active"
+        },
+        "ownerObservation": "last_persisted",
+        "record": {
+          "enabled": false,
+          "grantRef": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "intent": {
+            "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "definitionId": "saved-code-fixture",
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "definitionVersion": 1,
+            "expiresAtMs": 123456789,
+            "leaseId": "native-code-fixture",
+            "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "operationId": "explicit-native-code-fixture",
+            "scope": {
+              "accountId": "fixture-owner",
+              "identityGeneration": "fixture-identity",
+              "targetId": "fixture-target",
+              "targetRevision": "fixture-configuration",
+              "workspaceId": "fixture-workspace"
+            },
+            "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "template": "native-saved-code-service-v1"
+          },
+          "observedAtMs": 123450000,
+          "revision": 1,
+          "schemaVersion": 1,
+          "state": "approved"
+        }
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "currentOsState": "unknown",
+        "grant": {
+          "expiresAtMs": 123456789,
+          "reference": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "status": "active"
+        },
+        "ownerObservation": "last_persisted",
+        "record": {
+          "enabled": false,
+          "grantRef": {
+            "id": "original-code-grant",
+            "revision": "1"
+          },
+          "intent": {
+            "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "definitionId": "saved-code-fixture",
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "definitionVersion": 1,
+            "expiresAtMs": 123456789,
+            "leaseId": "native-code-fixture",
+            "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "operationId": "explicit-native-code-fixture",
+            "scope": {
+              "accountId": "fixture-owner",
+              "identityGeneration": "fixture-identity",
+              "targetId": "fixture-target",
+              "targetRevision": "fixture-configuration",
+              "workspaceId": "fixture-workspace"
+            },
+            "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "template": "native-saved-code-service-v1"
+          },
+          "observedAtMs": 123450000,
+          "revision": 1,
+          "schemaVersion": 1,
+          "state": "approved"
+        }
+      }
+    }
+  ],
+  "NativeCodeServiceReadyReceipt": [
+    {
+      "decoded": {
+        "acceptance": null,
+        "leaseId": "native-code-fixture",
+        "modelCalls": 0,
+        "operationId": "native-code-task-fixture"
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "acceptance": null,
+        "leaseId": "native-code-fixture",
+        "modelCalls": 0,
+        "operationId": "native-code-task-fixture"
+      }
+    }
+  ],
+  "NativeCodeServiceRecord": [
+    {
+      "decoded": {
+        "enabled": false,
+        "grantRef": {
+          "id": "original-code-grant",
+          "revision": "1"
+        },
+        "intent": {
+          "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "definitionId": "saved-code-fixture",
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definitionVersion": 1,
+          "expiresAtMs": 123456789,
+          "leaseId": "native-code-fixture",
+          "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "operationId": "explicit-native-code-fixture",
+          "scope": {
+            "accountId": "fixture-owner",
+            "identityGeneration": "fixture-identity",
+            "targetId": "fixture-target",
+            "targetRevision": "fixture-configuration",
+            "workspaceId": "fixture-workspace"
+          },
+          "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "template": "native-saved-code-service-v1"
+        },
+        "observedAtMs": 123450000,
+        "revision": 1,
+        "schemaVersion": 1,
+        "state": "approved"
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "enabled": false,
+        "grantRef": {
+          "id": "original-code-grant",
+          "revision": "1"
+        },
+        "intent": {
+          "configurationSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "definitionId": "saved-code-fixture",
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "definitionVersion": 1,
+          "expiresAtMs": 123456789,
+          "leaseId": "native-code-fixture",
+          "nativeImageSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "operationId": "explicit-native-code-fixture",
+          "scope": {
+            "accountId": "fixture-owner",
+            "identityGeneration": "fixture-identity",
+            "targetId": "fixture-target",
+            "targetRevision": "fixture-configuration",
+            "workspaceId": "fixture-workspace"
+          },
+          "taskSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "template": "native-saved-code-service-v1"
+        },
+        "observedAtMs": 123450000,
+        "revision": 1,
+        "schemaVersion": 1,
+        "state": "approved"
+      }
+    }
+  ],
+  "NativeCodeWorkflowSelection": [
+    {
+      "decoded": {
+        "args": {
+          "value": 6
+        },
+        "definitionId": "saved-code-fixture",
+        "version": 1
+      },
+      "name": "structural-native-code-example",
+      "value": {
+        "args": {
+          "value": 6
+        },
+        "definitionId": "saved-code-fixture",
+        "version": 1
+      }
+    }
+  ]
+}

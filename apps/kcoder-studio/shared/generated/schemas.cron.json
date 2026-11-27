@@ -1,0 +1,220 @@
+{
+  "CronCreateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "clientRequestId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "confirmed": {
+        "default": false,
+        "type": "boolean"
+      },
+      "jitterSeconds": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "prompt": {
+        "type": "string"
+      },
+      "schedule": {
+        "$ref": "#/definitions/CronSchedule"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "prompt",
+      "schedule"
+    ],
+    "title": "CronCreateParams",
+    "type": "object"
+  },
+  "CronCreationContext": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "epoch": {
+        "description": "None is the Gateway projection for a target without creation receipts.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      }
+    },
+    "title": "CronCreationContext",
+    "type": "object"
+  },
+  "CronCreationReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CronCreatedJob": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "clientRequestId": {
+        "type": "string"
+      },
+      "creationReceipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/CronCreatedJob"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "retired": {
+        "default": false,
+        "description": "Retired evidence remains unknown, and its original identity cannot execute again.",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "clientRequestId"
+    ],
+    "title": "CronCreationReadResult",
+    "type": "object"
+  },
+  "CronParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "clientRequestId": {
+        "description": "Read only the original creation receipt; absence never authorizes replay.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "creationContext": {
+        "description": "Read the current creation generation without activating scheduling.",
+        "type": "boolean"
+      },
+      "threadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "CronParams",
+    "type": "object"
+  }
+}

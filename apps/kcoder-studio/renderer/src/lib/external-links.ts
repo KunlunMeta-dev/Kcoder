@@ -1,0 +1,64 @@
+import type { BrowserLinkTarget } from '@/host/appPreferences'
+
+interface OpenExternalUrlOptions {
+  target?: BrowserLinkTarget
+}
+
+export function isHttpUrl(value: string | null | undefined): value is string {
+  if (!value) return false
+
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+export function isLocalHttpUrl(value: string | null | undefined): value is string {
+  if (!isHttpUrl(value)) return false
+
+  const hostname = new URL(value).hostname.toLowerCase()
+  return (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname === '0.0.0.0' ||
+    hostname === '::1' ||
+    hostname === '[::1]' ||
+    /^127(?:\.\d{1,3}){3}$/.test(hostname)
+  )
+}
+
+// This client always opens a new browser window; the requested target is
+// accepted for caller compatibility but has no separate destination here.
+export function openExternalUrl(value: string, options?: OpenExternalUrlOptions): Promise<boolean>
+export async function openExternalUrl(value: string): Promise<boolean> {
+  if (!isHttpUrl(value)) {
+    return false
+  }
+
+  window.open(value, '_blank', 'noopener,noreferrer')
+  return true
+}
+
+function findClickedAnchor(target: EventTarget | null): HTMLAnchorElement | null {
+  if (!(target instanceof Element)) return null
+  return target.closest('a[href]')
+}
+
+export function installExternalLinkHandler() {
+  const handleClick = (event: MouseEvent) => {
+    if (event.defaultPrevented || event.button !== 0) return
+
+    const anchor = findClickedAnchor(event.target)
+    if (!anchor || !isHttpUrl(anchor.href)) return
+
+    event.preventDefault()
+    void openExternalUrl(anchor.href).catch(error => {
+      console.error('Failed to open external URL:', error)
+    })
+  }
+
+  document.addEventListener('click', handleClick)
+  return () => document.removeEventListener('click', handleClick)
+}

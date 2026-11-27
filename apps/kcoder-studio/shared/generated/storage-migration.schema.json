@@ -1,0 +1,308 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "StorageMigrationReceipt",
+  "type": "object",
+  "required": [
+    "disposition",
+    "phase",
+    "plan"
+  ],
+  "properties": {
+    "disposition": {
+      "$ref": "#/definitions/StorageMigrationDisposition"
+    },
+    "errorCode": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "ownerReceipts": {
+      "description": "Domain-owned physical publication facts; never cached authorization decisions.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "phase": {
+      "$ref": "#/definitions/StorageMigrationPhase"
+    },
+    "plan": {
+      "$ref": "#/definitions/StorageMigrationPlan"
+    }
+  },
+  "additionalProperties": false,
+  "definitions": {
+    "StorageLaunchIntent": {
+      "type": "string",
+      "enum": [
+        "cli",
+        "gateway",
+        "desktop",
+        "verifyOnly"
+      ]
+    },
+    "StorageLayout": {
+      "type": "string",
+      "enum": [
+        "legacy",
+        "unified",
+        "custom"
+      ]
+    },
+    "StorageLocationRecord": {
+      "type": "object",
+      "required": [
+        "cacheRoot",
+        "dataRoot",
+        "revision",
+        "version"
+      ],
+      "properties": {
+        "cacheRoot": {
+          "type": "string"
+        },
+        "dataRoot": {
+          "type": "string"
+        },
+        "operationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "type": "integer",
+          "format": "uint64",
+          "maximum": 9007199254740991.0,
+          "minimum": 1.0
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "maximum": 1.0,
+          "minimum": 1.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "StorageLocationSource": {
+      "type": "string",
+      "enum": [
+        "default",
+        "selection",
+        "configOverride",
+        "homeOverride",
+        "cacheOverride",
+        "dataOverride",
+        "serversStoreOverride",
+        "desktopOverride",
+        "development"
+      ]
+    },
+    "StorageMigrationComponent": {
+      "type": "object",
+      "required": [
+        "destination",
+        "domain",
+        "estimatedBytes",
+        "source",
+        "sourceIdentity"
+      ],
+      "properties": {
+        "destination": {
+          "type": "string"
+        },
+        "domain": {
+          "type": "string"
+        },
+        "estimatedBytes": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "source": {
+          "type": "string"
+        },
+        "sourceIdentity": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "StorageMigrationDisposition": {
+      "type": "string",
+      "enum": [
+        "active",
+        "deferred",
+        "complete"
+      ]
+    },
+    "StorageMigrationPhase": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "stopping",
+        "stopped",
+        "copying",
+        "verifying",
+        "prepared",
+        "committed",
+        "verified"
+      ]
+    },
+    "StorageMigrationPlan": {
+      "type": "object",
+      "required": [
+        "components",
+        "from",
+        "launchIntent",
+        "operationId",
+        "target",
+        "version"
+      ],
+      "properties": {
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StorageMigrationComponent"
+          }
+        },
+        "from": {
+          "$ref": "#/definitions/StoragePaths"
+        },
+        "launchIntent": {
+          "$ref": "#/definitions/StorageLaunchIntent"
+        },
+        "operationId": {
+          "type": "string"
+        },
+        "original": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/StorageLocationRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target": {
+          "$ref": "#/definitions/StorageLocationRecord"
+        },
+        "targetBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/StorageTargetBinding"
+          }
+        },
+        "version": {
+          "type": "integer",
+          "format": "uint32",
+          "minimum": 0.0
+        }
+      },
+      "additionalProperties": false
+    },
+    "StoragePathSources": {
+      "type": "object",
+      "required": [
+        "cacheRoot",
+        "dataRoot",
+        "desktopRoot",
+        "gatewayRoot"
+      ],
+      "properties": {
+        "cacheRoot": {
+          "$ref": "#/definitions/StorageLocationSource"
+        },
+        "dataRoot": {
+          "$ref": "#/definitions/StorageLocationSource"
+        },
+        "desktopRoot": {
+          "$ref": "#/definitions/StorageLocationSource"
+        },
+        "gatewayRoot": {
+          "$ref": "#/definitions/StorageLocationSource"
+        }
+      }
+    },
+    "StoragePaths": {
+      "type": "object",
+      "required": [
+        "cacheRoot",
+        "dataRoot",
+        "desktopRoot",
+        "externallyConfigured",
+        "gatewayRoot",
+        "layout",
+        "sources",
+        "temporaryRoot"
+      ],
+      "properties": {
+        "cacheRoot": {
+          "type": "string"
+        },
+        "dataRoot": {
+          "type": "string"
+        },
+        "desktopRoot": {
+          "type": "string"
+        },
+        "externallyConfigured": {
+          "type": "boolean"
+        },
+        "gatewayRoot": {
+          "type": "string"
+        },
+        "layout": {
+          "$ref": "#/definitions/StorageLayout"
+        },
+        "locationFile": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "operationId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selectionRevision": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "sources": {
+          "$ref": "#/definitions/StoragePathSources"
+        },
+        "temporaryRoot": {
+          "type": "string"
+        }
+      }
+    },
+    "StorageTargetBinding": {
+      "type": "object",
+      "required": [
+        "ancestorIdentity",
+        "existingAncestor",
+        "path"
+      ],
+      "properties": {
+        "ancestorIdentity": {
+          "type": "string"
+        },
+        "existingAncestor": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

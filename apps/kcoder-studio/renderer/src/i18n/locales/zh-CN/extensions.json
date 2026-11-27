@@ -1,0 +1,168 @@
+{
+  "tabs": {
+    "all": "全部",
+    "conflicts": "冲突"
+  },
+  "kind": {
+    "skill": "技能",
+    "mcp_server": "MCP 服务",
+    "hook": "Hook",
+    "plugin": "插件",
+    "binary": "命令行工具"
+  },
+  "kindFilter": {
+    "label": "类型",
+    "all": "全部类型"
+  },
+  "onlyOverrides": "只看重名与覆盖",
+  "layer": {
+    "builtin": "内置",
+    "bundled": "随包",
+    "project": "项目",
+    "external": "外部目录",
+    "plugin": "插件 {{name}}",
+    "pluginUnnamed": "插件",
+    "user": "用户",
+    "runtime": "运行时"
+  },
+  "state": {
+    "effective": "生效中",
+    "shadowed": "被覆盖",
+    "inactive": "未使用",
+    "notFound": "未找到",
+    "disabledBy": {
+      "name": "已停用",
+      "plugin": "所属插件已停用",
+      "policy": "策略停用",
+      "trust": "项目未信任"
+    }
+  },
+  "relation": {
+    "shadowedBy": "被{{source}}覆盖",
+    "shadows": "覆盖了{{sources}}",
+    "preferred": "已选用插件版本"
+  },
+  "skillBadge": {
+    "shadowsCopy": "覆盖了{{source}}的同名副本",
+    "preferred": "已选用插件版本"
+  },
+  "intro": "列出此目标实际解析到的全部技能、MCP 服务、Hook、插件和命令行工具，包括被覆盖的副本。同名技能默认内置优先于插件，可改用插件版本；项目、外部目录和用户技能始终优先。",
+  "appliesToNewConversations": "更改对新会话生效，正在进行的会话保留开始时的技能。",
+  "loading": "正在加载扩展…",
+  "empty": "此目标上没有扩展。",
+  "noMatches": "没有匹配的项目。",
+  "unsupported": "此目标尚不提供重名与覆盖信息。升级目标上的 KCoder 后即可使用“全部”和“冲突”视图。",
+  "notice": {
+    "saved": "已保存，对新会话生效。",
+    "preference_conflict": "技能偏好已在其他地方被修改，已载入最新状态，请确认后重新选择。",
+    "skill_switch_conflict": "此插件的技能设置已在其他地方被修改，已载入最新状态，请确认后重新选择。",
+    "unconfirmed": "未能确认是否保存成功，已载入最新状态，请先确认再操作。",
+    "invalid": "目标拒绝了此偏好设置。",
+    "unavailable": "无法从此目标读取扩展信息，请刷新重试。",
+    "scope_changed": "目标或账户已变化，请刷新以加载当前目标。",
+    "unsupported": "此目标不支持该操作，请升级目标上的 KCoder。"
+  },
+  "dismiss": "关闭",
+  "details": "详情",
+  "detail": {
+    "path": "路径",
+    "description": "描述",
+    "repository": "上游仓库",
+    "ref": "上游版本标记",
+    "upstreamVersion": "上游版本",
+    "version": "版本",
+    "marketplace": "市场",
+    "role": "说明",
+    "count": "组件数",
+    "bundled": "来源",
+    "bundledYes": "随 KCoder Studio 提供",
+    "bundledNo": "系统安装",
+    "effectiveCopy": "生效副本",
+    "shadowedCopies": "被覆盖的副本",
+    "sameUpstream": "同一上游",
+    "differentUpstream": "上游不同或未声明",
+    "provided": "插件提供",
+    "missing": "插件未提供",
+    "fromPlugin": "插件副本生效",
+    "resolvedVersion": "PATH 上的版本",
+    "bundledVersion": "随包版本",
+    "unknownPath": "未提供路径"
+  },
+  "actions": {
+    "usePlugin": "改用插件版本",
+    "usePluginNamed": "改用 {{plugin}} 版本",
+    "useBuiltin": "改用内置版本",
+    "useDefault": "恢复默认顺序",
+    "preferPlugin": "优先使用此插件的技能",
+    "stopPreferPlugin": "取消优先使用此插件的技能",
+    "saving": "正在保存…"
+  },
+  "preferenceBlocked": "项目、外部目录和用户技能始终优先于插件副本，无法在此更改。",
+  "preferredByPlugin": "因已设置优先使用 {{plugin}} 的全部技能而生效。",
+  "pluginSkillSwitchLimit": "此目标只能随整个插件一起停用插件中的技能。升级目标上的 KCoder 后可单独停用技能，或在“插件”中停用整个插件。",
+  "pluginSkills": {
+    "toggle": "启用此插件的技能",
+    "toggleNamed": "启用 {{plugin}} 的技能",
+    "help": "关闭后只移除此插件提供的技能副本；其他来源的同名技能，以及此插件的 MCP 服务器和 Hook 保持不变。",
+    "helpOff": "此插件的技能已关闭，同名技能改用其他来源的副本；此插件的 MCP 服务器和 Hook 不受影响。"
+  },
+  "binaries": {
+    "title": "命令行工具",
+    "description": "在目标的 PATH 上查找 lark-cli、node 和 playwright-mcp，并做一次短时版本检查。仅在你点击时运行。",
+    "check": "检查命令行工具",
+    "recheck": "重新检查",
+    "checking": "正在检查…",
+    "checked": "显示的是上次检查的结果。"
+  },
+  "conflicts": {
+    "none": "没有发现重名或覆盖。",
+    "reason": {
+      "same_name": "同名",
+      "mixed_family": "技能族混用",
+      "multiple_binaries": "PATH 上有多个副本",
+      "version_mismatch": "版本不一致"
+    },
+    "summary": {
+      "same_name_other": "{{name}}：{{effective}}生效，另有 {{count}} 个副本被覆盖。",
+      "mixed_family": "{{name}}-* 混用多个来源：{{plugin}} 提供 {{provided}} 个，其中 {{fromPlugin}} 个生效；另有 {{missing}} 个只来自内置。",
+      "multiple_binaries_other": "{{name}}：使用 {{effective}}，PATH 上另有 {{count}} 个副本未被使用。",
+      "version_mismatch": "PATH 上的 {{name}} {{resolved}} 与随包版本 {{bundled}} 不一致，技能使用的命令可能不同。"
+    },
+    "unknownSource": "未知来源"
+  },
+  "hookIssues": {
+    "title": "Hook 配置问题",
+    "summary_other": "发现 {{count}} 个 Hook 配置问题。",
+    "view": "查看",
+    "error": "错误",
+    "warning": "警告",
+    "errorHelp": "有错误的规则会阻止其事件，直到修正配置。修正后请开启新会话。",
+    "file": "文件",
+    "location": "位置",
+    "event": "事件"
+  },
+  "preview": {
+    "title": "与已安装扩展的重叠",
+    "checking": "正在检查与已安装扩展的重叠…",
+    "installs_other": "将安装 {{count}} 个技能",
+    "provides_other": "提供 {{count}} 个技能",
+    "shadowedByBuiltin": "其中 {{count}} 个会被内置 {{names}} 覆盖",
+    "shadowedByExisting": "其中 {{count}} 个会被现有副本（{{names}}）覆盖",
+    "sameUpstreamAll": "同一上游",
+    "sameUpstreamSome": "{{count}} 个同一上游",
+    "note": "（{{text}}）",
+    "separator": "；",
+    "shadows": "{{count}} 个会替换现有副本",
+    "mcpCoexists": "{{count}} 个 MCP 服务名与现有服务相同，两者都保留可用",
+    "mixedFamily": "{{name}}-* 不完整：提供 {{provided}} 个，缺少 {{missing}} 个。",
+    "declaredOnly": "根据市场条目声明的技能目录判断。",
+    "installed": "已安装 {{name}}。",
+    "manage": "在“冲突”中查看",
+    "outcome": {
+      "none": "无重叠",
+      "coexists": "两者都保留",
+      "shadowed_by_existing": "被{{source}}覆盖",
+      "shadows_existing": "替换{{source}}"
+    }
+  }
+}

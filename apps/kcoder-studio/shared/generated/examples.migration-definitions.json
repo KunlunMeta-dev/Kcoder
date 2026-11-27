@@ -1,0 +1,244 @@
+{
+  "MigrationDefinitionBodyParams": [
+    {
+      "decoded": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "offset": 0
+      },
+      "name": "owned_pending_asset",
+      "value": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "offset": 0
+      }
+    }
+  ],
+  "MigrationDefinitionBodyResult": [
+    {
+      "decoded": {
+        "bytesBase64": "YWJj",
+        "encoding": "utf8",
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextOffset": null,
+        "offset": 0,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "text": "abc",
+        "totalBytes": 3
+      },
+      "name": "owned_pending_asset",
+      "value": {
+        "bytesBase64": "YWJj",
+        "encoding": "utf8",
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextOffset": null,
+        "offset": 0,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "text": "abc",
+        "totalBytes": 3
+      }
+    },
+    {
+      "decoded": {
+        "bytesBase64": "/wA=",
+        "encoding": "binary",
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextOffset": null,
+        "offset": 0,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "totalBytes": 2
+      },
+      "name": "opaque_binary_download",
+      "value": {
+        "bytesBase64": "/wA=",
+        "encoding": "binary",
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextOffset": null,
+        "offset": 0,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "totalBytes": 2
+      }
+    }
+  ],
+  "MigrationDefinitionReportParams": [
+    {
+      "decoded": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "pageIndex": 0
+      },
+      "name": "owned_pending_asset",
+      "value": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "pageIndex": 0
+      }
+    }
+  ],
+  "MigrationDefinitionReportResult": [
+    {
+      "decoded": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextPage": null,
+        "pageIndex": 0,
+        "report": {
+          "elements": 1,
+          "executionAllowed": false,
+          "fields": [
+            {
+              "element": 0,
+              "field": "name",
+              "ordinal": 0
+            },
+            {
+              "element": 0,
+              "field": null,
+              "ordinal": 1
+            }
+          ],
+          "format": "claude_agent_markdown",
+          "kind": "agent",
+          "parseStatus": "parsed",
+          "requiresReview": true,
+          "unknownFields": 1
+        },
+        "totalBytes": 3,
+        "totalFields": 2
+      },
+      "name": "owned_pending_asset",
+      "value": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextPage": null,
+        "pageIndex": 0,
+        "report": {
+          "elements": 1,
+          "executionAllowed": false,
+          "fields": [
+            {
+              "element": 0,
+              "field": "name",
+              "ordinal": 0
+            },
+            {
+              "element": 0,
+              "field": null,
+              "ordinal": 1
+            }
+          ],
+          "format": "claude_agent_markdown",
+          "kind": "agent",
+          "parseStatus": "parsed",
+          "requiresReview": true,
+          "unknownFields": 1
+        },
+        "totalBytes": 3,
+        "totalFields": 2
+      }
+    },
+    {
+      "decoded": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextPage": null,
+        "pageIndex": 0,
+        "report": {
+          "elements": null,
+          "executionAllowed": false,
+          "fields": [],
+          "format": "claude_agent_markdown",
+          "kind": "agent",
+          "parseStatus": "opaque",
+          "requiresReview": true,
+          "unknownFields": null
+        },
+        "totalBytes": 3,
+        "totalFields": 0
+      },
+      "name": "opaque_still_reviewable_storage",
+      "value": {
+        "itemId": "item-owned",
+        "jobId": "mig-owned",
+        "nextPage": null,
+        "pageIndex": 0,
+        "report": {
+          "elements": null,
+          "executionAllowed": false,
+          "fields": [],
+          "format": "claude_agent_markdown",
+          "kind": "agent",
+          "parseStatus": "opaque",
+          "requiresReview": true,
+          "unknownFields": null
+        },
+        "totalBytes": 3,
+        "totalFields": 0
+      }
+    }
+  ],
+  "MigrationDefinitionsDiscoverParams": [
+    {
+      "decoded": {
+        "includeProject": false,
+        "pageIndex": 0,
+        "sources": [
+          "claude-code"
+        ]
+      },
+      "name": "owned_pending_asset",
+      "value": {
+        "includeProject": false,
+        "pageIndex": 0,
+        "sources": [
+          "claude-code"
+        ]
+      }
+    }
+  ],
+  "MigrationDefinitionsDiscoverResult": [
+    {
+      "decoded": {
+        "catalogId": "defcat-owned",
+        "nextPage": null,
+        "problems": [],
+        "sources": [
+          {
+            "availableCategories": [
+              "agent"
+            ],
+            "displayName": "Claude Code",
+            "formatRevision": "passive-definition/v1",
+            "kind": "claude-code",
+            "scope": "user-agents",
+            "sourceId": "src-owned"
+          }
+        ],
+        "totalSources": 1
+      },
+      "name": "owned_pending_asset",
+      "value": {
+        "catalogId": "defcat-owned",
+        "nextPage": null,
+        "problems": [],
+        "sources": [
+          {
+            "availableCategories": [
+              "agent"
+            ],
+            "displayName": "Claude Code",
+            "formatRevision": "passive-definition/v1",
+            "kind": "claude-code",
+            "scope": "user-agents",
+            "sourceId": "src-owned"
+          }
+        ],
+        "totalSources": 1
+      }
+    }
+  ]
+}

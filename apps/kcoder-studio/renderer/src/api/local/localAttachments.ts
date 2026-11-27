@@ -1,0 +1,203 @@
+import { invokeRuntimeCommand as invoke } from '@/kcoder/gatewayServiceBridge'
+import { abortable } from '@/lib/abortable'
+import { isValidFileSize, MAX_FILE_SIZE } from '@/api/attachments'
+import { isGatewayRuntime } from '@/lib/runtime-environment'
+import { isKCoderGatewayPage } from '@/kcoder/gatewayRpc'
+import {
+  ATTACHMENT_CHUNK_BYTES,
+  MAX_GATEWAY_ATTACHMENT_BYTES,
+} from '@/kcoder/gatewayAttachmentTransfer'
+import type { Attachment, AttachmentUploadTarget } from '@/types/api'
+import i18n from '@/i18n'
+import { attachmentMimeType } from '../../../../shared/attachmentImagePolicy'
+
+export interface LocalAttachmentApi {
+  uploadAttachment: (
+    file: File,
+    onProgress?: (progress: number) => void,
+    signal?: AbortSignal,
+    target?: AttachmentUploadTarget
+  ) => Promise<Attachment>
+  deleteAttachment: (attachmentId: number) => Promise<void>
+}
+
+let localAttachmentIdSeed = 0
+
+function nextLocalAttachmentId(): number {
+  localAttachmentIdSeed += 1
+  return -(Date.now() * 1000 + localAttachmentIdSeed)
+}
+
+function fileExtension(fileName: string): string {
+  const dotIndex = fileName.lastIndexOf('.')
+  return dotIndex >= 0 ? fileName.substring(dotIndex) : ''
+}
+
+function fileMimeType(file: File): string {
+  return attachmentMimeType(file.name, file.type)
+}
+
+function canReadTextLength(file: File): boolean {
+  const mimeType = fileMimeType(file).toLowerCase()
+  return mimeType.startsWith('text/') || fileExtension(file.name).toLowerCase() === '.txt'
+}
+
+async function maybeTextLength(file: File): Promise<number | null> {
+  if (!canReadTextLength(file) || file.size > 128 * 1024) return null
+  try {
+    return (await file.text()).length
+  } catch {
+    return null
+  }
+}
+
+function encodeBase64(bytes: Uint8Array): string {
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  }
+  return btoa(binary)
+}
+
+function yieldToBrowser(): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, 0))
+}
+
+async function uploadGatewayFile(
+  file: File,
+  onProgress?: (progress: number) => void,
+  signal?: AbortSignal,
+  target?: AttachmentUploadTarget
+): Promise<{ path: string; deviceId: string; threadId?: string }> {
+  if (signal?.aborted) throw new Error('Upload cancelled')
+
+  const started = await invoke<{ uploadId?: string; deviceId?: string }>(
+    'start_local_attachment_upload',
+    {
+      filename: file.name,
+      mimeType: fileMimeType(file),
+      fileSize: file.size,
+      ...(target ? {
+        deviceId: target.deviceId,
+        workspacePath: target.workspacePath,
+        ...(target.threadId ? { threadId: target.threadId } : {}),
+      } : {}),
+    },
+    signal ? { signal } : undefined
+  )
+  const uploadId = typeof started.uploadId === 'string' ? started.uploadId : null
+  if (!uploadId) throw new Error('KCoder 网关未返回附件上传 ID')
+
+  try {
+    if (target && started.deviceId !== target.deviceId)
+      throw new Error(i18n.t('common:workbench.attachment_target_changed'))
+    onProgress?.(0)
+    let index = 0
+    for (let offset = 0; offset < file.size; offset += ATTACHMENT_CHUNK_BYTES) {
+      if (signal?.aborted) throw new Error('Upload cancelled')
+      await yieldToBrowser()
+      const end = Math.min(offset + ATTACHMENT_CHUNK_BYTES, file.size)
+      const bytes = new Uint8Array(await abortable(file.slice(offset, end).arrayBuffer(), signal))
+      await yieldToBrowser()
+      await invoke(
+        'append_local_attachment_upload',
+        {
+          uploadId,
+          index,
+          contentBase64: encodeBase64(bytes),
+        },
+        signal ? { signal } : undefined
+      )
+      index += 1
+      onProgress?.(Math.round((end / file.size) * 100))
+    }
+
+    if (signal?.aborted) throw new Error('Upload cancelled')
+    const saved = await invoke<{ path?: string; deviceId?: string; threadId?: string }>(
+      'finish_local_attachment_upload',
+      { uploadId },
+      signal ? { signal } : undefined
+    )
+    if (!saved.path || !saved.deviceId) throw new Error('KCoder 网关未返回附件路径')
+    if (target && saved.deviceId !== target.deviceId)
+      throw new Error(i18n.t('common:workbench.attachment_target_changed'))
+    return { path: saved.path, deviceId: saved.deviceId, ...(saved.threadId ? { threadId: saved.threadId } : {}) }
+  } catch (error) {
+    // Cleanup belongs to the original upload; a stalled cleanup cannot hold the composer open.
+    void invoke('cancel_local_attachment_upload', { uploadId }).catch(() => undefined)
+    if (signal?.aborted) throw new Error('Upload cancelled', { cause: error })
+    throw error
+  }
+}
+
+export function createLocalAttachmentApi(): LocalAttachmentApi {
+  return {
+    async uploadAttachment(file, onProgress, signal, target) {
+      // Older native callers supplied a workspace object in this position.
+      if (typeof signal?.addEventListener !== 'function') signal = undefined
+      if (!isValidFileSize(file.size) || file.size > MAX_GATEWAY_ATTACHMENT_BYTES) {
+        throw new Error(`File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)} MB`)
+      }
+      if (!isGatewayRuntime()) {
+        throw new Error('Local attachment storage requires the desktop app')
+      }
+      if (signal?.aborted) throw new Error('Upload cancelled')
+
+      if (isKCoderGatewayPage()) {
+        const saved = await uploadGatewayFile(file, onProgress, signal, target)
+        const textLength = await maybeTextLength(file)
+        return {
+          id: nextLocalAttachmentId(),
+          filename: file.name,
+          file_size: file.size,
+          mime_type: fileMimeType(file),
+          status: 'ready',
+          text_length: textLength,
+          file_extension: fileExtension(file.name),
+          created_at: new Date().toISOString(),
+          local_path: saved.path,
+          local_preview_url: saved.path,
+          runtime_device_id: saved.deviceId,
+          ...(saved.threadId ? { runtime_thread_id: saved.threadId } : {}),
+        }
+      }
+
+      onProgress?.(0)
+      const bytes = Array.from(new Uint8Array(await file.arrayBuffer()))
+      if (signal?.aborted) throw new Error('Upload cancelled')
+      const saved = await invoke<string | { path: string; deviceId: string }>(
+        'save_local_attachment_file',
+        {
+          workspacePath: null,
+          filename: file.name,
+          mimeType: fileMimeType(file),
+          fileSize: file.size,
+          bytes,
+        }
+      )
+      if (signal?.aborted) throw new Error('Upload cancelled')
+      const localPath = typeof saved === 'string' ? saved : saved.path
+      const runtimeDeviceId = typeof saved === 'string' ? undefined : saved.deviceId
+      onProgress?.(100)
+
+      const textLength = await maybeTextLength(file)
+      return {
+        id: nextLocalAttachmentId(),
+        filename: file.name,
+        file_size: file.size,
+        mime_type: fileMimeType(file),
+        status: 'ready',
+        text_length: textLength,
+        file_extension: fileExtension(file.name),
+        created_at: new Date().toISOString(),
+        local_path: localPath,
+        local_preview_url: localPath,
+        ...(runtimeDeviceId ? { runtime_device_id: runtimeDeviceId } : {}),
+      }
+    },
+    async deleteAttachment() {
+      // Draft files are intentionally left in place so already-sent runtime tasks
+      // can continue to resolve the absolute paths stored in their transcript.
+    },
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "active_profile": "custom",
+  "provider_profiles": {
+    "custom": {
+      "api_format": "openai_responses",
+      "endpoint": "https://model.example.invalid/v1",
+      "model": "chosen-model"
+    }
+  }
+}

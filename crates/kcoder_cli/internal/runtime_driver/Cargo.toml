@@ -1,0 +1,35 @@
+[package]
+name = "kcoder_runtime_driver"
+description = "Durable Native runtime task queue, binding storage, and workflow input pins."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow.workspace = true
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_integration_storage = { path = "../../../kcoder_state/internal/integration_storage" }
+kcoder_types = { path = "../../../kcoder_types" }
+kcoder_workflow = { path = "../../../kcoder_workflow" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+async-trait.workspace = true
+kcoder_tools = { path = "../../../kcoder_tools" }
+tempfile.workspace = true
+tokio.workspace = true
+
+[lib]
+path = "../../src/internal/runtime_driver/lib.rs"

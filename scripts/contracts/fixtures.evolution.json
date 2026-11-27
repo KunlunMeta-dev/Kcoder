@@ -1,0 +1,1490 @@
+{
+  "EvolutionStatusParams": {
+    "valid": [
+      {
+        "name": "user-scope",
+        "value": {}
+      },
+      {
+        "name": "project-scope",
+        "value": {
+          "workspace": "/work/project"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "forged-account",
+        "value": {
+          "accountId": "other"
+        }
+      },
+      {
+        "name": "wrong-type",
+        "value": {
+          "workspace": 7
+        }
+      }
+    ]
+  },
+  "EvolutionStatusResult": {
+    "valid": [
+      {
+        "name": "enabled",
+        "value": {
+          "enabled": true,
+          "mode": "observe",
+          "model": {
+            "selection": "follow_session",
+            "available": true
+          },
+          "targets": [
+            {
+              "type": "skill",
+              "enabled": true,
+              "implemented": true,
+              "learnedItems": 1,
+              "pendingProposals": 2
+            },
+            {
+              "type": "workflow_template",
+              "enabled": false,
+              "implemented": false,
+              "learnedItems": 0,
+              "pendingProposals": 0
+            }
+          ],
+          "usageThisMonth": {
+            "inputTokens": 1200,
+            "outputTokens": 300
+          },
+          "jobs": [
+            {
+              "kind": "distill",
+              "targetKey": "skill:bundled:docx",
+              "state": "idle",
+              "lastRunAt": "2026-11-24T00:00:00.000Z"
+            }
+          ],
+          "skillFileEditsSupported": false,
+          "diagnostics": {
+            "duplicateRecords": 0,
+            "invalidRecords": 0,
+            "futureRecords": 0,
+            "tornTail": false
+          }
+        }
+      },
+      {
+        "name": "paused-model",
+        "value": {
+          "enabled": true,
+          "mode": "propose",
+          "disabledReason": "model_unavailable",
+          "model": {
+            "selection": "configured",
+            "provider": "KunLun",
+            "model": "Model-X",
+            "available": false
+          },
+          "targets": [],
+          "usageThisMonth": {
+            "inputTokens": 0,
+            "outputTokens": 0,
+            "estimatedCost": {
+              "amount": 0.12,
+              "currency": "USD"
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-mode",
+        "value": {
+          "enabled": true,
+          "mode": "always",
+          "model": {
+            "selection": "follow_session",
+            "available": true
+          },
+          "targets": [],
+          "usageThisMonth": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          }
+        }
+      },
+      {
+        "name": "unknown-target-type",
+        "value": {
+          "enabled": true,
+          "mode": "observe",
+          "model": {
+            "selection": "follow_session",
+            "available": true
+          },
+          "targets": [
+            {
+              "type": "agent",
+              "enabled": true,
+              "implemented": false,
+              "learnedItems": 0,
+              "pendingProposals": 0
+            }
+          ],
+          "usageThisMonth": {
+            "inputTokens": 0,
+            "outputTokens": 0
+          }
+        }
+      }
+    ]
+  },
+  "EvolutionTargetsListParams": {
+    "valid": [
+      {
+        "name": "first-page",
+        "value": {
+          "type": "skill"
+        }
+      },
+      {
+        "name": "bounded",
+        "value": {
+          "workspace": "/work/project",
+          "type": "project_knowledge",
+          "cursor": "opaque",
+          "limit": 200
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-type",
+        "value": {
+          "type": "agent"
+        }
+      },
+      {
+        "name": "missing-type",
+        "value": {}
+      },
+      {
+        "name": "forged-field",
+        "value": {
+          "type": "skill",
+          "targetId": "x"
+        }
+      }
+    ]
+  },
+  "EvolutionTargetsListResult": {
+    "valid": [
+      {
+        "name": "page",
+        "value": {
+          "items": [
+            {
+              "targetKey": "skill:bundled:docx",
+              "type": "skill",
+              "source": "bundled",
+              "name": "docx",
+              "enabled": true,
+              "evolutionMode": "overlay",
+              "stable": {
+                "revision": "base-1@2",
+                "mean": 0.62,
+                "lower": 0.31,
+                "upper": 0.87,
+                "observations": 16
+              },
+              "candidate": {
+                "revision": "base-1@3",
+                "mean": 0.62,
+                "lower": 0.31,
+                "upper": 0.87,
+                "observations": 15
+              },
+              "channelTraffic": 0.5,
+              "pendingProposals": 1,
+              "needsRevalidation": false,
+              "pinned": false
+            }
+          ],
+          "nextCursor": "next"
+        }
+      },
+      {
+        "name": "empty",
+        "value": {
+          "items": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-key",
+        "value": {
+          "items": [
+            {
+              "targetKey": "skill:docx",
+              "type": "skill",
+              "source": "bundled",
+              "name": "docx",
+              "enabled": true,
+              "evolutionMode": "overlay",
+              "stable": {
+                "revision": "base-1@2",
+                "mean": 0.62,
+                "lower": 0.31,
+                "upper": 0.87,
+                "observations": 16
+              },
+              "candidate": {
+                "revision": "base-1@3",
+                "mean": 0.62,
+                "lower": 0.31,
+                "upper": 0.87,
+                "observations": 15
+              },
+              "channelTraffic": 0.5,
+              "pendingProposals": 1,
+              "needsRevalidation": false,
+              "pinned": false
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "EvolutionTargetReadParams": {
+    "valid": [
+      {
+        "name": "read",
+        "value": {
+          "targetKey": "tool_usage:mcp:github.create_issue"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-key",
+        "value": {
+          "targetKey": "tool:mcp:x"
+        }
+      },
+      {
+        "name": "missing-key",
+        "value": {}
+      }
+    ]
+  },
+  "EvolutionTargetReadResult": {
+    "valid": [
+      {
+        "name": "overlay-and-proposal",
+        "value": {
+          "summary": {
+            "targetKey": "skill:bundled:docx",
+            "type": "skill",
+            "source": "bundled",
+            "name": "docx",
+            "enabled": true,
+            "evolutionMode": "overlay",
+            "stable": {
+              "revision": "base-1@2",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 16
+            },
+            "candidate": {
+              "revision": "base-1@3",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 15
+            },
+            "channelTraffic": 0.5,
+            "pendingProposals": 1,
+            "needsRevalidation": false,
+            "pinned": false
+          },
+          "overlay": {
+            "stable": {
+              "lessons": "- Lead with the summary.",
+              "checklist": "- Headings are short.",
+              "examples": [
+                {
+                  "name": "short-report",
+                  "text": "..."
+                }
+              ]
+            },
+            "candidate": {
+              "lessons": "- candidate",
+              "examples": []
+            },
+            "overlayRevision": "4"
+          },
+          "patterns": [
+            {
+              "id": "P-1",
+              "categories": [
+                "structure"
+              ],
+              "statement": "Users move the summary to the top.",
+              "support": {
+                "usages": 14,
+                "sessions": 14,
+                "users": 1
+              },
+              "counterEvidence": 2,
+              "scope": "target_overlay"
+            }
+          ],
+          "proposals": [
+            {
+              "id": "prop-0123",
+              "state": "canary",
+              "createdAt": "2026-11-24T00:00:00.000Z",
+              "actor": "auto",
+              "diff": "+ Lead with the summary.",
+              "evaluation": {
+                "winRate": 0.75,
+                "ties": 1,
+                "hardCheckRegressions": 0,
+                "completed": true
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-proposal-state",
+        "value": {
+          "summary": {
+            "targetKey": "skill:bundled:docx",
+            "type": "skill",
+            "source": "bundled",
+            "name": "docx",
+            "enabled": true,
+            "evolutionMode": "overlay",
+            "stable": {
+              "revision": "base-1@2",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 16
+            },
+            "candidate": {
+              "revision": "base-1@3",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 15
+            },
+            "channelTraffic": 0.5,
+            "pendingProposals": 1,
+            "needsRevalidation": false,
+            "pinned": false
+          },
+          "overlay": {
+            "stable": {
+              "lessons": "- Lead with the summary.",
+              "checklist": "- Headings are short.",
+              "examples": [
+                {
+                  "name": "short-report",
+                  "text": "..."
+                }
+              ]
+            },
+            "overlayRevision": "4"
+          },
+          "patterns": [],
+          "proposals": [
+            {
+              "id": "p",
+              "state": "applied",
+              "createdAt": "x",
+              "actor": "auto",
+              "diff": ""
+            }
+          ]
+        }
+      },
+      {
+        "name": "unknown-content-field",
+        "value": {
+          "summary": {
+            "targetKey": "skill:bundled:docx",
+            "type": "skill",
+            "source": "bundled",
+            "name": "docx",
+            "enabled": true,
+            "evolutionMode": "overlay",
+            "stable": {
+              "revision": "base-1@2",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 16
+            },
+            "candidate": {
+              "revision": "base-1@3",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 15
+            },
+            "channelTraffic": 0.5,
+            "pendingProposals": 1,
+            "needsRevalidation": false,
+            "pinned": false
+          },
+          "overlay": {
+            "stable": {
+              "lessons": "- Lead with the summary.",
+              "checklist": "- Headings are short.",
+              "examples": [
+                {
+                  "name": "short-report",
+                  "text": "..."
+                }
+              ],
+              "html": "<b>"
+            },
+            "overlayRevision": "4"
+          },
+          "patterns": [],
+          "proposals": []
+        }
+      }
+    ]
+  },
+  "EvolutionProposalDecideParams": {
+    "valid": [
+      {
+        "name": "accept",
+        "value": {
+          "targetKey": "skill:bundled:docx",
+          "proposalId": "prop-0123",
+          "decision": "accept",
+          "expectedRevision": "3"
+        }
+      },
+      {
+        "name": "pin",
+        "value": {
+          "workspace": "/w",
+          "targetKey": "skill:project:deploy-check",
+          "proposalId": "prop-1",
+          "decision": "pin_stable",
+          "expectedRevision": "1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-decision",
+        "value": {
+          "targetKey": "skill:bundled:docx",
+          "proposalId": "p",
+          "decision": "apply",
+          "expectedRevision": "1"
+        }
+      },
+      {
+        "name": "missing-revision",
+        "value": {
+          "targetKey": "skill:bundled:docx",
+          "proposalId": "p",
+          "decision": "accept"
+        }
+      }
+    ]
+  },
+  "EvolutionProposalDecideResult": {
+    "valid": [
+      {
+        "name": "summary",
+        "value": {
+          "summary": {
+            "targetKey": "skill:bundled:docx",
+            "type": "skill",
+            "source": "bundled",
+            "name": "docx",
+            "enabled": true,
+            "evolutionMode": "overlay",
+            "stable": {
+              "revision": "base-1@2",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 16
+            },
+            "candidate": {
+              "revision": "base-1@3",
+              "mean": 0.62,
+              "lower": 0.31,
+              "upper": 0.87,
+              "observations": 15
+            },
+            "channelTraffic": 0.5,
+            "pendingProposals": 1,
+            "needsRevalidation": false,
+            "pinned": false
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-summary",
+        "value": {}
+      }
+    ]
+  },
+  "EvolutionOverlayUpdateParams": {
+    "valid": [
+      {
+        "name": "stable-edit",
+        "value": {
+          "targetKey": "skill:bundled:docx",
+          "slot": "stable",
+          "content": {
+            "lessons": "- Lead with the summary.",
+            "checklist": "- Headings are short.",
+            "examples": [
+              {
+                "name": "short-report",
+                "text": "..."
+              }
+            ]
+          },
+          "expectedRevision": "4"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "candidate-slot",
+        "value": {
+          "targetKey": "skill:bundled:docx",
+          "slot": "candidate",
+          "content": {
+            "lessons": "- Lead with the summary.",
+            "checklist": "- Headings are short.",
+            "examples": [
+              {
+                "name": "short-report",
+                "text": "..."
+              }
+            ]
+          },
+          "expectedRevision": "4"
+        }
+      },
+      {
+        "name": "unknown-content-field",
+        "value": {
+          "targetKey": "skill:bundled:docx",
+          "slot": "stable",
+          "content": {
+            "lessons": "- Lead with the summary.",
+            "checklist": "- Headings are short.",
+            "examples": [
+              {
+                "name": "short-report",
+                "text": "..."
+              }
+            ],
+            "script": "x"
+          },
+          "expectedRevision": "4"
+        }
+      }
+    ]
+  },
+  "EvolutionOverlayUpdateResult": {
+    "valid": [
+      {
+        "name": "revision",
+        "value": {
+          "overlayRevision": "5"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "numeric-revision",
+        "value": {
+          "overlayRevision": 5
+        }
+      }
+    ]
+  },
+  "EvolutionPreferenceListParams": {
+    "valid": [
+      {
+        "name": "empty",
+        "value": {}
+      }
+    ],
+    "invalid": [
+      {
+        "name": "forged-user",
+        "value": {
+          "userId": "other"
+        }
+      }
+    ]
+  },
+  "EvolutionPreferenceListResult": {
+    "valid": [
+      {
+        "name": "items",
+        "value": {
+          "items": [
+            {
+              "key": "pref.global.length",
+              "value": "concise",
+              "scope": "global",
+              "evidenceCount": 6,
+              "updatedAt": "2026-11-24T00:00:00.000Z"
+            }
+          ],
+          "revision": "r1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-revision",
+        "value": {
+          "items": []
+        }
+      }
+    ]
+  },
+  "EvolutionPreferenceUpdateParams": {
+    "valid": [
+      {
+        "name": "set",
+        "value": {
+          "key": "pref.global.length",
+          "value": "concise",
+          "expectedRevision": "r1"
+        }
+      },
+      {
+        "name": "delete",
+        "value": {
+          "key": "pref.global.length",
+          "value": null,
+          "expectedRevision": "r1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-key",
+        "value": {
+          "expectedRevision": "r1"
+        }
+      },
+      {
+        "name": "unknown-field",
+        "value": {
+          "key": "k",
+          "expectedRevision": "r",
+          "scope": "x"
+        }
+      }
+    ]
+  },
+  "EvolutionPreferenceUpdateResult": {
+    "valid": [
+      {
+        "name": "revision",
+        "value": {
+          "revision": "r2"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing",
+        "value": {}
+      }
+    ]
+  },
+  "EvolutionRateParams": {
+    "valid": [
+      {
+        "name": "turn",
+        "value": {
+          "threadId": "t-1",
+          "turnId": "turn-1",
+          "rating": "up"
+        }
+      },
+      {
+        "name": "target-with-reason",
+        "value": {
+          "threadId": "t-1",
+          "turnId": "turn-1",
+          "targetKey": "skill:bundled:docx",
+          "rating": "down",
+          "reason": "too long"
+        }
+      },
+      {
+        "name": "subagent-turn",
+        "value": {
+          "threadId": "t-1",
+          "subagentId": "agent-7",
+          "turnId": "child-turn-3",
+          "rating": "up"
+        }
+      },
+      {
+        "name": "tool-calls",
+        "value": {
+          "threadId": "t-1",
+          "subagentId": "agent-7",
+          "turnId": "assistant-item-2",
+          "toolCallIds": [
+            "toolu_01"
+          ],
+          "rating": "down"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "star-rating",
+        "value": {
+          "threadId": "t",
+          "turnId": "u",
+          "rating": 5
+        }
+      },
+      {
+        "name": "bad-target",
+        "value": {
+          "threadId": "t",
+          "turnId": "u",
+          "rating": "up",
+          "targetKey": "docx"
+        }
+      },
+      {
+        "name": "numeric-subagent",
+        "value": {
+          "threadId": "t",
+          "subagentId": 7,
+          "turnId": "u",
+          "rating": "up"
+        }
+      },
+      {
+        "name": "tool-calls-not-array",
+        "value": {
+          "threadId": "t",
+          "turnId": "u",
+          "rating": "up",
+          "toolCallIds": "toolu_01"
+        }
+      }
+    ]
+  },
+  "EvolutionRateResult": {
+    "valid": [
+      {
+        "name": "recorded",
+        "value": {
+          "recorded": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "string",
+        "value": {
+          "recorded": "yes"
+        }
+      }
+    ]
+  },
+  "EvolutionRatingsListParams": {
+    "valid": [
+      {
+        "name": "thread",
+        "value": {
+          "threadId": "t-1"
+        }
+      },
+      {
+        "name": "subagent",
+        "value": {
+          "threadId": "t-1",
+          "subagentId": "agent-7"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-thread",
+        "value": {}
+      },
+      {
+        "name": "unknown-field",
+        "value": {
+          "threadId": "t-1",
+          "turnId": "turn-1"
+        }
+      }
+    ]
+  },
+  "EvolutionRatingsListResult": {
+    "valid": [
+      {
+        "name": "empty",
+        "value": {
+          "items": [],
+          "truncated": false
+        }
+      },
+      {
+        "name": "rated",
+        "value": {
+          "items": [
+            {
+              "turnId": "turn-3",
+              "toolCallIds": [
+                "toolu_01"
+              ],
+              "targetKeys": [
+                "skill:bundled:docx"
+              ],
+              "rating": "up"
+            },
+            {
+              "turnId": "turn-1",
+              "targetKeys": [
+                "skill:user_created:deploy-check"
+              ]
+            }
+          ],
+          "truncated": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-rating",
+        "value": {
+          "items": [
+            {
+              "turnId": "turn-3",
+              "targetKeys": [
+                "skill:bundled:docx"
+              ],
+              "rating": 5
+            }
+          ],
+          "truncated": false
+        }
+      },
+      {
+        "name": "bad-target",
+        "value": {
+          "items": [
+            {
+              "turnId": "turn-3",
+              "targetKeys": [
+                "docx"
+              ]
+            }
+          ],
+          "truncated": false
+        }
+      }
+    ]
+  },
+  "EvolutionDataClearParams": {
+    "valid": [
+      {
+        "name": "all",
+        "value": {
+          "scope": "all",
+          "confirm": true
+        }
+      },
+      {
+        "name": "project",
+        "value": {
+          "workspace": "/w",
+          "scope": "project",
+          "confirm": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-scope",
+        "value": {
+          "scope": "everything",
+          "confirm": true
+        }
+      },
+      {
+        "name": "missing-confirm",
+        "value": {
+          "scope": "user"
+        }
+      }
+    ]
+  },
+  "EvolutionDataClearResult": {
+    "valid": [
+      {
+        "name": "cleared",
+        "value": {
+          "cleared": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing",
+        "value": {}
+      }
+    ]
+  },
+  "EvolutionTargetDistillParams": {
+    "valid": [
+      {
+        "name": "workspace-skill",
+        "value": {
+          "workspace": "/w",
+          "targetKey": "skill:user_created:review"
+        }
+      },
+      {
+        "name": "default-workspace",
+        "value": {
+          "targetKey": "skill:bundled:git"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-target",
+        "value": {}
+      },
+      {
+        "name": "unknown-field",
+        "value": {
+          "targetKey": "skill:bundled:git",
+          "force": true
+        }
+      }
+    ]
+  },
+  "EvolutionTargetDistillResult": {
+    "valid": [
+      {
+        "name": "queued",
+        "value": {
+          "outcome": "queued"
+        }
+      },
+      {
+        "name": "model-unavailable",
+        "value": {
+          "outcome": "model_unavailable",
+          "reason": "provider is not configured"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-outcome",
+        "value": {}
+      },
+      {
+        "name": "unknown-outcome",
+        "value": {
+          "outcome": "started"
+        }
+      }
+    ]
+  },
+  "EvolutionDistillOutcome": {
+    "valid": [
+      {
+        "name": "disabled",
+        "value": "disabled"
+      },
+      {
+        "name": "unknown-target",
+        "value": "unknown_target"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown",
+        "value": "running"
+      }
+    ]
+  },
+  "EvolutionChangedNotification": {
+    "valid": [
+      {
+        "name": "target",
+        "value": {
+          "targetKey": "skill:bundled:docx",
+          "reason": "promoted"
+        }
+      },
+      {
+        "name": "scope",
+        "value": {
+          "reason": "settings"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-reason",
+        "value": {
+          "reason": "edited"
+        }
+      }
+    ]
+  },
+  "EvolutionErrorCode": {
+    "valid": [
+      {
+        "name": "conflict",
+        "value": "evolution_revision_conflict"
+      },
+      {
+        "name": "too-large",
+        "value": "evolution_content_too_large"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown",
+        "value": "evolution_oops"
+      }
+    ]
+  },
+  "EvolutionSettingsReadParams": {
+    "valid": [
+      {
+        "name": "empty",
+        "value": {}
+      }
+    ],
+    "invalid": [
+      {
+        "name": "forged-scope",
+        "value": {
+          "scope": "project"
+        }
+      }
+    ]
+  },
+  "EvolutionSettingsReadResult": {
+    "valid": [
+      {
+        "name": "defaults",
+        "value": {
+          "settings": {
+            "enabled": false,
+            "mode": "observe",
+            "targets": {
+              "skill": {
+                "enabled": true,
+                "scope": "all",
+                "items": {},
+                "allow_file_edits": false
+              },
+              "preference": {
+                "enabled": true,
+                "scope": "all",
+                "items": {}
+              },
+              "project_knowledge": {
+                "enabled": true,
+                "mode": "propose",
+                "scope": "all",
+                "items": {}
+              },
+              "tool_usage": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              },
+              "workflow_template": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              }
+            },
+            "signals": {
+              "artifact_edits": true,
+              "procedure_results": true,
+              "chat_corrections": true,
+              "rating_ui": true
+            },
+            "distill_min_usages": 20,
+            "candidate_traffic": 0.5,
+            "promote_threshold": 0.8,
+            "rollback_threshold": 0.3,
+            "model": null,
+            "stage_models": {
+              "classifier": null,
+              "distill": null,
+              "eval": null
+            },
+            "evidence_ttl_days": 90,
+            "share_aggregates": false,
+            "usage_limit": {
+              "monthly_max_tokens": null
+            }
+          },
+          "revision": "sha256:00"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "camel-case-key",
+        "value": {
+          "settings": {
+            "enabled": false,
+            "mode": "observe",
+            "targets": {
+              "skill": {
+                "enabled": true,
+                "scope": "all",
+                "items": {},
+                "allow_file_edits": false
+              },
+              "preference": {
+                "enabled": true,
+                "scope": "all",
+                "items": {}
+              },
+              "project_knowledge": {
+                "enabled": true,
+                "mode": "propose",
+                "scope": "all",
+                "items": {}
+              },
+              "tool_usage": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              },
+              "workflow_template": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              }
+            },
+            "signals": {
+              "artifact_edits": true,
+              "procedure_results": true,
+              "chat_corrections": true,
+              "rating_ui": true
+            },
+            "distill_min_usages": 20,
+            "candidate_traffic": 0.5,
+            "promote_threshold": 0.8,
+            "rollback_threshold": 0.3,
+            "model": null,
+            "stage_models": {
+              "classifier": null,
+              "distill": null,
+              "eval": null
+            },
+            "evidence_ttl_days": 90,
+            "share_aggregates": false,
+            "usage_limit": {
+              "monthly_max_tokens": null
+            },
+            "distillMinUsages": 20
+          },
+          "revision": "r"
+        }
+      },
+      {
+        "name": "unknown-target",
+        "value": {
+          "settings": {
+            "enabled": false,
+            "mode": "observe",
+            "targets": {
+              "skill": {
+                "enabled": true,
+                "scope": "all",
+                "items": {},
+                "allow_file_edits": false
+              },
+              "preference": {
+                "enabled": true,
+                "scope": "all",
+                "items": {}
+              },
+              "project_knowledge": {
+                "enabled": true,
+                "mode": "propose",
+                "scope": "all",
+                "items": {}
+              },
+              "tool_usage": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              },
+              "workflow_template": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              },
+              "agent": {}
+            },
+            "signals": {
+              "artifact_edits": true,
+              "procedure_results": true,
+              "chat_corrections": true,
+              "rating_ui": true
+            },
+            "distill_min_usages": 20,
+            "candidate_traffic": 0.5,
+            "promote_threshold": 0.8,
+            "rollback_threshold": 0.3,
+            "model": null,
+            "stage_models": {
+              "classifier": null,
+              "distill": null,
+              "eval": null
+            },
+            "evidence_ttl_days": 90,
+            "share_aggregates": false,
+            "usage_limit": {
+              "monthly_max_tokens": null
+            }
+          },
+          "revision": "r"
+        }
+      }
+    ]
+  },
+  "EvolutionSettingsSaveParams": {
+    "valid": [
+      {
+        "name": "custom",
+        "value": {
+          "settings": {
+            "enabled": true,
+            "mode": "propose",
+            "targets": {
+              "skill": {
+                "enabled": true,
+                "mode": "auto",
+                "scope": "selected",
+                "items": {
+                  "skill:user_created:weekly-report": {
+                    "enabled": true
+                  }
+                },
+                "allow_file_edits": false
+              },
+              "preference": {
+                "enabled": true,
+                "scope": "all",
+                "items": {}
+              },
+              "project_knowledge": {
+                "enabled": true,
+                "mode": "propose",
+                "scope": "all",
+                "items": {}
+              },
+              "tool_usage": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              },
+              "workflow_template": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              }
+            },
+            "signals": {
+              "artifact_edits": true,
+              "procedure_results": true,
+              "chat_corrections": true,
+              "rating_ui": true
+            },
+            "distill_min_usages": 20,
+            "candidate_traffic": 0.5,
+            "promote_threshold": 0.8,
+            "rollback_threshold": 0.3,
+            "model": {
+              "provider": "KunLun",
+              "model": "Model-X"
+            },
+            "stage_models": {
+              "classifier": null,
+              "distill": null,
+              "eval": null
+            },
+            "evidence_ttl_days": 90,
+            "share_aggregates": false,
+            "usage_limit": {
+              "monthly_max_tokens": 100000
+            }
+          },
+          "expectedRevision": "sha256:00"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-revision",
+        "value": {
+          "settings": {
+            "enabled": false,
+            "mode": "observe",
+            "targets": {
+              "skill": {
+                "enabled": true,
+                "scope": "all",
+                "items": {},
+                "allow_file_edits": false
+              },
+              "preference": {
+                "enabled": true,
+                "scope": "all",
+                "items": {}
+              },
+              "project_knowledge": {
+                "enabled": true,
+                "mode": "propose",
+                "scope": "all",
+                "items": {}
+              },
+              "tool_usage": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              },
+              "workflow_template": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              }
+            },
+            "signals": {
+              "artifact_edits": true,
+              "procedure_results": true,
+              "chat_corrections": true,
+              "rating_ui": true
+            },
+            "distill_min_usages": 20,
+            "candidate_traffic": 0.5,
+            "promote_threshold": 0.8,
+            "rollback_threshold": 0.3,
+            "model": null,
+            "stage_models": {
+              "classifier": null,
+              "distill": null,
+              "eval": null
+            },
+            "evidence_ttl_days": 90,
+            "share_aggregates": false,
+            "usage_limit": {
+              "monthly_max_tokens": null
+            }
+          }
+        }
+      },
+      {
+        "name": "model-without-provider",
+        "value": {
+          "settings": {
+            "enabled": false,
+            "mode": "observe",
+            "targets": {
+              "skill": {
+                "enabled": true,
+                "scope": "all",
+                "items": {},
+                "allow_file_edits": false
+              },
+              "preference": {
+                "enabled": true,
+                "scope": "all",
+                "items": {}
+              },
+              "project_knowledge": {
+                "enabled": true,
+                "mode": "propose",
+                "scope": "all",
+                "items": {}
+              },
+              "tool_usage": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              },
+              "workflow_template": {
+                "enabled": false,
+                "scope": "all",
+                "items": {}
+              }
+            },
+            "signals": {
+              "artifact_edits": true,
+              "procedure_results": true,
+              "chat_corrections": true,
+              "rating_ui": true
+            },
+            "distill_min_usages": 20,
+            "candidate_traffic": 0.5,
+            "promote_threshold": 0.8,
+            "rollback_threshold": 0.3,
+            "model": {
+              "model": "m"
+            },
+            "stage_models": {
+              "classifier": null,
+              "distill": null,
+              "eval": null
+            },
+            "evidence_ttl_days": 90,
+            "share_aggregates": false,
+            "usage_limit": {
+              "monthly_max_tokens": null
+            }
+          },
+          "expectedRevision": "r"
+        }
+      }
+    ]
+  }
+}

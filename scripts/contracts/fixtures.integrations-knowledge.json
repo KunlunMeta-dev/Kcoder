@@ -1,0 +1,1398 @@
+{
+  "KnowledgeVisibility": {
+    "valid": [
+      {
+        "name": "valid_KnowledgeVisibility",
+        "value": "personal"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgeVisibility",
+        "value": "unsupported_fixture_case"
+      }
+    ]
+  },
+  "PublicationSource": {
+    "valid": [
+      {
+        "name": "valid_PublicationSource",
+        "value": {
+          "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+          "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+          "pageRevision": "fixture-page-revision"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_PublicationSource",
+        "value": {
+          "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+          "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+          "pageRevision": "fixture-page-revision",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "PublicationDraft": {
+    "valid": [
+      {
+        "name": "valid_PublicationDraft",
+        "value": {
+          "publicationId": "fixture-policy",
+          "title": "合成报销制度",
+          "visibility": "personal",
+          "audienceId": null,
+          "sources": [
+            {
+              "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+              "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+              "pageRevision": "fixture-page-revision"
+            }
+          ],
+          "validFromMs": null,
+          "validUntilMs": null,
+          "unresolved": [
+            "人工复核业务口径"
+          ],
+          "purpose": "Synthetic fixed-version task reference",
+          "reviewConclusion": "Publisher checked references; independent review is not claimed"
+        }
+      },
+      {
+        "name": "legacy_publication_without_optional_review_metadata",
+        "value": {
+          "publicationId": "fixture-policy",
+          "title": "合成报销制度",
+          "visibility": "personal",
+          "audienceId": null,
+          "sources": [
+            {
+              "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+              "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+              "pageRevision": "fixture-page-revision"
+            }
+          ],
+          "validFromMs": null,
+          "validUntilMs": null,
+          "unresolved": [
+            "人工复核业务口径"
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_PublicationDraft",
+        "value": {
+          "publicationId": "fixture-policy",
+          "title": "合成报销制度",
+          "visibility": "personal",
+          "audienceId": null,
+          "sources": [
+            {
+              "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+              "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+              "pageRevision": "fixture-page-revision"
+            }
+          ],
+          "validFromMs": null,
+          "validUntilMs": null,
+          "unresolved": [
+            "人工复核业务口径"
+          ],
+          "__untrustedAuthority": true,
+          "purpose": "Synthetic fixed-version task reference",
+          "reviewConclusion": "Publisher checked references; independent review is not claimed"
+        }
+      },
+      {
+        "name": "draft_cannot_sign_native_publisher_role",
+        "value": {
+          "publicationId": "fixture-policy",
+          "title": "合成报销制度",
+          "visibility": "personal",
+          "audienceId": null,
+          "sources": [
+            {
+              "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+              "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+              "pageRevision": "fixture-page-revision"
+            }
+          ],
+          "validFromMs": null,
+          "validUntilMs": null,
+          "unresolved": [
+            "人工复核业务口径"
+          ],
+          "purpose": "Synthetic fixed-version task reference",
+          "reviewConclusion": "Publisher checked references; independent review is not claimed",
+          "publisherRole": "administrator"
+        }
+      }
+    ]
+  },
+  "PublishedKnowledgePage": {
+    "valid": [
+      {
+        "name": "valid_PublishedKnowledgePage",
+        "value": {
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          },
+          "title": "合成制度",
+          "markdown": "十个工作日内审核。"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_PublishedKnowledgePage",
+        "value": {
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          },
+          "title": "合成制度",
+          "markdown": "十个工作日内审核。",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgePublication": {
+    "valid": [
+      {
+        "name": "valid_KnowledgePublication",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "version": 1,
+          "draft": {
+            "publicationId": "fixture-policy",
+            "title": "合成报销制度",
+            "visibility": "personal",
+            "audienceId": null,
+            "sources": [
+              {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              }
+            ],
+            "validFromMs": null,
+            "validUntilMs": null,
+            "unresolved": [
+              "人工复核业务口径"
+            ],
+            "purpose": "Synthetic fixed-version task reference",
+            "reviewConclusion": "Publisher checked references; independent review is not claimed"
+          },
+          "pages": [
+            {
+              "source": {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              },
+              "title": "合成制度",
+              "markdown": "十个工作日内审核。"
+            }
+          ],
+          "publishedAtMs": 1000,
+          "revoked": false,
+          "publisherRole": "personal_owner"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgePublication",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "version": 1,
+          "draft": {
+            "publicationId": "fixture-policy",
+            "title": "合成报销制度",
+            "visibility": "personal",
+            "audienceId": null,
+            "sources": [
+              {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              }
+            ],
+            "validFromMs": null,
+            "validUntilMs": null,
+            "unresolved": [
+              "人工复核业务口径"
+            ],
+            "purpose": "Synthetic fixed-version task reference",
+            "reviewConclusion": "Publisher checked references; independent review is not claimed"
+          },
+          "pages": [
+            {
+              "source": {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              },
+              "title": "合成制度",
+              "markdown": "十个工作日内审核。"
+            }
+          ],
+          "publishedAtMs": 1000,
+          "revoked": false,
+          "__untrustedAuthority": true,
+          "publisherRole": "personal_owner"
+        }
+      }
+    ]
+  },
+  "PublicationHit": {
+    "valid": [
+      {
+        "name": "valid_PublicationHit",
+        "value": {
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          },
+          "title": "合成制度",
+          "excerpt": "十个工作日内审核。"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_PublicationHit",
+        "value": {
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          },
+          "title": "合成制度",
+          "excerpt": "十个工作日内审核。",
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeRetrievalOutcome": {
+    "valid": [
+      {
+        "name": "valid_KnowledgeRetrievalOutcome",
+        "value": "matched"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgeRetrievalOutcome",
+        "value": "unsupported_fixture_case"
+      }
+    ]
+  },
+  "KnowledgeRetrieval": {
+    "valid": [
+      {
+        "name": "valid_KnowledgeRetrieval",
+        "value": {
+          "outcome": "matched",
+          "hits": [
+            {
+              "publicationId": "fixture-policy",
+              "version": 1,
+              "source": {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              },
+              "title": "合成制度",
+              "excerpt": "十个工作日内审核。"
+            }
+          ],
+          "observedAtMs": 1000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgeRetrieval",
+        "value": {
+          "outcome": "matched",
+          "hits": [
+            {
+              "publicationId": "fixture-policy",
+              "version": 1,
+              "source": {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              },
+              "title": "合成制度",
+              "excerpt": "十个工作日内审核。"
+            }
+          ],
+          "observedAtMs": 1000,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "PublicationReadParams": {
+    "valid": [
+      {
+        "name": "valid_PublicationReadParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_PublicationReadParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeRetrieveParams": {
+    "valid": [
+      {
+        "name": "valid_KnowledgeRetrieveParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "query": "审核",
+          "limit": 5
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgeRetrieveParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "query": "审核",
+          "limit": 5,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "CitationReadParams": {
+    "valid": [
+      {
+        "name": "valid_CitationReadParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_CitationReadParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgePublishParams": {
+    "valid": [
+      {
+        "name": "valid_KnowledgePublishParams",
+        "value": {
+          "draft": {
+            "publicationId": "fixture-policy",
+            "title": "合成报销制度",
+            "visibility": "personal",
+            "audienceId": null,
+            "sources": [
+              {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              }
+            ],
+            "validFromMs": null,
+            "validUntilMs": null,
+            "unresolved": [
+              "人工复核业务口径"
+            ],
+            "purpose": "Synthetic fixed-version task reference",
+            "reviewConclusion": "Publisher checked references; independent review is not claimed"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgePublishParams",
+        "value": {
+          "draft": {
+            "publicationId": "fixture-policy",
+            "title": "合成报销制度",
+            "visibility": "personal",
+            "audienceId": null,
+            "sources": [
+              {
+                "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                "pageRevision": "fixture-page-revision"
+              }
+            ],
+            "validFromMs": null,
+            "validUntilMs": null,
+            "unresolved": [
+              "人工复核业务口径"
+            ],
+            "purpose": "Synthetic fixed-version task reference",
+            "reviewConclusion": "Publisher checked references; independent review is not claimed"
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeRevokeParams": {
+    "valid": [
+      {
+        "name": "valid_KnowledgeRevokeParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgeRevokeParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "PublicationListResult": {
+    "valid": [
+      {
+        "name": "valid_PublicationListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "version": 1,
+                "draft": {
+                  "publicationId": "fixture-policy",
+                  "title": "合成报销制度",
+                  "visibility": "personal",
+                  "audienceId": null,
+                  "sources": [
+                    {
+                      "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                      "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                      "pageRevision": "fixture-page-revision"
+                    }
+                  ],
+                  "validFromMs": null,
+                  "validUntilMs": null,
+                  "unresolved": [
+                    "人工复核业务口径"
+                  ],
+                  "purpose": "Synthetic fixed-version task reference",
+                  "reviewConclusion": "Publisher checked references; independent review is not claimed"
+                },
+                "pages": [
+                  {
+                    "source": {
+                      "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                      "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                      "pageRevision": "fixture-page-revision"
+                    },
+                    "title": "合成制度",
+                    "markdown": "十个工作日内审核。"
+                  }
+                ],
+                "publishedAtMs": 1000,
+                "revoked": false,
+                "publisherRole": "personal_owner"
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_PublicationListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "version": 1,
+                "draft": {
+                  "publicationId": "fixture-policy",
+                  "title": "合成报销制度",
+                  "visibility": "personal",
+                  "audienceId": null,
+                  "sources": [
+                    {
+                      "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                      "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                      "pageRevision": "fixture-page-revision"
+                    }
+                  ],
+                  "validFromMs": null,
+                  "validUntilMs": null,
+                  "unresolved": [
+                    "人工复核业务口径"
+                  ],
+                  "purpose": "Synthetic fixed-version task reference",
+                  "reviewConclusion": "Publisher checked references; independent review is not claimed"
+                },
+                "pages": [
+                  {
+                    "source": {
+                      "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                      "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                      "pageRevision": "fixture-page-revision"
+                    },
+                    "title": "合成制度",
+                    "markdown": "十个工作日内审核。"
+                  }
+                ],
+                "publishedAtMs": 1000,
+                "revoked": false,
+                "publisherRole": "personal_owner"
+              }
+            ],
+            "nextCursor": null
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "PublicationReadResult": {
+    "valid": [
+      {
+        "name": "valid_PublicationReadResult",
+        "value": {
+          "publication": {
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "version": 1,
+            "draft": {
+              "publicationId": "fixture-policy",
+              "title": "合成报销制度",
+              "visibility": "personal",
+              "audienceId": null,
+              "sources": [
+                {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                }
+              ],
+              "validFromMs": null,
+              "validUntilMs": null,
+              "unresolved": [
+                "人工复核业务口径"
+              ],
+              "purpose": "Synthetic fixed-version task reference",
+              "reviewConclusion": "Publisher checked references; independent review is not claimed"
+            },
+            "pages": [
+              {
+                "source": {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                },
+                "title": "合成制度",
+                "markdown": "十个工作日内审核。"
+              }
+            ],
+            "publishedAtMs": 1000,
+            "revoked": false,
+            "publisherRole": "personal_owner"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_PublicationReadResult",
+        "value": {
+          "publication": {
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "version": 1,
+            "draft": {
+              "publicationId": "fixture-policy",
+              "title": "合成报销制度",
+              "visibility": "personal",
+              "audienceId": null,
+              "sources": [
+                {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                }
+              ],
+              "validFromMs": null,
+              "validUntilMs": null,
+              "unresolved": [
+                "人工复核业务口径"
+              ],
+              "purpose": "Synthetic fixed-version task reference",
+              "reviewConclusion": "Publisher checked references; independent review is not claimed"
+            },
+            "pages": [
+              {
+                "source": {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                },
+                "title": "合成制度",
+                "markdown": "十个工作日内审核。"
+              }
+            ],
+            "publishedAtMs": 1000,
+            "revoked": false,
+            "publisherRole": "personal_owner"
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeRetrieveResult": {
+    "valid": [
+      {
+        "name": "valid_KnowledgeRetrieveResult",
+        "value": {
+          "retrieval": {
+            "outcome": "matched",
+            "hits": [
+              {
+                "publicationId": "fixture-policy",
+                "version": 1,
+                "source": {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                },
+                "title": "合成制度",
+                "excerpt": "十个工作日内审核。"
+              }
+            ],
+            "observedAtMs": 1000
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_KnowledgeRetrieveResult",
+        "value": {
+          "retrieval": {
+            "outcome": "matched",
+            "hits": [
+              {
+                "publicationId": "fixture-policy",
+                "version": 1,
+                "source": {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                },
+                "title": "合成制度",
+                "excerpt": "十个工作日内审核。"
+              }
+            ],
+            "observedAtMs": 1000
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "CitationReadResult": {
+    "valid": [
+      {
+        "name": "valid_CitationReadResult",
+        "value": {
+          "citation": {
+            "source": {
+              "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+              "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+              "pageRevision": "fixture-page-revision"
+            },
+            "title": "合成制度",
+            "markdown": "十个工作日内审核。"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject_invalid_CitationReadResult",
+        "value": {
+          "citation": {
+            "source": {
+              "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+              "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+              "pageRevision": "fixture-page-revision"
+            },
+            "title": "合成制度",
+            "markdown": "十个工作日内审核。"
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeAdoption": {
+    "valid": [
+      {
+        "name": "synthetic-valid",
+        "value": {
+          "id": "fixture-adoption",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "revision": 1,
+          "publicationOwner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-publication",
+          "publicationVersion": 1,
+          "enabled": true,
+          "adoptedAtMs": 100,
+          "updatedAtMs": 100
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority-field",
+        "value": {
+          "id": "fixture-adoption",
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "revision": 1,
+          "publicationOwner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-publication",
+          "publicationVersion": 1,
+          "enabled": true,
+          "adoptedAtMs": 100,
+          "updatedAtMs": 100,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeAdoptParams": {
+    "valid": [
+      {
+        "name": "synthetic-valid",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-publication",
+          "version": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority-field",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-publication",
+          "version": 1,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeAdoptionEnableParams": {
+    "valid": [
+      {
+        "name": "synthetic-valid",
+        "value": {
+          "adoptionId": "fixture-adoption",
+          "enabled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority-field",
+        "value": {
+          "adoptionId": "fixture-adoption",
+          "enabled": false,
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeAdoptionResult": {
+    "valid": [
+      {
+        "name": "synthetic-valid",
+        "value": {
+          "adoption": {
+            "id": "fixture-adoption",
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "revision": 1,
+            "publicationOwner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "publicationId": "fixture-publication",
+            "publicationVersion": 1,
+            "enabled": true,
+            "adoptedAtMs": 100,
+            "updatedAtMs": 100
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority-field",
+        "value": {
+          "adoption": {
+            "id": "fixture-adoption",
+            "owner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "revision": 1,
+            "publicationOwner": {
+              "accountId": "fixture-account",
+              "targetId": "fixture-target",
+              "workspaceId": null
+            },
+            "publicationId": "fixture-publication",
+            "publicationVersion": 1,
+            "enabled": true,
+            "adoptedAtMs": 100,
+            "updatedAtMs": 100
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgeAdoptionListResult": {
+    "valid": [
+      {
+        "name": "synthetic-valid",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "fixture-adoption",
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "revision": 1,
+                "publicationOwner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "publicationId": "fixture-publication",
+                "publicationVersion": 1,
+                "enabled": true,
+                "adoptedAtMs": 100,
+                "updatedAtMs": 100
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority-field",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "id": "fixture-adoption",
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "revision": 1,
+                "publicationOwner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "publicationId": "fixture-publication",
+                "publicationVersion": 1,
+                "enabled": true,
+                "adoptedAtMs": 100,
+                "updatedAtMs": 100
+              }
+            ],
+            "nextCursor": null
+          },
+          "__untrustedAuthority": true
+        }
+      }
+    ]
+  },
+  "KnowledgePublicationSummary": {
+    "valid": [
+      {
+        "name": "valid_KnowledgePublicationSummary",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "title": "合成报销制度",
+          "purpose": "Synthetic fixed-version task reference",
+          "publisherRole": "personal_owner",
+          "publishedAtMs": 1000,
+          "validFromMs": null,
+          "validUntilMs": null,
+          "revoked": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_field_KnowledgePublicationSummary",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "title": "合成报销制度",
+          "purpose": "Synthetic fixed-version task reference",
+          "publisherRole": "personal_owner",
+          "publishedAtMs": 1000,
+          "validFromMs": null,
+          "validUntilMs": null,
+          "revoked": false,
+          "unknownPrivateBody": "must not cross summary schema"
+        }
+      }
+    ]
+  },
+  "PublicationHistoryListResult": {
+    "valid": [
+      {
+        "name": "valid_PublicationHistoryListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "publicationId": "fixture-policy",
+                "version": 1,
+                "title": "合成报销制度",
+                "purpose": "Synthetic fixed-version task reference",
+                "publisherRole": "personal_owner",
+                "publishedAtMs": 1000,
+                "validFromMs": null,
+                "validUntilMs": null,
+                "revoked": false
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_field_PublicationHistoryListResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "owner": {
+                  "accountId": "fixture-account",
+                  "targetId": "fixture-target",
+                  "workspaceId": null
+                },
+                "publicationId": "fixture-policy",
+                "version": 1,
+                "title": "合成报销制度",
+                "purpose": "Synthetic fixed-version task reference",
+                "publisherRole": "personal_owner",
+                "publishedAtMs": 1000,
+                "validFromMs": null,
+                "validUntilMs": null,
+                "revoked": false
+              }
+            ],
+            "nextCursor": null
+          },
+          "unknownPrivateBody": "must not cross summary schema"
+        }
+      }
+    ]
+  },
+  "KnowledgeSourceObservation": {
+    "valid": [
+      {
+        "name": "valid_KnowledgeSourceObservation",
+        "value": {
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          },
+          "available": true,
+          "removed": true,
+          "archived": false,
+          "observedAtMs": 1000
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_field_KnowledgeSourceObservation",
+        "value": {
+          "source": {
+            "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+            "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+            "pageRevision": "fixture-page-revision"
+          },
+          "available": true,
+          "removed": true,
+          "archived": false,
+          "observedAtMs": 1000,
+          "untrustedGrant": true
+        }
+      }
+    ]
+  },
+  "PublicationSourcesReadParams": {
+    "valid": [
+      {
+        "name": "valid_PublicationSourcesReadParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "after": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_field_PublicationSourcesReadParams",
+        "value": {
+          "owner": {
+            "accountId": "fixture-account",
+            "targetId": "fixture-target",
+            "workspaceId": null
+          },
+          "publicationId": "fixture-policy",
+          "version": 1,
+          "after": null,
+          "untrustedGrant": true
+        }
+      }
+    ]
+  },
+  "PublicationSourcesReadResult": {
+    "valid": [
+      {
+        "name": "valid_PublicationSourcesReadResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "source": {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                },
+                "available": true,
+                "removed": true,
+                "archived": false,
+                "observedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_field_PublicationSourcesReadResult",
+        "value": {
+          "page": {
+            "items": [
+              {
+                "source": {
+                  "libraryId": "f10a22c6-86ae-49ce-a6ac-cc05888c3bdb",
+                  "pageId": "269bba7b-9379-45ed-a54e-e366ba3558d8",
+                  "pageRevision": "fixture-page-revision"
+                },
+                "available": true,
+                "removed": true,
+                "archived": false,
+                "observedAtMs": 1000
+              }
+            ],
+            "nextCursor": null
+          },
+          "untrustedGrant": true
+        }
+      }
+    ]
+  },
+  "KnowledgeSettingsFlags": {
+    "valid": [
+      {
+        "name": "explicit-state",
+        "value": {
+          "memoryCenterEnabled": false,
+          "publicationsEnabled": false,
+          "businessAutomationEnabled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong-type",
+        "value": 12
+      }
+    ]
+  },
+  "KnowledgeSettingsPersisted": {
+    "valid": [
+      {
+        "name": "explicit-state",
+        "value": {
+          "memoryCenterEnabled": null,
+          "publicationsEnabled": null,
+          "businessAutomationEnabled": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong-type",
+        "value": 12
+      }
+    ]
+  },
+  "KnowledgeSettingsReadResult": {
+    "valid": [
+      {
+        "name": "explicit-state",
+        "value": {
+          "persisted": {
+            "memoryCenterEnabled": null,
+            "publicationsEnabled": null,
+            "businessAutomationEnabled": null
+          },
+          "effective": {
+            "memoryCenterEnabled": false,
+            "publicationsEnabled": false,
+            "businessAutomationEnabled": false
+          },
+          "connection": {
+            "memoryCenterEnabled": false,
+            "publicationsEnabled": false,
+            "businessAutomationEnabled": false
+          },
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "restartRequired": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong-type",
+        "value": 12
+      }
+    ]
+  },
+  "KnowledgeSettingsFeature": {
+    "valid": [
+      {
+        "name": "explicit-state",
+        "value": "subscriptions"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong-type",
+        "value": 12
+      }
+    ]
+  },
+  "KnowledgeSettingsSaveParams": {
+    "valid": [
+      {
+        "name": "explicit-state",
+        "value": {
+          "feature": "subscriptions",
+          "enabled": true,
+          "expectedRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong-type",
+        "value": 12
+      }
+    ]
+  }
+}

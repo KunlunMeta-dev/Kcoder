@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "adapterRevision": "claude-settings-layers/v1",
+  "fixtureKind": "synthetic-selected-file-snapshot",
+  "sourceVersionComparisonBaseline": "Claude Code 2.1.301",
+  "nativeVendorAcceptance": false,
+  "reviewedOn": "2026-10-17",
+  "officialReferences": [
+    "https://code.claude.com/docs/en/settings",
+    "https://learn.chatgpt.com/docs/config-file/config-reference"
+  ],
+  "semantics": [
+    "explicit user < project < local file precedence for supported model/env fields",
+    "all present and absent slots bound before publication",
+    "private API key read from original winning source only"
+  ],
+  "unobserved": [
+    "managed settings",
+    "command-line settings",
+    "source process environment",
+    "Git/worktree local-path routing",
+    "separate MCP namespaces"
+  ],
+  "fixtures": [
+    {
+      "path": "tests/fixtures/configuration-layers/user/settings.json",
+      "sha256": "6443fb3b81d03be9817391e4578fcb705695efdecbe987252674ee7aa81d6f46"
+    },
+    {
+      "path": "tests/fixtures/configuration-layers/project/settings.json",
+      "sha256": "b96aed415685779a2e2f3e739414c1fcf9e5d6caacbc3c9ea938745ccb741be7"
+    },
+    {
+      "path": "tests/fixtures/configuration-layers/local/settings.local.json",
+      "sha256": "dcb0cb27937045b8f32863ca374d02801dc87f8a2667a047f934101fef45053a"
+    }
+  ]
+}

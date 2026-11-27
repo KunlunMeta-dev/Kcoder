@@ -1,0 +1,929 @@
+{
+  "ExtensionConflictsPreviewParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "mcpServerNames": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "pluginId": {
+        "description": "Installed or discovered plugin whose components are checked.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "skillNames": {
+        "default": [],
+        "description": "Names declared by a plugin that is not installed yet.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "title": "ExtensionConflictsPreviewParams",
+    "type": "object"
+  },
+  "ExtensionConflictsPreviewResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ExtensionConflict": {
+        "additionalProperties": false,
+        "properties": {
+          "effective": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ExtensionSourceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveFromPlugin": {
+            "description": "`mixed_family`: provided names currently effective from the plugin.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/definitions/ExtensionItemKind"
+          },
+          "missing": {
+            "description": "`mixed_family`: bundled family names the plugin does not provide. `version_mismatch`: the version bundled with KCoder.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Item name, or the family prefix for `mixed_family`.",
+            "type": "string"
+          },
+          "pluginId": {
+            "description": "`mixed_family`: the plugin involved.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provided": {
+            "description": "`mixed_family`: bundled family names the plugin also provides. `version_mismatch`: the resolved binary version.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "$ref": "#/definitions/ExtensionConflictReason"
+          },
+          "sameUpstream": {
+            "description": "All copies declare the same upstream repository (for example larksuite/cli).",
+            "type": "boolean"
+          },
+          "shadowed": {
+            "items": {
+              "$ref": "#/definitions/ExtensionSourceRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ExtensionConflictOutcome": {
+        "oneOf": [
+          {
+            "description": "No other copy of this name.",
+            "enum": [
+              "none"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Another server with this name stays available alongside (MCP names are namespaced).",
+            "enum": [
+              "coexists"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "An existing copy stays effective; the plugin copy would be shadowed.",
+            "enum": [
+              "shadowed_by_existing"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The plugin copy would replace the existing effective copy.",
+            "enum": [
+              "shadows_existing"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "ExtensionConflictPreviewEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "existing": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ExtensionSourceRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The copy that is effective now, excluding the previewed plugin's own copy."
+          },
+          "kind": {
+            "$ref": "#/definitions/ExtensionItemKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/definitions/ExtensionConflictOutcome"
+          },
+          "sameUpstream": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "outcome"
+        ],
+        "type": "object"
+      },
+      "ExtensionConflictReason": {
+        "oneOf": [
+          {
+            "description": "Several copies share one name; only `effective` is used.",
+            "enum": [
+              "same_name"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "A plugin provides only part of a bundled family, or mixes versions.",
+            "enum": [
+              "mixed_family"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Several executables with this name are on `PATH`.",
+            "enum": [
+              "multiple_binaries"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The resolved binary differs from the version bundled with KCoder.",
+            "enum": [
+              "version_mismatch"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "ExtensionItemKind": {
+        "enum": [
+          "skill",
+          "mcp_server",
+          "hook",
+          "plugin",
+          "binary"
+        ],
+        "type": "string"
+      },
+      "ExtensionLayer": {
+        "description": "Discovery layer. Skill precedence (low to high): plugin, builtin/bundled, preferred plugin, project, external, user; `runtime` is the separate `expert:` namespace.",
+        "enum": [
+          "builtin",
+          "bundled",
+          "project",
+          "external",
+          "plugin",
+          "user",
+          "runtime"
+        ],
+        "type": "string"
+      },
+      "ExtensionSourceRef": {
+        "additionalProperties": false,
+        "description": "Identity of another copy, used by `shadowedBy` and `shadows`.",
+        "properties": {
+          "layer": {
+            "$ref": "#/definitions/ExtensionLayer"
+          },
+          "ownerPluginId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "Display path, with the target home directory shown as `~`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "layer"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "conflicts": {
+        "description": "Family-level findings such as a partial `lark-*` set.",
+        "items": {
+          "$ref": "#/definitions/ExtensionConflict"
+        },
+        "type": "array"
+      },
+      "entries": {
+        "items": {
+          "$ref": "#/definitions/ExtensionConflictPreviewEntry"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "conflicts",
+      "entries"
+    ],
+    "title": "ExtensionConflictsPreviewResult",
+    "type": "object"
+  },
+  "ExtensionPluginSkillsResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "appliesToNewConversations": {
+        "description": "Running conversations keep the skill catalog they started with.",
+        "type": "boolean"
+      },
+      "changed": {
+        "description": "False when the setting already had the requested value.",
+        "type": "boolean"
+      },
+      "generation": {
+        "description": "Plugin store generation after this request.",
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "pluginId": {
+        "type": "string"
+      },
+      "revision": {
+        "description": "Revision of the setting after this request.",
+        "type": "string"
+      },
+      "skillsEnabled": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "appliesToNewConversations",
+      "changed",
+      "generation",
+      "pluginId",
+      "revision",
+      "skillsEnabled"
+    ],
+    "title": "ExtensionPluginSkillsResult",
+    "type": "object"
+  },
+  "ExtensionPluginSkillsSetEnabledParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "`plugin/skills/setEnabled`: turn one installed plugin's skills on or off in the selected target's user settings. Other copies of the same names, the plugin's MCP servers and Hooks are unaffected.",
+    "properties": {
+      "enabled": {
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "description": "`skillPolicyRevision` from `extensions/inventory`. When present, a changed setting fails with `plugin_skill_policy_conflict` instead of being overwritten.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "pluginId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "enabled",
+      "pluginId"
+    ],
+    "title": "ExtensionPluginSkillsSetEnabledParams",
+    "type": "object"
+  },
+  "ExtensionSkillPreferenceResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ExtensionSkillPreference": {
+        "additionalProperties": false,
+        "description": "`skills.source_preference` of the selected target's user settings.",
+        "properties": {
+          "preferPluginSkills": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "description": "Skill name to plugin ID whose copy wins over the built-in/bundled copy.",
+            "type": "object"
+          },
+          "preferPlugins": {
+            "default": [],
+            "description": "Plugin IDs whose every skill wins over built-in/bundled copies.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "appliesToNewConversations": {
+        "type": "boolean"
+      },
+      "preference": {
+        "$ref": "#/definitions/ExtensionSkillPreference"
+      },
+      "revision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "appliesToNewConversations",
+      "preference",
+      "revision"
+    ],
+    "title": "ExtensionSkillPreferenceResult",
+    "type": "object"
+  },
+  "ExtensionSkillPreferenceUpdateParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ExtensionSkillPreference": {
+        "additionalProperties": false,
+        "description": "`skills.source_preference` of the selected target's user settings.",
+        "properties": {
+          "preferPluginSkills": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "description": "Skill name to plugin ID whose copy wins over the built-in/bundled copy.",
+            "type": "object"
+          },
+          "preferPlugins": {
+            "default": [],
+            "description": "Plugin IDs whose every skill wins over built-in/bundled copies.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "type": "string"
+      },
+      "preference": {
+        "$ref": "#/definitions/ExtensionSkillPreference"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "preference"
+    ],
+    "title": "ExtensionSkillPreferenceUpdateParams",
+    "type": "object"
+  },
+  "ExtensionsInventoryParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "includeBinaries": {
+        "default": false,
+        "description": "Resolve `lark-cli`, `node` and `playwright-mcp` on the target `PATH` and run bounded `--version` probes. Never set this on polling paths.",
+        "type": "boolean"
+      }
+    },
+    "title": "ExtensionsInventoryParams",
+    "type": "object"
+  },
+  "ExtensionsInventoryResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ExtensionConflict": {
+        "additionalProperties": false,
+        "properties": {
+          "effective": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ExtensionSourceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effectiveFromPlugin": {
+            "description": "`mixed_family`: provided names currently effective from the plugin.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "$ref": "#/definitions/ExtensionItemKind"
+          },
+          "missing": {
+            "description": "`mixed_family`: bundled family names the plugin does not provide. `version_mismatch`: the version bundled with KCoder.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "Item name, or the family prefix for `mixed_family`.",
+            "type": "string"
+          },
+          "pluginId": {
+            "description": "`mixed_family`: the plugin involved.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provided": {
+            "description": "`mixed_family`: bundled family names the plugin also provides. `version_mismatch`: the resolved binary version.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "reason": {
+            "$ref": "#/definitions/ExtensionConflictReason"
+          },
+          "sameUpstream": {
+            "description": "All copies declare the same upstream repository (for example larksuite/cli).",
+            "type": "boolean"
+          },
+          "shadowed": {
+            "items": {
+              "$ref": "#/definitions/ExtensionSourceRef"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ExtensionConflictReason": {
+        "oneOf": [
+          {
+            "description": "Several copies share one name; only `effective` is used.",
+            "enum": [
+              "same_name"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "A plugin provides only part of a bundled family, or mixes versions.",
+            "enum": [
+              "mixed_family"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Several executables with this name are on `PATH`.",
+            "enum": [
+              "multiple_binaries"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The resolved binary differs from the version bundled with KCoder.",
+            "enum": [
+              "version_mismatch"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "ExtensionDisabledBy": {
+        "description": "Why an item is not enabled. `name` is a by-name switch (`skills/setEnabled`, `mcp/setEnabled`), `plugin` the owning plugin or its component switch, `policy` a settings policy (per-server plugin policy, training isolation), `trust` an untrusted project directory.",
+        "enum": [
+          "name",
+          "plugin",
+          "policy",
+          "trust"
+        ],
+        "type": "string"
+      },
+      "ExtensionHookIssue": {
+        "additionalProperties": false,
+        "description": "A Hook configuration problem found while parsing (nothing is executed). Messages are redacted; commands, URLs and headers are never echoed.",
+        "properties": {
+          "event": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "layer": {
+            "$ref": "#/definitions/ExtensionLayer"
+          },
+          "location": {
+            "description": "JSON location, for example `hooks.PreToolUse[1].hooks[0]`.",
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "path": {
+            "description": "Display path of the settings file.",
+            "type": "string"
+          },
+          "severity": {
+            "$ref": "#/definitions/ExtensionIssueSeverity"
+          }
+        },
+        "required": [
+          "layer",
+          "location",
+          "message",
+          "path",
+          "severity"
+        ],
+        "type": "object"
+      },
+      "ExtensionInventoryItem": {
+        "additionalProperties": false,
+        "properties": {
+          "bundled": {
+            "description": "Binaries: the copy shipped with KCoder Studio.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "count": {
+            "description": "Hooks: number of matchers; plugins: number of contributed components.",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "description": "MCP transport, Hook event or binary role, depending on `kind`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "disabledBy": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ExtensionDisabledBy"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effective": {
+            "description": "This copy is what new conversations use. Shadowed and disabled copies are false.",
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "family": {
+            "description": "Skills: shared name prefix of a bundled family (for example `lark`).",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Stable key unique within one response.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/ExtensionItemKind"
+          },
+          "layer": {
+            "$ref": "#/definitions/ExtensionLayer"
+          },
+          "marketplaceId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerPluginId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "Display path, with the target home directory shown as `~`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "preferred": {
+            "description": "Skill copies only: `skills.source_preference` selects this plugin copy.",
+            "type": "boolean"
+          },
+          "shadowedBy": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ExtensionSourceRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "shadows": {
+            "items": {
+              "$ref": "#/definitions/ExtensionSourceRef"
+            },
+            "type": "array"
+          },
+          "skillPolicyRevision": {
+            "description": "Installed plugins with skills: pass as `expectedRevision` to `plugin/skills/setEnabled`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "skillsEnabled": {
+            "description": "Installed plugins with skills (`pluginSkillPolicyV1`): whether the plugin's own skill copies are enabled (`plugins.installed.<id>.skills.enabled`).",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "targetKey": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TargetKey"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Skills: server-provided self-evolution target key (`skill:<provenance origin>:<name>`); clients never construct it."
+          },
+          "upstream": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ExtensionUpstream"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "effective",
+          "enabled",
+          "id",
+          "kind",
+          "layer",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ExtensionIssueSeverity": {
+        "oneOf": [
+          {
+            "description": "The rule fails closed: it blocks its event instead of running.",
+            "enum": [
+              "error"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "The configuration loads, but part of it is ignored.",
+            "enum": [
+              "warning"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "ExtensionItemKind": {
+        "enum": [
+          "skill",
+          "mcp_server",
+          "hook",
+          "plugin",
+          "binary"
+        ],
+        "type": "string"
+      },
+      "ExtensionLayer": {
+        "description": "Discovery layer. Skill precedence (low to high): plugin, builtin/bundled, preferred plugin, project, external, user; `runtime` is the separate `expert:` namespace.",
+        "enum": [
+          "builtin",
+          "bundled",
+          "project",
+          "external",
+          "plugin",
+          "user",
+          "runtime"
+        ],
+        "type": "string"
+      },
+      "ExtensionSkillPreference": {
+        "additionalProperties": false,
+        "description": "`skills.source_preference` of the selected target's user settings.",
+        "properties": {
+          "preferPluginSkills": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "description": "Skill name to plugin ID whose copy wins over the built-in/bundled copy.",
+            "type": "object"
+          },
+          "preferPlugins": {
+            "default": [],
+            "description": "Plugin IDs whose every skill wins over built-in/bundled copies.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ExtensionSourceRef": {
+        "additionalProperties": false,
+        "description": "Identity of another copy, used by `shadowedBy` and `shadows`.",
+        "properties": {
+          "layer": {
+            "$ref": "#/definitions/ExtensionLayer"
+          },
+          "ownerPluginId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "description": "Display path, with the target home directory shown as `~`.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "layer"
+        ],
+        "type": "object"
+      },
+      "ExtensionUpstream": {
+        "additionalProperties": false,
+        "description": "Declared upstream identity; never inferred from content hashes.",
+        "properties": {
+          "ref": {
+            "description": "Upstream tag, or commit when no tag is recorded.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "repository": {
+            "description": "Repository URL from `UPSTREAM.md` or the plugin manifest.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "TargetKey": {
+        "pattern": "^(?:skill|preference|project_knowledge|tool_usage|workflow_template):[A-Za-z0-9_.-]{1,64}:(?!\\p{White_Space})[^\\p{Cc}]+(?<!\\p{White_Space})$",
+        "type": "string",
+        "x-max-utf8-bytes": 339
+      }
+    },
+    "properties": {
+      "appliesToNewConversations": {
+        "type": "boolean"
+      },
+      "binariesIncluded": {
+        "type": "boolean"
+      },
+      "conflicts": {
+        "items": {
+          "$ref": "#/definitions/ExtensionConflict"
+        },
+        "type": "array"
+      },
+      "hookIssues": {
+        "default": [],
+        "description": "User and project Hook configuration problems, including untrusted projects.",
+        "items": {
+          "$ref": "#/definitions/ExtensionHookIssue"
+        },
+        "type": "array"
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/ExtensionInventoryItem"
+        },
+        "type": "array"
+      },
+      "pluginSkillPolicy": {
+        "description": "The target accepts `plugin/skills/setEnabled` (mirrors the `pluginSkillPolicyV1` capability); absent from older targets.",
+        "type": "boolean"
+      },
+      "skillPreference": {
+        "$ref": "#/definitions/ExtensionSkillPreference"
+      },
+      "skillPreferenceRevision": {
+        "description": "Pass as `expectedRevision` to `extensions/skillPreference/update`.",
+        "type": "string"
+      }
+    },
+    "required": [
+      "appliesToNewConversations",
+      "binariesIncluded",
+      "conflicts",
+      "items",
+      "skillPreference",
+      "skillPreferenceRevision"
+    ],
+    "title": "ExtensionsInventoryResult",
+    "type": "object"
+  }
+}

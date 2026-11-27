@@ -1,0 +1,11 @@
+{
+  "id": "native-loses",
+  "name": "Native Loses",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": []
+      }
+    ]
+  }
+}

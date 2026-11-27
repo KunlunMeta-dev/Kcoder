@@ -1,0 +1,433 @@
+//! Immutable UTF-8 revision objects. Database records reference durable files.
+//! A crash before the DB commit can leave an unreferenced object, never a partial revision.
+use anyhow::{Context, Result, ensure};
+use sha2::{Digest, Sha256};
+use std::{
+    fs,
+    io::{Read, Write},
+    path::{Path, PathBuf},
+};
+
+pub(crate) struct ObjectStore {
+    root: PathBuf,
+    existing_root: Option<kcoder_config::PrivateDirectory>,
+    existing_parent: Option<(kcoder_config::PrivateDirectory, std::ffi::OsString)>,
+    held_writer: Option<kcoder_config::PrivateDirectory>,
+}
+impl ObjectStore {
+    pub fn open(root: PathBuf) -> Result<Self> {
+        private_dir(&root)?;
+        let root = fs::canonicalize(root)?;
+        // Schema-current opens may do no SQLite write to confirm this entry.
+        // Existing roots can also be visible leftovers of a failed confirmation.
+        sync_object_directory(
+            root.parent()
+                .context("knowledge object root has no parent")?,
+        )?;
+        Ok(Self {
+            root,
+            existing_root: None,
+            existing_parent: None,
+            held_writer: None,
+        })
+    }
+    /// Observe a private existing root without creating, syncing or repairing it.
+    pub(crate) fn open_existing(root: PathBuf) -> Result<Self> {
+        let directory = kcoder_config::PrivateDirectory::open_existing(&root)?;
+        directory.verify_trusted_config_directory()?;
+        let store = Self {
+            root: fs::canonicalize(root)?,
+            existing_root: Some(directory),
+            existing_parent: None,
+            held_writer: None,
+        };
+        store.verify_existing_root()?;
+        Ok(store)
+    }
+    pub(crate) fn open_existing_child(
+        parent: kcoder_config::PrivateDirectory,
+        name: &std::ffi::OsStr,
+    ) -> Result<Self> {
+        let directory = parent.open_child(name, false)?;
+        directory.verify_trusted_config_directory()?;
+        // All read I/O and continuity checks use these held parent/child FDs.
+        // The writer path is intentionally absent and cannot be used in this mode.
+        let store = Self {
+            root: PathBuf::new(),
+            existing_root: Some(directory),
+            existing_parent: Some((parent, name.to_os_string())),
+            held_writer: None,
+        };
+        store.verify_existing_root()?;
+        Ok(store)
+    }
+    fn verify_existing_root(&self) -> Result<()> {
+        if let Some(original) = self.existing_root.as_ref().or(self.held_writer.as_ref()) {
+            original.verify_trusted_config_directory()?;
+            let current = if let Some((parent, name)) = &self.existing_parent {
+                parent.verify_trusted_config_directory()?;
+                parent.open_child(name, false)?
+            } else {
+                kcoder_config::PrivateDirectory::open_existing(&self.root)?
+            };
+            current.verify_trusted_config_directory()?;
+            ensure!(
+                current.directory_identity()? == original.directory_identity()?,
+                "knowledge object root changed"
+            );
+        }
+        Ok(())
+    }
+    pub(crate) fn open_writer_child(
+        parent: kcoder_config::PrivateDirectory,
+        name: &std::ffi::OsStr,
+    ) -> Result<Self> {
+        let directory = parent.open_child(name, true)?;
+        directory.verify_trusted_config_directory()?;
+        parent.sync()?;
+        let store = Self {
+            root: PathBuf::new(),
+            existing_root: None,
+            existing_parent: Some((parent, name.to_os_string())),
+            held_writer: Some(directory),
+        };
+        store.verify_existing_root()?;
+        Ok(store)
+    }
+    pub(crate) fn verify_held_writer(&self) -> Result<()> {
+        self.verify_existing_root()
+    }
+
+    fn held_library(&self, library: &str) -> Result<kcoder_config::PrivateDirectory> {
+        self.verify_existing_root()?;
+        let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
+        let root = self
+            .held_writer
+            .as_ref()
+            .context("held object writer unavailable")?;
+        let directory = root.open_child(std::ffi::OsStr::new(&id.to_string()), true)?;
+        directory.verify_trusted_config_directory()?;
+        root.sync()?;
+        Ok(directory)
+    }
+    fn put_held_reader(
+        &self,
+        library: &str,
+        reader: &mut impl Read,
+        length: u64,
+        expected: &str,
+    ) -> Result<()> {
+        ensure!(length <= 32 * 1024 * 1024, "revision object too large");
+        validate_hash(expected)?;
+        let directory = self.held_library(library)?;
+        let name = format!("{expected}.md");
+        let state = std::cell::RefCell::new((Sha256::new(), 0u64));
+        struct Hashed<'a, R> {
+            reader: R,
+            state: &'a std::cell::RefCell<(Sha256, u64)>,
+        }
+        impl<R: Read> Read for Hashed<'_, R> {
+            fn read(&mut self, bytes: &mut [u8]) -> std::io::Result<usize> {
+                let count = self.reader.read(bytes)?;
+                let mut state = self.state.borrow_mut();
+                state.0.update(&bytes[..count]);
+                state.1 += count as u64;
+                Ok(count)
+            }
+        }
+        let mut stream = Hashed {
+            reader: reader.take(length),
+            state: &state,
+        };
+        let published = directory.atomic_publish_from_reader(
+            std::ffi::OsStr::new(&name),
+            &mut stream,
+            false,
+            || {
+                let state = state.borrow();
+                ensure!(
+                    state.1 == length && format!("{:x}", state.0.clone().finalize()) == expected,
+                    "revision object integrity failure"
+                );
+                self.verify_existing_root()?;
+                Ok(())
+            },
+        );
+        match published {
+            Ok(_) => {}
+            Err(error)
+                if error.chain().any(|e| {
+                    e.downcast_ref::<std::io::Error>()
+                        .is_some_and(|e| e.kind() == std::io::ErrorKind::AlreadyExists)
+                }) =>
+            {
+                ensure!(
+                    self.object_len(library, expected)? == length,
+                    "revision object integrity failure"
+                );
+                self.copy_object_to(library, expected, &mut std::io::sink())?;
+                directory.sync()?;
+            }
+            Err(error) => return Err(error),
+        }
+        self.verify_existing_root()
+    }
+    fn directory(&self, library: &str) -> Result<PathBuf> {
+        ensure!(
+            self.existing_root.is_none() && self.held_writer.is_none(),
+            "knowledge object store is read-only"
+        );
+        let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
+        let path = self.root.join(id.to_string());
+        private_dir(&path)?;
+        // The library entry belongs to root, not to the library's own directory.
+        // Retry confirmation even when a failed mkdir publication left it visible.
+        sync_object_directory(&self.root)?;
+        Ok(path)
+    }
+    /// Only for a newly allocated unpublished import library owned by the caller.
+    pub(crate) fn remove_library_unpublished(&self, library: &str) -> Result<()> {
+        ensure!(
+            self.existing_root.is_none() && self.held_writer.is_none(),
+            "knowledge object store is read-only"
+        );
+        let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
+        let path = self.root.join(id.to_string());
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        ensure!(
+            metadata.is_dir() && !metadata.file_type().is_symlink(),
+            "invalid unpublished object directory"
+        );
+        fs::remove_dir_all(path).context("remove unpublished objects")
+    }
+
+    pub(crate) fn remove_library_permanently(&self, library: &str) -> Result<()> {
+        ensure!(
+            self.existing_root.is_none() && self.held_writer.is_none(),
+            "knowledge object store is read-only"
+        );
+        let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
+        let name = std::ffi::OsString::from(id.to_string());
+        let path = self.root.join(&name);
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        ensure!(
+            metadata.is_dir() && !metadata.file_type().is_symlink(),
+            "invalid knowledge object directory"
+        );
+        let root = kcoder_config::PrivateDirectory::open_existing(&self.root)?;
+        root.verify_trusted_config_directory()?;
+        root.remove_child_tree(&name)
+            .context("remove knowledge objects")
+    }
+    pub fn put(&self, library: &str, content: &str) -> Result<String> {
+        self.put_bytes(library, content.as_bytes())
+    }
+    pub fn put_bytes(&self, library: &str, content: &[u8]) -> Result<String> {
+        let hash = digest(content);
+        if self.held_writer.is_some() {
+            self.put_held_reader(
+                library,
+                &mut std::io::Cursor::new(content),
+                content.len() as u64,
+                &hash,
+            )?;
+            return Ok(hash);
+        }
+        let dir = self.directory(library)?;
+        let path = dir.join(format!("{hash}.md"));
+        if path.try_exists()? {
+            ensure!(
+                self.read_bytes(library, &hash)? == content,
+                "revision object integrity failure"
+            );
+            // An earlier publish may have created this leaf but failed its
+            // directory sync. A valid hash alone is not a durable publication.
+            sync_object_directory(&dir)?;
+            return Ok(hash);
+        }
+        let mut temporary = tempfile::NamedTempFile::new_in(&dir)?;
+        temporary.write_all(content)?;
+        temporary.as_file().sync_all()?;
+        match temporary.persist_noclobber(&path) {
+            Ok(_) => {}
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                ensure!(
+                    self.read_bytes(library, &hash)? == content,
+                    "revision object integrity failure"
+                );
+            }
+            Err(error) => return Err(error.error.into()),
+        }
+        sync_object_directory(&dir)?;
+        Ok(hash)
+    }
+    pub fn read(&self, library: &str, hash: &str) -> Result<String> {
+        String::from_utf8(self.read_bytes(library, hash)?).context("invalid UTF-8 revision")
+    }
+    pub fn read_bytes(&self, library: &str, hash: &str) -> Result<Vec<u8>> {
+        let mut bytes = Vec::new();
+        self.copy_object_to(library, hash, &mut bytes)?;
+        Ok(bytes)
+    }
+
+    pub(crate) fn object_len(&self, library: &str, hash: &str) -> Result<u64> {
+        Ok(self.open_object(library, hash)?.metadata()?.len())
+    }
+
+    pub(crate) fn copy_object_to(
+        &self,
+        library: &str,
+        hash: &str,
+        writer: &mut impl Write,
+    ) -> Result<u64> {
+        let mut file = self.open_object(library, hash)?;
+        let mut hasher = Sha256::new();
+        let mut total = 0u64;
+        let mut buffer = [0; 64 * 1024];
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            total += count as u64;
+            ensure!(total <= 32 * 1024 * 1024, "revision object too large");
+            hasher.update(&buffer[..count]);
+            writer.write_all(&buffer[..count])?;
+        }
+        ensure!(
+            format!("{:x}", hasher.finalize()) == hash,
+            "revision object integrity failure"
+        );
+        self.verify_existing_root()?;
+        Ok(total)
+    }
+
+    /// A bounded stream is hashed before atomic immutable publication.
+    pub(crate) fn put_object_reader(
+        &self,
+        library: &str,
+        reader: &mut impl Read,
+        length: u64,
+        expected_hash: &str,
+    ) -> Result<()> {
+        ensure!(length <= 32 * 1024 * 1024, "revision object too large");
+        validate_hash(expected_hash)?;
+        if self.held_writer.is_some() {
+            return self.put_held_reader(library, reader, length, expected_hash);
+        }
+        let dir = self.directory(library)?;
+        let mut temporary = tempfile::NamedTempFile::new_in(&dir)?;
+        let mut hasher = Sha256::new();
+        let mut remaining = length;
+        let mut buffer = [0; 64 * 1024];
+        while remaining > 0 {
+            let size = remaining.min(buffer.len() as u64) as usize;
+            reader
+                .read_exact(&mut buffer[..size])
+                .context("incomplete revision object")?;
+            hasher.update(&buffer[..size]);
+            temporary.write_all(&buffer[..size])?;
+            remaining -= size as u64;
+        }
+        ensure!(
+            format!("{:x}", hasher.finalize()) == expected_hash,
+            "revision object integrity failure"
+        );
+        temporary.as_file().sync_all()?;
+        let path = dir.join(format!("{expected_hash}.md"));
+        match temporary.persist_noclobber(&path) {
+            Ok(_) => {}
+            Err(error) if error.error.kind() == std::io::ErrorKind::AlreadyExists => {
+                ensure!(
+                    self.object_len(library, expected_hash)? == length,
+                    "revision object integrity failure"
+                );
+                self.copy_object_to(library, expected_hash, &mut std::io::sink())?;
+            }
+            Err(error) => return Err(error.error.into()),
+        }
+        sync_object_directory(&dir)?;
+        Ok(())
+    }
+
+    fn open_object(&self, library: &str, hash: &str) -> Result<fs::File> {
+        validate_hash(hash)?;
+        let id = uuid::Uuid::parse_str(library).context("invalid library id")?;
+        if let Some(original) = self.existing_root.as_ref().or(self.held_writer.as_ref()) {
+            self.verify_existing_root()?;
+            let directory = original
+                .open_entry_handle(std::ffi::OsStr::new(&id.to_string()))?
+                .open_child_directory()?;
+            directory.verify_trusted_config_directory()?;
+            let file = directory
+                .open_single_link_regular_file(std::ffi::OsStr::new(&format!("{hash}.md")))?;
+            ensure!(
+                file.metadata()?.len() <= 32 * 1024 * 1024,
+                "revision object too large"
+            );
+            return Ok(file);
+        }
+        let dir = self.root.join(id.to_string());
+        let meta = fs::symlink_metadata(&dir)?;
+        ensure!(
+            meta.is_dir() && !meta.file_type().is_symlink(),
+            "invalid object directory"
+        );
+        let path = dir.join(format!("{hash}.md"));
+        let metadata = fs::symlink_metadata(&path)?;
+        ensure!(
+            metadata.is_file() && !metadata.file_type().is_symlink(),
+            "invalid revision object"
+        );
+        ensure!(
+            metadata.len() <= 32 * 1024 * 1024,
+            "revision object too large"
+        );
+        let file = fs::File::open(path)?;
+        let opened = file.metadata()?;
+        ensure!(
+            opened.is_file() && opened.len() <= 32 * 1024 * 1024,
+            "invalid revision object"
+        );
+        Ok(file)
+    }
+}
+
+fn sync_object_directory(_directory: &Path) -> Result<()> {
+    #[cfg(all(test, unix))]
+    tests::before_directory_sync(_directory)?;
+    #[cfg(unix)]
+    fs::File::open(_directory)?.sync_all()?;
+    Ok(())
+}
+
+#[cfg(test)]
+#[path = "objects_observation_tests.rs"]
+mod observation_tests;
+#[cfg(all(test, unix))]
+#[path = "objects_tests.rs"]
+mod tests;
+pub(crate) fn digest(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+fn validate_hash(hash: &str) -> Result<()> {
+    ensure!(
+        hash.len() == 64
+            && hash
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+        "invalid object hash"
+    );
+    Ok(())
+}
+fn private_dir(path: &Path) -> Result<()> {
+    kcoder_config::PrivateDirectory::open_or_create(path)?.verify_trusted_config_directory()
+}

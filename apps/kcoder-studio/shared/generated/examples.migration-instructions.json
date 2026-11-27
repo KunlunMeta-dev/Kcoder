@@ -1,0 +1,296 @@
+{
+  "MigrationInstructionBodyParams": [
+    {
+      "decoded": {
+        "itemId": "instruction-owned",
+        "offset": 0,
+        "representation": "compiled",
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        }
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "itemId": "instruction-owned",
+        "offset": 0,
+        "representation": "compiled",
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        }
+      }
+    }
+  ],
+  "MigrationInstructionBodyResult": [
+    {
+      "decoded": {
+        "bytesBase64": "Z3VpZGU=",
+        "enabledByPreview": false,
+        "encoding": "utf8",
+        "formatRevision": "scoped-instructions/v2",
+        "itemId": "instruction-owned",
+        "nextOffset": null,
+        "offset": 0,
+        "representation": "original",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        },
+        "text": "guide",
+        "totalBytes": 5
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "bytesBase64": "Z3VpZGU=",
+        "enabledByPreview": false,
+        "encoding": "utf8",
+        "formatRevision": "scoped-instructions/v2",
+        "itemId": "instruction-owned",
+        "nextOffset": null,
+        "offset": 0,
+        "representation": "original",
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        },
+        "text": "guide",
+        "totalBytes": 5
+      }
+    }
+  ],
+  "MigrationInstructionCaptureParams": [
+    {
+      "decoded": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "confirmStaticSubset": true,
+        "format": "static_v2",
+        "includeDescendants": true,
+        "source": "claude-code",
+        "sourceCwd": "/owned/source/project",
+        "sourceRoot": "/owned/source"
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "confirmStaticSubset": true,
+        "format": "static_v2",
+        "includeDescendants": true,
+        "source": "claude-code",
+        "sourceCwd": "/owned/source/project",
+        "sourceRoot": "/owned/source"
+      }
+    }
+  ],
+  "MigrationInstructionCaptureResult": [
+    {
+      "decoded": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "completeAuthorizedStaticChain": true,
+        "dynamicScopePresent": false,
+        "formatRevision": "scoped-instructions/v2",
+        "remainingMs": 599000,
+        "source": "claude-code",
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "totalItems": 1
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "completeAuthorizedStaticChain": true,
+        "dynamicScopePresent": false,
+        "formatRevision": "scoped-instructions/v2",
+        "remainingMs": 599000,
+        "source": "claude-code",
+        "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "totalItems": 1
+      }
+    }
+  ],
+  "MigrationInstructionPageParams": [
+    {
+      "decoded": {
+        "pageIndex": 0,
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        }
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "pageIndex": 0,
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        }
+      }
+    }
+  ],
+  "MigrationInstructionPageResult": [
+    {
+      "decoded": {
+        "items": [
+          {
+            "bytes": 4,
+            "completeAuthorizedStaticChain": true,
+            "displayName": "CLAUDE.md",
+            "disposition": "selected",
+            "formatRevision": "scoped-instructions/v2",
+            "itemId": "instruction-owned",
+            "reasonCode": null,
+            "relativePath": "CLAUDE.md",
+            "relativeScope": "",
+            "role": "shared",
+            "scoped": true,
+            "source": "claude-code",
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "trigger": "launch"
+          }
+        ],
+        "nextPage": null,
+        "pageIndex": 0,
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        },
+        "totalItems": 1
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "items": [
+          {
+            "bytes": 4,
+            "completeAuthorizedStaticChain": true,
+            "displayName": "CLAUDE.md",
+            "disposition": "selected",
+            "formatRevision": "scoped-instructions/v2",
+            "itemId": "instruction-owned",
+            "reasonCode": null,
+            "relativePath": "CLAUDE.md",
+            "relativeScope": "",
+            "role": "shared",
+            "scoped": true,
+            "source": "claude-code",
+            "sourceRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "trigger": "launch"
+          }
+        ],
+        "nextPage": null,
+        "pageIndex": 0,
+        "target": {
+          "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+          "kind": "source"
+        },
+        "totalItems": 1
+      }
+    }
+  ],
+  "MigrationInstructionReadTarget": [
+    {
+      "decoded": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "kind": "source"
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "kind": "source"
+      }
+    },
+    {
+      "decoded": {
+        "jobId": "mig-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "kind": "job"
+      },
+      "name": "original_saved_job",
+      "value": {
+        "jobId": "mig-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "kind": "job"
+      }
+    },
+    {
+      "decoded": {
+        "entryId": "e0000-0000",
+        "kind": "received",
+        "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "requestId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+      },
+      "name": "received_graph_receipt",
+      "value": {
+        "entryId": "e0000-0000",
+        "kind": "received",
+        "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "requestId": "bdaeb662-a7fe-4412-974c-18c4f9e78005"
+      }
+    }
+  ],
+  "MigrationInstructionScopeChoice": [
+    {
+      "decoded": {
+        "itemId": "instruction-owned",
+        "targetRelativeScope": "child"
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "itemId": "instruction-owned",
+        "targetRelativeScope": "child"
+      }
+    }
+  ],
+  "MigrationSourceInstructionBodyParams": [
+    {
+      "decoded": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "itemId": "instruction-owned",
+        "offset": 0,
+        "representation": "original"
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "itemId": "instruction-owned",
+        "offset": 0,
+        "representation": "original"
+      }
+    }
+  ],
+  "MigrationSourceInstructionMapping": [
+    {
+      "decoded": {
+        "entryId": "e0000-0000",
+        "items": [
+          {
+            "itemId": "instruction-owned",
+            "targetRelativeScope": ""
+          }
+        ]
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "archiveIncompleteChain": false,
+        "entryId": "e0000-0000",
+        "items": [
+          {
+            "itemId": "instruction-owned",
+            "targetRelativeScope": ""
+          }
+        ]
+      }
+    }
+  ],
+  "MigrationSourceInstructionPageParams": [
+    {
+      "decoded": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "pageIndex": 0
+      },
+      "name": "explicit_static_subset",
+      "value": {
+        "captureId": "bdaeb662-a7fe-4412-974c-18c4f9e78005",
+        "pageIndex": 0
+      }
+    }
+  ]
+}

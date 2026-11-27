@@ -1,0 +1,650 @@
+{
+  "McpAppOperationReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "connectionId": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "connectionId",
+      "operationId",
+      "revision",
+      "threadId",
+      "widgetId"
+    ],
+    "title": "McpAppOperationReadParams",
+    "type": "object"
+  },
+  "McpAppOperationStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "prepared",
+      "executing",
+      "completed",
+      "denied",
+      "not_sent",
+      "outcome_unknown"
+    ],
+    "title": "McpAppOperationStatus",
+    "type": "string"
+  },
+  "McpAppReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "connectionId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "connectionId",
+      "revision",
+      "threadId",
+      "widgetId"
+    ],
+    "title": "McpAppReadParams",
+    "type": "object"
+  },
+  "McpAppReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "McpAppCsp": {
+        "additionalProperties": false,
+        "properties": {
+          "baseUriDomains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "connectDomains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "frameDomains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "resourceDomains": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "McpAppPermissions": {
+        "additionalProperties": false,
+        "description": "These are server requests, never permissions automatically granted by the host.",
+        "properties": {
+          "camera": {
+            "default": false,
+            "type": "boolean"
+          },
+          "clipboardWrite": {
+            "default": false,
+            "type": "boolean"
+          },
+          "geolocation": {
+            "default": false,
+            "type": "boolean"
+          },
+          "microphone": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "WidgetExecutionMode": {
+        "enum": [
+          "managed",
+          "isolated_html"
+        ],
+        "type": "string"
+      },
+      "WidgetFormat": {
+        "enum": [
+          "html",
+          "svg"
+        ],
+        "type": "string"
+      },
+      "WidgetLibrary": {
+        "enum": [
+          "chart_js",
+          "d3",
+          "topojson"
+        ],
+        "type": "string"
+      },
+      "WidgetMcpSource": {
+        "additionalProperties": false,
+        "description": "Routing identity only. UI datasets and HTML never inflate widget directories.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": "string"
+          },
+          "pluginId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resourceUri": {
+            "type": "string"
+          },
+          "serverName": {
+            "type": "string"
+          },
+          "toolName": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "connectionId",
+          "mimeType",
+          "resourceUri",
+          "serverName",
+          "toolName"
+        ],
+        "type": "object"
+      },
+      "WidgetRef": {
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "executionMode": {
+            "$ref": "#/definitions/WidgetExecutionMode"
+          },
+          "format": {
+            "$ref": "#/definitions/WidgetFormat"
+          },
+          "libraries": {
+            "items": {
+              "$ref": "#/definitions/WidgetLibrary"
+            },
+            "type": "array"
+          },
+          "mcpApp": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/WidgetMcpSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          },
+          "widgetId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attemptId",
+          "bytes",
+          "createdAtMs",
+          "executionMode",
+          "format",
+          "libraries",
+          "revision",
+          "sha256",
+          "summary",
+          "threadId",
+          "title",
+          "toolCallId",
+          "turnId",
+          "widgetId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "allowedTools": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "csp": {
+        "$ref": "#/definitions/McpAppCsp"
+      },
+      "live": {
+        "description": "Historical data stays readable; only the original live authority permits actions.",
+        "type": "boolean"
+      },
+      "protocolVersion": {
+        "type": "string"
+      },
+      "requestedPermissions": {
+        "$ref": "#/definitions/McpAppPermissions"
+      },
+      "resourcesEnabled": {
+        "type": "boolean"
+      },
+      "resultMeta": true,
+      "structuredContent": true,
+      "toolContent": {
+        "items": true,
+        "type": "array"
+      },
+      "toolInfo": true,
+      "toolInput": true,
+      "widget": {
+        "$ref": "#/definitions/WidgetRef"
+      }
+    },
+    "required": [
+      "allowedTools",
+      "csp",
+      "live",
+      "protocolVersion",
+      "requestedPermissions",
+      "resourcesEnabled",
+      "toolContent",
+      "widget"
+    ],
+    "title": "McpAppReadResult",
+    "type": "object"
+  },
+  "McpAppResourceContentReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "connectionId": {
+        "type": "string"
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "resourceId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "connectionId",
+      "offset",
+      "resourceId",
+      "revision",
+      "sha256",
+      "threadId",
+      "widgetId"
+    ],
+    "title": "McpAppResourceContentReadParams",
+    "type": "object"
+  },
+  "McpAppResourceContentReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "dataBase64": {
+        "type": "string"
+      },
+      "nextOffset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "offset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "resourceId": {
+        "type": "string"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytes",
+      "dataBase64",
+      "nextOffset",
+      "offset",
+      "resourceId",
+      "sha256"
+    ],
+    "title": "McpAppResourceContentReadResult",
+    "type": "object"
+  },
+  "McpAppResourceReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "connectionId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "uri": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "connectionId",
+      "revision",
+      "threadId",
+      "uri",
+      "widgetId"
+    ],
+    "title": "McpAppResourceReadParams",
+    "type": "object"
+  },
+  "McpAppResourceReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "McpAppResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "contentCount": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "encoding": {
+            "type": "string"
+          },
+          "mimeType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "resourceId": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          },
+          "uri": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "contentCount",
+          "encoding",
+          "resourceId",
+          "sha256",
+          "uri"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "resource": {
+        "$ref": "#/definitions/McpAppResourceRef"
+      }
+    },
+    "required": [
+      "resource"
+    ],
+    "title": "McpAppResourceReadResult",
+    "type": "object"
+  },
+  "McpAppResourceRef": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "contentCount": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "encoding": {
+        "type": "string"
+      },
+      "mimeType": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "resourceId": {
+        "type": "string"
+      },
+      "sha256": {
+        "type": "string"
+      },
+      "uri": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytes",
+      "contentCount",
+      "encoding",
+      "resourceId",
+      "sha256",
+      "uri"
+    ],
+    "title": "McpAppResourceRef",
+    "type": "object"
+  },
+  "McpAppRevokeParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "McpAppRevokeParams",
+    "type": "object"
+  },
+  "McpAppRevokeResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "revoked": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "revoked"
+    ],
+    "title": "McpAppRevokeResult",
+    "type": "object"
+  },
+  "McpAppToolCallParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "arguments": true,
+      "connectionId": {
+        "type": "string"
+      },
+      "name": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "widgetId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "arguments",
+      "connectionId",
+      "name",
+      "operationId",
+      "revision",
+      "threadId",
+      "widgetId"
+    ],
+    "title": "McpAppToolCallParams",
+    "type": "object"
+  },
+  "McpAppToolCallResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "McpAppOperationStatus": {
+        "enum": [
+          "prepared",
+          "executing",
+          "completed",
+          "denied",
+          "not_sent",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "errorCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "result": true,
+      "resultSha256": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "status": {
+        "$ref": "#/definitions/McpAppOperationStatus"
+      }
+    },
+    "required": [
+      "operationId",
+      "status"
+    ],
+    "title": "McpAppToolCallResult",
+    "type": "object"
+  }
+}

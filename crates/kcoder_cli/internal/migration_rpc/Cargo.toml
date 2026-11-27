@@ -1,0 +1,39 @@
+[package]
+name = "kcoder_migration_rpc"
+description = "Native migration RPC workers and source authorization."
+version.workspace = true
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "../../src/app_server/migration_processor/mod.rs"
+
+[dependencies]
+anyhow.workspace = true
+base64 = "0.22"
+futures.workspace = true
+hmac = "0.12"
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_mcp_policy = { path = "../../../kcoder_mcp/internal/mcp_policy" }
+kcoder_migration = { path = "../../../kcoder_migration" }
+kcoder_migration_client = { path = "../migration_client" }
+kcoder_plugins = { path = "../../../kcoder_plugins" }
+kcoder_skills = { path = "../../../kcoder_skills" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

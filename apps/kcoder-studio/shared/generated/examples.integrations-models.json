@@ -1,0 +1,758 @@
+{
+  "IntegrationModelHealthObservation": [
+    {
+      "decoded": {
+        "configurationRevision": "opaque-actual-semantic-revision",
+        "consecutiveFailures": 0,
+        "cooldownUntil": null,
+        "failure": null,
+        "lastObservedAt": null,
+        "model": "approved-model",
+        "provider": "ApprovedProvider",
+        "responseStarted": false,
+        "state": "unknown"
+      },
+      "name": "no-provider-observation",
+      "value": {
+        "configurationRevision": "opaque-actual-semantic-revision",
+        "consecutiveFailures": 0,
+        "cooldownUntil": null,
+        "failure": null,
+        "lastObservedAt": null,
+        "model": "approved-model",
+        "provider": "ApprovedProvider",
+        "responseStarted": false,
+        "state": "unknown"
+      }
+    },
+    {
+      "decoded": {
+        "configurationRevision": "opaque-actual-semantic-revision",
+        "consecutiveFailures": 0,
+        "cooldownUntil": null,
+        "failure": {
+          "category": "provider_error",
+          "http_status": 65535,
+          "recovery_action": "diagnose_only",
+          "resume_safe": false,
+          "retry_after_ms": null,
+          "retryable": false
+        },
+        "lastObservedAt": null,
+        "model": "approved-model",
+        "provider": "ApprovedProvider",
+        "responseStarted": false,
+        "state": "unknown"
+      },
+      "name": "native-u16-upper-bound",
+      "value": {
+        "configurationRevision": "opaque-actual-semantic-revision",
+        "consecutiveFailures": 0,
+        "cooldownUntil": null,
+        "failure": {
+          "category": "provider_error",
+          "http_status": 65535,
+          "recovery_action": "diagnose_only",
+          "resume_safe": false,
+          "retry_after_ms": null,
+          "retryable": false
+        },
+        "lastObservedAt": null,
+        "model": "approved-model",
+        "provider": "ApprovedProvider",
+        "responseStarted": false,
+        "state": "unknown"
+      }
+    }
+  ],
+  "IntegrationModelHealthReadParams": [
+    {
+      "decoded": {
+        "id": "approved-policy",
+        "version": "opaque-current-sha"
+      },
+      "name": "fixed-policy-ref",
+      "value": {
+        "id": "approved-policy",
+        "version": "opaque-current-sha"
+      }
+    }
+  ],
+  "IntegrationModelHealthReport": [
+    {
+      "decoded": {
+        "observations": [
+          {
+            "configurationRevision": "opaque-actual-semantic-revision",
+            "consecutiveFailures": 0,
+            "cooldownUntil": null,
+            "failure": null,
+            "lastObservedAt": null,
+            "model": "approved-model",
+            "provider": "ApprovedProvider",
+            "responseStarted": false,
+            "state": "unknown"
+          }
+        ],
+        "policyRef": {
+          "id": "approved-policy",
+          "version": "opaque-current-sha"
+        }
+      },
+      "name": "current-fixed-pool-observations",
+      "value": {
+        "observations": [
+          {
+            "configurationRevision": "opaque-actual-semantic-revision",
+            "consecutiveFailures": 0,
+            "cooldownUntil": null,
+            "failure": null,
+            "lastObservedAt": null,
+            "model": "approved-model",
+            "provider": "ApprovedProvider",
+            "responseStarted": false,
+            "state": "unknown"
+          }
+        ],
+        "policyRef": {
+          "id": "approved-policy",
+          "version": "opaque-current-sha"
+        }
+      }
+    }
+  ],
+  "IntegrationModelHealthState": [
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    },
+    {
+      "decoded": "cooling_down",
+      "name": "cooling",
+      "value": "cooling_down"
+    }
+  ],
+  "IntegrationModelPolicyAvailableModel": [
+    {
+      "decoded": {
+        "available": true,
+        "configurationRevision": "opaque-actual-native-revision",
+        "model": "ExactCase",
+        "provider": "ActualConfigured"
+      },
+      "name": "configured-not-authorized",
+      "value": {
+        "available": true,
+        "configurationRevision": "opaque-actual-native-revision",
+        "model": "ExactCase",
+        "provider": "ActualConfigured"
+      }
+    }
+  ],
+  "IntegrationModelPolicyCandidate": [
+    {
+      "decoded": {
+        "configurationRevision": "native-model-revision",
+        "enabled": true,
+        "model": "Exact-Model",
+        "provider": "Exact-Provider"
+      },
+      "name": "valid-model-policy-1",
+      "value": {
+        "configurationRevision": "native-model-revision",
+        "enabled": true,
+        "model": "Exact-Model",
+        "provider": "Exact-Provider"
+      }
+    }
+  ],
+  "IntegrationModelPolicyCatalog": [
+    {
+      "decoded": {
+        "policies": [
+          {
+            "candidates": [
+              {
+                "configurationRevision": "native-model-revision",
+                "enabled": true,
+                "model": "Exact-Model",
+                "provider": "Exact-Provider"
+              }
+            ],
+            "enabled": true,
+            "reference": {
+              "id": "business",
+              "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "title": "Explicit candidate pool"
+          }
+        ]
+      },
+      "name": "valid-model-policy-1",
+      "value": {
+        "policies": [
+          {
+            "candidates": [
+              {
+                "configurationRevision": "native-model-revision",
+                "enabled": true,
+                "model": "Exact-Model",
+                "provider": "Exact-Provider"
+              }
+            ],
+            "enabled": true,
+            "reference": {
+              "id": "business",
+              "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+            },
+            "title": "Explicit candidate pool"
+          }
+        ]
+      }
+    }
+  ],
+  "IntegrationModelPolicyDefinition": [
+    {
+      "decoded": {
+        "candidates": [
+          {
+            "enabled": true,
+            "model": "ExactCase",
+            "provider": "ActualConfigured"
+          }
+        ],
+        "enabled": true,
+        "id": "explicit-user-pool",
+        "title": "User controlled pool"
+      },
+      "name": "explicit-order",
+      "value": {
+        "candidates": [
+          {
+            "enabled": true,
+            "model": "ExactCase",
+            "provider": "ActualConfigured"
+          }
+        ],
+        "enabled": true,
+        "id": "explicit-user-pool",
+        "title": "User controlled pool"
+      }
+    }
+  ],
+  "IntegrationModelPolicyDescriptor": [
+    {
+      "decoded": {
+        "candidates": [
+          {
+            "configurationRevision": "native-model-revision",
+            "enabled": true,
+            "model": "Exact-Model",
+            "provider": "Exact-Provider"
+          }
+        ],
+        "enabled": true,
+        "reference": {
+          "id": "business",
+          "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "title": "Explicit candidate pool"
+      },
+      "name": "valid-model-policy-1",
+      "value": {
+        "candidates": [
+          {
+            "configurationRevision": "native-model-revision",
+            "enabled": true,
+            "model": "Exact-Model",
+            "provider": "Exact-Provider"
+          }
+        ],
+        "enabled": true,
+        "reference": {
+          "id": "business",
+          "version": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "title": "Explicit candidate pool"
+      }
+    }
+  ],
+  "IntegrationModelPolicySettingsOperationParams": [
+    {
+      "decoded": {
+        "operationId": "original-save-operation"
+      },
+      "name": "original-operation-only",
+      "value": {
+        "operationId": "original-save-operation"
+      }
+    }
+  ],
+  "IntegrationModelPolicySettingsSaveParams": [
+    {
+      "decoded": {
+        "policies": [
+          {
+            "candidates": [
+              {
+                "enabled": true,
+                "model": "ExactCase",
+                "provider": "ActualConfigured"
+              }
+            ],
+            "enabled": true,
+            "id": "explicit-user-pool",
+            "title": "User controlled pool"
+          }
+        ]
+      },
+      "name": "exact-desired-list",
+      "value": {
+        "policies": [
+          {
+            "candidates": [
+              {
+                "enabled": true,
+                "model": "ExactCase",
+                "provider": "ActualConfigured"
+              }
+            ],
+            "enabled": true,
+            "id": "explicit-user-pool",
+            "title": "User controlled pool"
+          }
+        ]
+      }
+    }
+  ],
+  "IntegrationModelPolicySettingsSaveResult": [
+    {
+      "decoded": {
+        "current": {
+          "models": [
+            {
+              "available": true,
+              "configurationRevision": "opaque-actual-native-revision",
+              "model": "ExactCase",
+              "provider": "ActualConfigured"
+            }
+          ],
+          "modelsTruncated": false,
+          "policies": [
+            {
+              "candidates": [
+                {
+                  "enabled": true,
+                  "model": "ExactCase",
+                  "provider": "ActualConfigured"
+                }
+              ],
+              "enabled": true,
+              "id": "explicit-user-pool",
+              "title": "User controlled pool"
+            }
+          ],
+          "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "operation": {
+          "createdAtMs": 1792800000000,
+          "entityRef": {
+            "id": "native-owned-profile-field",
+            "kind": "model_policy_configuration",
+            "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "error": null,
+          "method": "savePolicies",
+          "operationId": "operation-1",
+          "phase": "completed",
+          "port": "model-policy-settings",
+          "revision": 1,
+          "scope": {
+            "accountId": "fixture-account",
+            "identityGeneration": "fixture-auth-1",
+            "targetId": "fixture-target",
+            "targetRevision": "fixture-target-1",
+            "workspaceId": null
+          },
+          "updatedAtMs": 1792800000000
+        }
+      },
+      "name": "original-operation-receipt-and-current-observation",
+      "value": {
+        "current": {
+          "models": [
+            {
+              "available": true,
+              "configurationRevision": "opaque-actual-native-revision",
+              "model": "ExactCase",
+              "provider": "ActualConfigured"
+            }
+          ],
+          "modelsTruncated": false,
+          "policies": [
+            {
+              "candidates": [
+                {
+                  "enabled": true,
+                  "model": "ExactCase",
+                  "provider": "ActualConfigured"
+                }
+              ],
+              "enabled": true,
+              "id": "explicit-user-pool",
+              "title": "User controlled pool"
+            }
+          ],
+          "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "operation": {
+          "createdAtMs": 1792800000000,
+          "entityRef": {
+            "id": "native-owned-profile-field",
+            "kind": "model_policy_configuration",
+            "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "error": null,
+          "method": "savePolicies",
+          "operationId": "operation-1",
+          "phase": "completed",
+          "port": "model-policy-settings",
+          "revision": 1,
+          "scope": {
+            "accountId": "fixture-account",
+            "identityGeneration": "fixture-auth-1",
+            "targetId": "fixture-target",
+            "targetRevision": "fixture-target-1",
+            "workspaceId": null
+          },
+          "updatedAtMs": 1792800000000
+        }
+      }
+    }
+  ],
+  "IntegrationModelPolicySettingsSnapshot": [
+    {
+      "decoded": {
+        "models": [
+          {
+            "available": true,
+            "configurationRevision": "opaque-actual-native-revision",
+            "model": "ExactCase",
+            "provider": "ActualConfigured"
+          }
+        ],
+        "modelsTruncated": false,
+        "policies": [
+          {
+            "candidates": [
+              {
+                "enabled": true,
+                "model": "ExactCase",
+                "provider": "ActualConfigured"
+              }
+            ],
+            "enabled": true,
+            "id": "explicit-user-pool",
+            "title": "User controlled pool"
+          }
+        ],
+        "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "name": "original-profile-field",
+      "value": {
+        "models": [
+          {
+            "available": true,
+            "configurationRevision": "opaque-actual-native-revision",
+            "model": "ExactCase",
+            "provider": "ActualConfigured"
+          }
+        ],
+        "modelsTruncated": false,
+        "policies": [
+          {
+            "candidates": [
+              {
+                "enabled": true,
+                "model": "ExactCase",
+                "provider": "ActualConfigured"
+              }
+            ],
+            "enabled": true,
+            "id": "explicit-user-pool",
+            "title": "User controlled pool"
+          }
+        ],
+        "revision": "0000000000000000000000000000000000000000000000000000000000000000"
+      }
+    }
+  ],
+  "IntegrationModelRequirements": [
+    {
+      "decoded": {
+        "inputTokens": 1000,
+        "outputTokens": 200,
+        "structuredOutput": false,
+        "tools": true,
+        "vision": false
+      },
+      "name": "native-selection-metadata-only",
+      "value": {
+        "inputTokens": 1000,
+        "outputTokens": 200,
+        "tools": true
+      }
+    }
+  ],
+  "IntegrationModelResolutionRequest": [
+    {
+      "decoded": {
+        "requirements": {
+          "structuredOutput": false,
+          "tools": false,
+          "vision": false
+        },
+        "selection": {
+          "kind": "inherit_current"
+        }
+      },
+      "name": "native-selection-metadata-only",
+      "value": {
+        "selection": {
+          "kind": "inherit_current"
+        }
+      }
+    }
+  ],
+  "IntegrationModelResolutionResult": [
+    {
+      "decoded": {
+        "budget": {
+          "costKnown": false,
+          "reservationState": "not_reserved"
+        },
+        "model": {
+          "apiFormat": null,
+          "boundary": "next_turn",
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "extraBodyConfigured": false,
+          "maxOutputTokens": 2048,
+          "modelId": "model",
+          "outputHeadroomTokens": 2048,
+          "providerId": "provider",
+          "reasoning": true,
+          "reasoningEffort": "high",
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "structuredOutput": false,
+          "text": true,
+          "tools": true,
+          "vision": false
+        },
+        "policyRef": null,
+        "selectionKind": "inherit_current"
+      },
+      "name": "native-selection-metadata-only",
+      "value": {
+        "budget": {
+          "costKnown": false,
+          "reservationState": "not_reserved"
+        },
+        "model": {
+          "apiFormat": null,
+          "boundary": "next_turn",
+          "chatProtocol": "auto",
+          "contextWindowTokens": 64000,
+          "extraBodyConfigured": false,
+          "maxOutputTokens": 2048,
+          "modelId": "model",
+          "outputHeadroomTokens": 2048,
+          "providerId": "provider",
+          "reasoning": true,
+          "reasoningEffort": "high",
+          "requestOutputLimits": {
+            "max_tokens": 2048
+          },
+          "requestOverrideFields": [],
+          "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sources": {
+            "max_output_tokens": [
+              "user"
+            ]
+          },
+          "structuredOutput": false,
+          "text": true,
+          "tools": true,
+          "vision": false
+        },
+        "policyRef": null,
+        "selectionKind": "inherit_current"
+      }
+    }
+  ],
+  "IntegrationModelSelectionIntent": [
+    {
+      "decoded": {
+        "kind": "explicit",
+        "model": "Model-Exact",
+        "provider": "CaseProvider"
+      },
+      "name": "native-selection-metadata-only",
+      "value": {
+        "kind": "explicit",
+        "model": "Model-Exact",
+        "provider": "CaseProvider"
+      }
+    }
+  ],
+  "IntegrationModelUsageObservation": [
+    {
+      "decoded": {
+        "complete": false,
+        "configurationRevision": "actual-current-summary",
+        "lastObservedAt": null,
+        "model": "ExactModel",
+        "provider": "ConfiguredProvider",
+        "reportedCacheCreationInputTokens": null,
+        "reportedCacheReadInputTokens": null,
+        "reportedInputTokens": null,
+        "reportedOutputTokens": null,
+        "reportedTotalTokens": null
+      },
+      "name": "unknown-normalized-fields",
+      "value": {
+        "complete": false,
+        "configurationRevision": "actual-current-summary",
+        "lastObservedAt": null,
+        "model": "ExactModel",
+        "provider": "ConfiguredProvider",
+        "reportedCacheCreationInputTokens": null,
+        "reportedCacheReadInputTokens": null,
+        "reportedInputTokens": null,
+        "reportedOutputTokens": null,
+        "reportedTotalTokens": null
+      }
+    },
+    {
+      "decoded": {
+        "complete": false,
+        "configurationRevision": "actual-current-summary",
+        "lastObservedAt": null,
+        "model": "ExactModel",
+        "provider": "ConfiguredProvider",
+        "reportedCacheCreationInputTokens": null,
+        "reportedCacheReadInputTokens": 0,
+        "reportedInputTokens": null,
+        "reportedOutputTokens": null,
+        "reportedTotalTokens": 0
+      },
+      "name": "explicit-optional-zero-stays-zero",
+      "value": {
+        "complete": false,
+        "configurationRevision": "actual-current-summary",
+        "lastObservedAt": null,
+        "model": "ExactModel",
+        "provider": "ConfiguredProvider",
+        "reportedCacheCreationInputTokens": null,
+        "reportedCacheReadInputTokens": 0,
+        "reportedInputTokens": null,
+        "reportedOutputTokens": null,
+        "reportedTotalTokens": 0
+      }
+    }
+  ],
+  "IntegrationModelUsageReport": [
+    {
+      "decoded": {
+        "observations": [
+          {
+            "complete": false,
+            "configurationRevision": "actual-current-summary",
+            "lastObservedAt": null,
+            "model": "ExactModel",
+            "provider": "ConfiguredProvider",
+            "reportedCacheCreationInputTokens": null,
+            "reportedCacheReadInputTokens": null,
+            "reportedInputTokens": null,
+            "reportedOutputTokens": null,
+            "reportedTotalTokens": null
+          }
+        ],
+        "policyRef": {
+          "id": "policy",
+          "version": "current-native-version"
+        }
+      },
+      "name": "fixed-policy-last-reports",
+      "value": {
+        "observations": [
+          {
+            "complete": false,
+            "configurationRevision": "actual-current-summary",
+            "lastObservedAt": null,
+            "model": "ExactModel",
+            "provider": "ConfiguredProvider",
+            "reportedCacheCreationInputTokens": null,
+            "reportedCacheReadInputTokens": null,
+            "reportedInputTokens": null,
+            "reportedOutputTokens": null,
+            "reportedTotalTokens": null
+          }
+        ],
+        "policyRef": {
+          "id": "policy",
+          "version": "current-native-version"
+        }
+      }
+    }
+  ],
+  "ModelPoliciesMethod": [
+    {
+      "decoded": "integrations/models/readPolicies",
+      "name": "valid-model-policy-1",
+      "value": "integrations/models/readPolicies"
+    },
+    {
+      "decoded": "integrations/models/resolveSelection",
+      "name": "valid-model-policy-2",
+      "value": "integrations/models/resolveSelection"
+    },
+    {
+      "decoded": "integrations/models/readHealth",
+      "name": "read-actual-health",
+      "value": "integrations/models/readHealth"
+    },
+    {
+      "decoded": "integrations/models/readUsage",
+      "name": "read-actual-reported-usage",
+      "value": "integrations/models/readUsage"
+    }
+  ],
+  "ModelPolicySettingsMethod": [
+    {
+      "decoded": "integrations/models/settings/read",
+      "name": "read-field",
+      "value": "integrations/models/settings/read"
+    },
+    {
+      "decoded": "integrations/models/settings/save",
+      "name": "save-field",
+      "value": "integrations/models/settings/save"
+    },
+    {
+      "decoded": "integrations/models/settings/readOperation",
+      "name": "reconcile-original",
+      "value": "integrations/models/settings/readOperation"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+import { expect, test } from '@playwright/test'
+
+test('send-menu interruption failure is retryable without duplicate user bubbles (model-independent)', async ({ page }, testInfo) => {
+  const errors: string[] = []
+  page.on('pageerror', error => errors.push(error.message))
+  await page.goto('/e2e/fixtures/input-delivery.html?interrupt=1')
+  const input = page.getByTestId('chat-message-input')
+  await input.fill('不要编译，你不要执行代码')
+  await page.getByTestId('send-mode-menu-button').click()
+  await page.getByTestId('interrupt-and-send-option').click()
+  const row = page.locator('[data-testid^="conversation-queue-row-"]')
+  await expect(row).toHaveAttribute('data-status', 'failed')
+  const originalId = await row.getAttribute('data-testid')
+  await expect(page.getByTestId('delivery-user-message')).toHaveCount(0)
+  await expect(page.getByTestId('delivery-send-count')).toHaveText('0')
+  await page.screenshot({ path: testInfo.outputPath('interrupt-failed-before-send.png') })
+  await page.locator('[data-testid^="queue-interrupt-button-"]').click()
+  await expect(row).toHaveCount(0)
+  await expect(page.getByText('等待 KCoder app-server 中断任务超时', { exact: true })).toHaveCount(0)
+  await expect(page.getByTestId('delivery-user-message')).toHaveCount(1)
+  await expect(page.getByTestId('delivery-user-message')).toHaveText('不要编译，你不要执行代码')
+  await expect(page.getByTestId('delivery-send-count')).toHaveText('1')
+  await expect(page.getByTestId('delivery-active-turn')).toHaveText('replacement-turn')
+  expect(originalId).toBeTruthy()
+  expect(errors).toEqual([])
+  await page.screenshot({ path: testInfo.outputPath('interrupt-retried-once.png') })
+})

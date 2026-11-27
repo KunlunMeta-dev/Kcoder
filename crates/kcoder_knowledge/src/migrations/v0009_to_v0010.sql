@@ -1,0 +1,1 @@
+ALTER TABLE knowledge_chunks ADD COLUMN page INTEGER; CREATE TABLE knowledge_originals(library_id TEXT NOT NULL, source_id TEXT NOT NULL, revision_id TEXT NOT NULL, raw_hash TEXT NOT NULL, format TEXT NOT NULL, PRIMARY KEY(library_id,source_id,revision_id));

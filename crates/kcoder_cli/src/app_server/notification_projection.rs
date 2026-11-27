@@ -1,0 +1,459 @@
+//! Notification projection: extracted from the app-server connection boundary.
+
+use super::*;
+use kcoder_transcript::{TOOL_PREVIEW_BYTES, input_preview, tool_images, truncate_utf8_bytes};
+
+const STREAM_TEXT_CHUNK_BYTES: usize = 128 * 1024;
+fn text_chunks(text: &str) -> impl Iterator<Item = &str> {
+    let mut rest = text;
+    std::iter::from_fn(move || {
+        if rest.is_empty() {
+            return None;
+        }
+        let mut end = rest.len().min(STREAM_TEXT_CHUNK_BYTES);
+        while !rest.is_char_boundary(end) {
+            end -= 1;
+        }
+        let (part, remaining) = rest.split_at(end);
+        rest = remaining;
+        Some(part)
+    })
+}
+
+impl StreamProjection {
+    pub fn new(
+        server_id: String,
+        thread_id: String,
+        turn_id: String,
+        sequence: Arc<AtomicU64>,
+    ) -> Self {
+        Self {
+            native_child_sources: false,
+            server_id,
+            thread_id,
+            item_namespace: turn_id.clone(),
+            turn_id,
+            sequence,
+            next_item: 1,
+            assistant_item: None,
+            turn_terminal: false,
+        }
+    }
+
+    pub fn params(&self, payload: Value) -> Value {
+        with_event_context(
+            &self.server_id,
+            &self.thread_id,
+            Some(&self.turn_id),
+            &self.sequence,
+            payload,
+        )
+    }
+
+    pub fn project(&mut self, event: EngineEvent) -> Vec<Value> {
+        self.project_with_client_message_id(event, None)
+    }
+
+    pub fn project_with_client_message_id(
+        &mut self,
+        event: EngineEvent,
+        client_message_id: Option<String>,
+    ) -> Vec<Value> {
+        if let EngineEvent::BackgroundScoped { identity, event } = event {
+            let mut messages = self.project_with_client_message_id(*event, client_message_id);
+            for message in &mut messages {
+                if let Some(params) = message.get_mut("params").and_then(Value::as_object_mut) {
+                    params.insert(
+                        "identity".into(),
+                        serde_json::to_value(&identity).expect("background identity serializes"),
+                    );
+                }
+            }
+            return messages;
+        }
+        match event {
+            EngineEvent::PeerAgentMessageAdded {
+                history_uuid,
+                message,
+            } => {
+                let Some((metadata, text)) = message.peer_agent_data() else {
+                    return Vec::new();
+                };
+                if metadata.target_thread_id != self.thread_id {
+                    return Vec::new();
+                }
+                vec![notification("item/completed", self.params(json!({"item":{
+                    "id":history_uuid,"type":"peerAgentMessage","role":"peer_agent","origin":"peer_agent",
+                    "agentMessage":metadata,"text":text,"status":"applied","timestamp":now_millis()
+                }})))]
+            }
+            EngineEvent::SubagentSteerApplied {
+                agent_id,
+                message_id,
+                queue_depth,
+            } => vec![notification(
+                method::AGENT_STEER_APPLIED,
+                serde_json::to_value(AgentSteerAppliedParams {
+                    identity: None,
+                    context: kcoder_app_protocol::EventContext {
+                        server_id: self.server_id.clone(),
+                        thread_id: self.thread_id.clone(),
+                        turn_id: Some(self.turn_id.clone()),
+                        sequence: self.sequence.fetch_add(1, Ordering::SeqCst),
+                        occurred_at_ms: Some(now_millis()),
+                        display_text: Default::default(),
+                    },
+                    agent_id,
+                    message_id,
+                    queue_depth,
+                    applied_at_ms: now_millis(),
+                    client_message_id,
+                })
+                .expect("agent steer applied params serialize"),
+            )],
+            EngineEvent::AssistantMessageStarted => {
+                let id = format!("{}-assistant-{}", self.item_namespace, self.next_item);
+                self.next_item += 1;
+                self.assistant_item = Some(id.clone());
+                vec![notification(
+                    "item/started",
+                    self.params(json!({"item": {"id": id, "type": "agentMessage"}})),
+                )]
+            }
+            EngineEvent::AssistantTextDelta(text) => {
+                let id = self.assistant_item.clone().unwrap_or_else(|| {
+                    let id = format!("{}-assistant-{}", self.item_namespace, self.next_item);
+                    self.next_item += 1;
+                    self.assistant_item = Some(id.clone());
+                    id
+                });
+                text_chunks(&text)
+                    .map(|text| {
+                        notification(
+                            "item/delta",
+                            self.params(json!({"itemId":id,"delta":{"text":text}})),
+                        )
+                    })
+                    .collect()
+            }
+            EngineEvent::AssistantStopReason { reason } => vec![notification(
+                "item/event",
+                self.params(json!({"event":{"type":"assistant_stop_reason","reason":reason}})),
+            )],
+            EngineEvent::AssistantMessageDone => self
+                .assistant_item
+                .take()
+                .map(|id| {
+                    notification(
+                        "item/completed",
+                        self.params(json!({
+                            "item": {"id": id, "type": "agentMessage", "status": "completed"}
+                        })),
+                    )
+                })
+                .into_iter()
+                .collect(),
+            EngineEvent::AssistantThinkingDelta(text) => text_chunks(&text)
+                .map(|text| {
+                    notification(
+                        "item/event",
+                        self.params(json!({"event":{
+                            "type":"assistant_thinking_delta","text":text
+                        }})),
+                    )
+                })
+                .collect(),
+            EngineEvent::WidgetInputPreview { id, preview } => vec![notification(
+                "item/event",
+                self.params(json!({"attemptId":self.item_namespace,"event":{
+                    "type":"widget_input_preview","id":id,"preview":preview
+                }})),
+            )],
+            EngineEvent::ToolUseStarted { id, name, input } => {
+                // Full arguments remain in authoritative history; the live preview must fit
+                // even when JSON escaping expands control characters sixfold.
+                let (input, truncated, bytes) = input_preview(input);
+                vec![notification(
+                    "item/started",
+                    self.params(json!({"item":{
+                        "id":id,"type":"toolCall","name":name,"input":input,
+                        "inputTruncated":truncated,"inputOriginalBytes":bytes
+                    }})),
+                )]
+            }
+            EngineEvent::ToolResult { id, name, output } => {
+                let (images, images_omitted) = tool_images::observations(&name, &output.content);
+                let widget = output
+                    .execution_metadata
+                    .iter()
+                    .find_map(|metadata| match metadata {
+                        kcoder_tools::ToolExecutionMetadata::Widget(widget) => Some(widget.clone()),
+                        _ => None,
+                    });
+                let web_sources =
+                    output
+                        .execution_metadata
+                        .iter()
+                        .find_map(|metadata| match metadata {
+                            kcoder_tools::ToolExecutionMetadata::WebSources(receipt)
+                                if (receipt.matches(&self.thread_id, &id)
+                                    && receipt.identity.turn_id == self.turn_id
+                                    && receipt.identity.attempt_id == self.item_namespace)
+                                    || (self.native_child_sources
+                                        && receipt.matches(&receipt.identity.thread_id, &id)) =>
+                            {
+                                Some(receipt.clone())
+                            }
+                            _ => None,
+                        });
+                let mut raw = engine_event_json(EngineEvent::ToolResult {
+                    id: id.clone(),
+                    name: name.clone(),
+                    output,
+                });
+                let text = raw.get_mut("text").map(Value::take).unwrap_or(Value::Null);
+                let (text, truncated, bytes) = match text {
+                    Value::String(text) => {
+                        let bytes = text.len();
+                        let (preview, truncated, _) = truncate_utf8_bytes(text, TOOL_PREVIEW_BYTES);
+                        (Value::String(preview), truncated, bytes)
+                    }
+                    other => (other, false, 0),
+                };
+                vec![notification(
+                    "item/completed",
+                    self.params(json!({
+                        "attemptId": self.item_namespace,
+                        "item": {
+                            "id": id,
+                            "type": "toolCall",
+                            "name": name,
+                            "status": if raw.get("is_error").and_then(Value::as_bool).unwrap_or(false) { "failed" } else { "completed" },
+                            "output": text,
+                            "outputTruncated": truncated,
+                            "outputOriginalBytes": bytes,
+                            "outputImages": images,
+                            "outputImagesOmitted": images_omitted,
+                            "widgetRef": widget,
+                            "webSources": web_sources,
+                        },
+                    })),
+                )]
+            }
+            other => vec![notification(
+                "item/event",
+                self.params(json!({"event": engine_event_json(other)})),
+            )],
+        }
+    }
+}
+
+pub fn background_event_id(event: &EngineEvent) -> Option<&str> {
+    match event.background_payload() {
+        EngineEvent::BackgroundJobStarted { id, .. }
+        | EngineEvent::SubagentSteerApplied { agent_id: id, .. }
+        | EngineEvent::BackgroundJobAssociated { id, .. }
+        | EngineEvent::BackgroundJobPromoted { id }
+        | EngineEvent::BackgroundJobProgress { id, .. }
+        | EngineEvent::BackgroundJobPaused { id, .. }
+        | EngineEvent::BackgroundJobHalted { id, .. }
+        | EngineEvent::BackgroundJobCompleted { id, .. }
+        | EngineEvent::BackgroundJobFailed { id, .. }
+        | EngineEvent::BackgroundJobCancelled { id, .. } => Some(id),
+        _ => None,
+    }
+}
+
+pub fn tool_can_spawn_managed_background_job(name: &str) -> bool {
+    matches!(
+        name,
+        "spawn_agent" | "explore_agent" | "PlanAgent" | "Workflow"
+    )
+}
+
+pub fn is_background_terminal_event(event: &EngineEvent) -> bool {
+    matches!(
+        event.background_payload(),
+        EngineEvent::BackgroundJobCompleted { .. }
+            | EngineEvent::BackgroundJobFailed { .. }
+            | EngineEvent::BackgroundJobHalted { .. }
+            | EngineEvent::BackgroundJobCancelled { .. }
+    )
+}
+
+pub fn agent_steer_result_from_receipt(
+    client_message_id: Option<String>,
+    receipt: kcoder_tools::SubagentSteerReceipt,
+) -> AgentSteerResult {
+    let status = match receipt.status {
+        kcoder_tools::SubagentSteerStatus::Applied => AgentSteerStatus::Applied,
+        kcoder_tools::SubagentSteerStatus::QueuedLive => AgentSteerStatus::QueuedLive,
+        kcoder_tools::SubagentSteerStatus::QueuedPaused => AgentSteerStatus::QueuedPaused,
+        kcoder_tools::SubagentSteerStatus::QueuedBehindBlocked => {
+            AgentSteerStatus::QueuedBehindBlocked
+        }
+        kcoder_tools::SubagentSteerStatus::Resuming => AgentSteerStatus::Resuming,
+        kcoder_tools::SubagentSteerStatus::Finishing => AgentSteerStatus::Finishing,
+        kcoder_tools::SubagentSteerStatus::Cancelled => AgentSteerStatus::Cancelled,
+        kcoder_tools::SubagentSteerStatus::Closed => AgentSteerStatus::Closed,
+        kcoder_tools::SubagentSteerStatus::Rejected => AgentSteerStatus::Rejected,
+    };
+    AgentSteerResult {
+        agent_id: receipt.agent_id,
+        message_id: receipt.message_id,
+        status,
+        queued: receipt.queued,
+        queue_position: receipt.queue_position,
+        reason_code: receipt.reason_code,
+        client_message_id,
+        expected_background_run: None,
+    }
+}
+
+pub fn with_event_context(
+    server_id: &str,
+    thread_id: &str,
+    turn_id: Option<&str>,
+    sequence: &AtomicU64,
+    payload: Value,
+) -> Value {
+    with_event_context_at_sequence(
+        server_id,
+        thread_id,
+        turn_id,
+        sequence.fetch_add(1, Ordering::Relaxed),
+        payload,
+    )
+}
+
+pub fn with_event_context_at_sequence(
+    server_id: &str,
+    thread_id: &str,
+    turn_id: Option<&str>,
+    sequence: u64,
+    mut payload: Value,
+) -> Value {
+    let object = payload
+        .as_object_mut()
+        .expect("event notification payload must be an object");
+    object.insert("serverId".into(), json!(server_id));
+    object.insert("threadId".into(), json!(thread_id));
+    if let Some(turn_id) = turn_id {
+        object.insert("turnId".into(), json!(turn_id));
+    }
+    object.insert("sequence".into(), json!(sequence));
+    object.insert("occurredAtMs".into(), json!(now_millis()));
+    let event = object.get("event").unwrap_or(&Value::Null);
+    let item = object.get("item").unwrap_or(&Value::Null);
+    let name = if item.get("type").and_then(Value::as_str) == Some("toolCall") {
+        item.get("name").and_then(Value::as_str)
+    } else if matches!(
+        event.get("type").and_then(Value::as_str),
+        Some("tool_input_progress" | "tool_use_started" | "tool_execution_started" | "tool_result")
+    ) {
+        event.get("name").and_then(Value::as_str)
+    } else {
+        None
+    };
+    let text = if event.get("type").and_then(Value::as_str) == Some("assistant_thinking_delta") {
+        Some(kcoder_types::tool_ui::thinking_display_text())
+    } else {
+        name.map(kcoder_tools::tool_display_text)
+    };
+    if let Some(text) = text {
+        object.insert("displayText".into(), json!(text));
+    }
+    payload
+}
+
+pub fn turn_completion_error(
+    message: Option<String>,
+    details: Option<kcoder_types::ProviderFailureDetails>,
+) -> Option<Value> {
+    message.map(|message| json!({"code": -32010, "message": message, "details": details}))
+}
+
+pub fn file_progress_notification(
+    server_id: &str,
+    thread_id: &str,
+    turn_id: &str,
+    sequence: &AtomicU64,
+    tool_id: Option<&str>,
+    counts: kcoder_types::tool_ui::WorkspaceFileProgress,
+) -> Value {
+    let event = match tool_id {
+        Some(id) => json!({"type":"tool_file_progress","id":id,"counts":counts}),
+        None => json!({"type":"workspace_file_progress","counts":counts}),
+    };
+    notification(
+        "item/event",
+        with_event_context(
+            server_id,
+            thread_id,
+            Some(turn_id),
+            sequence,
+            json!({"event":event}),
+        ),
+    )
+}
+
+/// Cancellation can close a provider socket before its transport returns an error.
+/// Normalize before persisting or projecting the event, not only at turn completion.
+pub fn normalize_cancelled_terminal_event(event: EngineEvent, cancelled: bool) -> EngineEvent {
+    if cancelled
+        && matches!(
+            &event,
+            EngineEvent::Error(_)
+                | EngineEvent::ProviderFailed { .. }
+                | EngineEvent::StreamAborted { .. }
+        )
+    {
+        EngineEvent::StreamAborted {
+            reason: "cancelled by user".into(),
+        }
+    } else {
+        event
+    }
+}
+
+pub fn terminal_outcome(event: &EngineEvent, cancelled: bool) -> Option<(&'static str, String)> {
+    match event {
+        EngineEvent::Error(message) | EngineEvent::ProviderFailed { message, .. } => {
+            Some(("failed", message.clone()))
+        }
+        EngineEvent::StreamAborted { reason } => Some((
+            if cancelled { "interrupted" } else { "failed" },
+            reason.clone(),
+        )),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod activity_text_tests {
+    use super::*;
+
+    #[test]
+    fn events_carry_configured_tool_copy_and_fixed_thinking_copy_without_arguments() {
+        let sequence = AtomicU64::new(1);
+        for payload in [
+            json!({"item":{"id":"call","type":"toolCall","name":"WebFetch","input":{"url":"private"}}}),
+            json!({"event":{"type":"tool_input_progress","id":"call","name":"WebFetch","chars":1842}}),
+        ] {
+            let params = with_event_context("server", "thread", Some("turn"), &sequence, payload);
+            assert_eq!(params["displayText"]["zh-CN"], "正在访问网页");
+            assert!(!params["displayText"].to_string().contains("private"));
+            let context: kcoder_app_protocol::EventContext =
+                serde_json::from_value(params).unwrap();
+            assert_eq!(context.display_text["en"], "Visiting a webpage");
+        }
+        let params = with_event_context(
+            "server",
+            "thread",
+            Some("turn"),
+            &sequence,
+            json!({"event":{"type":"assistant_thinking_delta","text":"reasoning"}}),
+        );
+        assert_eq!(params["displayText"]["zh-CN"], "正在分析请求");
+    }
+}

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "text-completion",
+  "protocol": "openai_chat_completions",
+  "source": {
+    "kind": "synthetic",
+    "description": "Synthetic OpenAI Chat Completions SSE frames for deterministic offline protocol testing. This is not a captured MiniMax response."
+  },
+  "requests": [
+    {
+      "id": "initial",
+      "match": {
+        "lastMessageRole": "user",
+        "lastMessageIncludes": "KCODER_E2E:text-completion"
+      },
+      "frames": [
+        "data: {\"id\":\"chatcmpl-e2e-text\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-text\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"I will answer with the requested marker. \"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-text\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"KCODER_E2E:REPLY_COMPLETE\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-text\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" The fixture is ready.\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"chatcmpl-e2e-text\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"MiniMax-M2.7\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":12,\"completion_tokens\":10,\"total_tokens\":22}}\n\n",
+        "data: [DONE]\n\n"
+      ]
+    }
+  ]
+}

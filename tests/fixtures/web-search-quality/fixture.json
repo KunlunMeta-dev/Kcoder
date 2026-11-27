@@ -1,0 +1,6 @@
+{
+  "schema_version": 1,
+  "name": "web-search-quality",
+  "version": "1",
+  "description": "公开查询与人工评分规范；不含模型答案、个人资料或凭证，真实执行需 external-provider/real-model 门控。"
+}

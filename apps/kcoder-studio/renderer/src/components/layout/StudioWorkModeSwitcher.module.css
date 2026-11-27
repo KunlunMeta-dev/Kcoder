@@ -1,0 +1,7 @@
+.highlight {
+  transition: transform var(--duration-slow) var(--ease-standard);
+}
+
+.highlight[data-mode='kworker'] {
+  transform: translateX(calc(100% + 0.125rem));
+}

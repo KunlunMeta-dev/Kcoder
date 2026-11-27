@@ -1,0 +1,83 @@
+{
+  "MigrationItemsParams": [
+    {
+      "decoded": {
+        "jobId": "job"
+      },
+      "name": "first_page",
+      "value": {
+        "jobId": "job"
+      }
+    },
+    {
+      "decoded": {
+        "cursor": "opaque",
+        "jobId": "job"
+      },
+      "name": "next_page",
+      "value": {
+        "cursor": "opaque",
+        "jobId": "job"
+      }
+    }
+  ],
+  "MigrationItemsResult": [
+    {
+      "decoded": {
+        "assets": [],
+        "items": [],
+        "mcps": [],
+        "providers": []
+      },
+      "name": "empty_page",
+      "value": {
+        "items": []
+      }
+    },
+    {
+      "decoded": {
+        "assets": [],
+        "items": [
+          {
+            "category": "mcp",
+            "id": "item",
+            "issues": [
+              {
+                "code": "unsupported_field",
+                "field": "cwd",
+                "phase": "import",
+                "severity": "blocking"
+              }
+            ],
+            "selectedByDefault": false,
+            "sourceName": "documents",
+            "status": "requires_action"
+          }
+        ],
+        "mcps": [],
+        "nextCursor": "cursor",
+        "providers": []
+      },
+      "name": "review_item",
+      "value": {
+        "items": [
+          {
+            "category": "mcp",
+            "id": "item",
+            "issues": [
+              {
+                "code": "unsupported_field",
+                "field": "cwd",
+                "severity": "blocking"
+              }
+            ],
+            "selectedByDefault": false,
+            "sourceName": "documents",
+            "status": "requires_action"
+          }
+        ],
+        "nextCursor": "cursor"
+      }
+    }
+  ]
+}

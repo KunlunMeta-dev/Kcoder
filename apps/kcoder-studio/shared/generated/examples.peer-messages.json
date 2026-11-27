@@ -1,0 +1,1459 @@
+{
+  "CrossSessionMessageDiscoveryCompleteness": [
+    {
+      "decoded": "complete",
+      "name": "complete",
+      "value": "complete"
+    },
+    {
+      "decoded": "partial",
+      "name": "partial",
+      "value": "partial"
+    },
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    },
+    {
+      "decoded": "indexing",
+      "name": "indexing",
+      "value": "indexing"
+    }
+  ],
+  "CrossSessionMessageDiscoveryCoverage": [
+    {
+      "decoded": "resident_only",
+      "name": "resident-only",
+      "value": "resident_only"
+    },
+    {
+      "decoded": "workspace_history",
+      "name": "workspace-history",
+      "value": "workspace_history"
+    }
+  ],
+  "CrossSessionMessageGetParams": [
+    {
+      "decoded": {
+        "messageId": "message-1"
+      },
+      "name": "server-message-id",
+      "value": {
+        "messageId": "message-1"
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1"
+      },
+      "name": "original-client-id",
+      "value": {
+        "clientMessageId": "request-1"
+      }
+    },
+    {
+      "decoded": {
+        "messageId": "message-1"
+      },
+      "name": "null-unused-selector",
+      "value": {
+        "clientMessageId": null,
+        "messageId": "message-1"
+      }
+    }
+  ],
+  "CrossSessionMessageGetResult": [
+    {
+      "decoded": {
+        "receipt": {
+          "clientMessageId": "request-a",
+          "messageId": "message-a",
+          "revision": 1,
+          "status": "queued",
+          "targetThreadId": "target-thread"
+        }
+      },
+      "name": "found",
+      "value": {
+        "receipt": {
+          "clientMessageId": "request-a",
+          "messageId": "message-a",
+          "revision": 1,
+          "status": "queued",
+          "targetThreadId": "target-thread"
+        }
+      }
+    },
+    {
+      "decoded": {
+        "receipt": null
+      },
+      "name": "confirmed-missing",
+      "value": {
+        "receipt": null
+      }
+    }
+  ],
+  "CrossSessionMessageGetRpcParams": [
+    {
+      "decoded": {
+        "query": {
+          "clientMessageId": "request-a"
+        },
+        "sourceThreadId": "source-thread"
+      },
+      "name": "original-id",
+      "value": {
+        "query": {
+          "clientMessageId": "request-a"
+        },
+        "sourceThreadId": "source-thread"
+      }
+    }
+  ],
+  "CrossSessionMessageLastTurn": [
+    {
+      "decoded": {
+        "endedAtMs": 123,
+        "status": "completed",
+        "turnId": "turn-1"
+      },
+      "name": "completed",
+      "value": {
+        "endedAtMs": 123,
+        "status": "completed",
+        "turnId": "turn-1"
+      }
+    },
+    {
+      "decoded": {
+        "status": "failed"
+      },
+      "name": "failed",
+      "value": {
+        "status": "failed"
+      }
+    },
+    {
+      "decoded": {
+        "status": "interrupted"
+      },
+      "name": "interrupted",
+      "value": {
+        "status": "interrupted"
+      }
+    },
+    {
+      "decoded": {
+        "status": "completed"
+      },
+      "name": "omitted-null-facts",
+      "value": {
+        "endedAtMs": null,
+        "status": "completed",
+        "turnId": null
+      }
+    }
+  ],
+  "CrossSessionMessageMode": [
+    {
+      "decoded": "enqueue_only",
+      "name": "enqueue_only",
+      "value": "enqueue_only"
+    },
+    {
+      "decoded": "wake_if_idle",
+      "name": "wake_if_idle",
+      "value": "wake_if_idle"
+    }
+  ],
+  "CrossSessionMessagePolicyReadParams": [
+    {
+      "decoded": {
+        "sourceThreadId": "source-thread"
+      },
+      "name": "owned-source",
+      "value": {
+        "sourceThreadId": "source-thread"
+      }
+    }
+  ],
+  "CrossSessionMessagePolicyResult": [
+    {
+      "decoded": {
+        "enabled": false,
+        "revision": "revision-a",
+        "wakeIdle": false
+      },
+      "name": "off",
+      "value": {
+        "enabled": false,
+        "revision": "revision-a",
+        "wakeIdle": false
+      }
+    }
+  ],
+  "CrossSessionMessagePolicySaveParams": [
+    {
+      "decoded": {
+        "enabled": true,
+        "expectedRevision": "revision-a",
+        "sourceThreadId": "source-thread",
+        "wakeIdle": false
+      },
+      "name": "explicit-user",
+      "value": {
+        "enabled": true,
+        "expectedRevision": "revision-a",
+        "sourceThreadId": "source-thread",
+        "wakeIdle": false
+      }
+    }
+  ],
+  "CrossSessionMessageReceipt": [
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 1,
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      },
+      "name": "queued",
+      "value": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 1,
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 2,
+        "status": "delivering",
+        "targetThreadId": "thread-b"
+      },
+      "name": "delivering",
+      "value": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 2,
+        "status": "delivering",
+        "targetThreadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 3,
+        "status": "applied",
+        "targetThreadId": "thread-b"
+      },
+      "name": "applied",
+      "value": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 3,
+        "status": "applied",
+        "targetThreadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 4,
+        "status": "rejected",
+        "targetThreadId": "thread-b"
+      },
+      "name": "rejected",
+      "value": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 4,
+        "status": "rejected",
+        "targetThreadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 5,
+        "status": "expired",
+        "targetThreadId": "thread-b"
+      },
+      "name": "expired",
+      "value": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 5,
+        "status": "expired",
+        "targetThreadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 6,
+        "status": "unknown",
+        "targetThreadId": "thread-b"
+      },
+      "name": "unknown",
+      "value": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "revision": 6,
+        "status": "unknown",
+        "targetThreadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "replyToMessageId": "original-inbound-message",
+        "revision": 1,
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      },
+      "name": "linked-original-peer-message",
+      "value": {
+        "clientMessageId": "request-1",
+        "messageId": "message-1",
+        "replyToMessageId": "original-inbound-message",
+        "revision": 1,
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      }
+    }
+  ],
+  "CrossSessionMessageReceiptListEntry": [
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "confirmation": "unconfirmed",
+        "mode": "enqueue_only",
+        "reasonCode": "peer_message_receipt_unconfirmed",
+        "targetAddress": {
+          "targetId": "native",
+          "threadId": "thread-b",
+          "workspaceId": "workspace-b"
+        }
+      },
+      "name": "unreachable-destination",
+      "value": {
+        "clientMessageId": "request-1",
+        "confirmation": "unconfirmed",
+        "mode": "enqueue_only",
+        "reasonCode": "peer_message_receipt_unconfirmed",
+        "targetAddress": {
+          "targetId": "native",
+          "threadId": "thread-b",
+          "workspaceId": "workspace-b"
+        }
+      }
+    }
+  ],
+  "CrossSessionMessageReceiptListParams": [
+    {
+      "decoded": {},
+      "name": "recover-original-ids",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "createdAfterMs": 100,
+        "createdBeforeMs": 200,
+        "limit": 42,
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      },
+      "name": "filtered-outbox",
+      "value": {
+        "createdAfterMs": 100,
+        "createdBeforeMs": 200,
+        "limit": 42,
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      }
+    }
+  ],
+  "CrossSessionMessageReceiptListResult": [
+    {
+      "decoded": {
+        "items": [],
+        "unconfirmedCount": 0
+      },
+      "name": "completed-no-matches",
+      "value": {
+        "items": [],
+        "unconfirmedCount": 0
+      }
+    },
+    {
+      "decoded": {
+        "items": [
+          {
+            "clientMessageId": "request-1",
+            "confirmation": "unconfirmed",
+            "mode": "enqueue_only",
+            "reasonCode": "peer_message_receipt_unconfirmed",
+            "targetAddress": {
+              "targetId": "native",
+              "threadId": "thread-b",
+              "workspaceId": "workspace-b"
+            }
+          }
+        ],
+        "nextCursor": "opaque",
+        "unconfirmedCount": 1
+      },
+      "name": "partial-observation",
+      "value": {
+        "items": [
+          {
+            "clientMessageId": "request-1",
+            "confirmation": "unconfirmed",
+            "mode": "enqueue_only",
+            "reasonCode": "peer_message_receipt_unconfirmed",
+            "targetAddress": {
+              "targetId": "native",
+              "threadId": "thread-b",
+              "workspaceId": "workspace-b"
+            }
+          }
+        ],
+        "nextCursor": "opaque",
+        "unconfirmedCount": 1
+      }
+    }
+  ],
+  "CrossSessionMessageReceiptListRpcParams": [
+    {
+      "decoded": {
+        "createdAfterMs": 100,
+        "createdBeforeMs": 200,
+        "limit": 42,
+        "sourceThreadId": "source-thread",
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      },
+      "name": "scoped-outbox",
+      "value": {
+        "createdAfterMs": 100,
+        "createdBeforeMs": 200,
+        "limit": 42,
+        "sourceThreadId": "source-thread",
+        "status": "queued",
+        "targetThreadId": "thread-b"
+      }
+    }
+  ],
+  "CrossSessionMessageResolveParams": [
+    {
+      "decoded": {
+        "address": {
+          "targetId": "native-target",
+          "threadId": "target-thread",
+          "workspaceId": "workspace-a"
+        },
+        "sourceThreadId": "source-thread"
+      },
+      "name": "full-address",
+      "value": {
+        "address": {
+          "targetId": "native-target",
+          "threadId": "target-thread",
+          "workspaceId": "workspace-a"
+        },
+        "sourceThreadId": "source-thread"
+      }
+    }
+  ],
+  "CrossSessionMessageResolveResult": [
+    {
+      "decoded": {
+        "address": {
+          "targetId": "native-target",
+          "threadId": "target-thread",
+          "workspaceId": "workspace-a"
+        },
+        "serverId": "catalog-alias",
+        "threadId": "target-thread",
+        "workspacePath": "/owned/workspace"
+      },
+      "name": "authorized-mapping",
+      "value": {
+        "address": {
+          "targetId": "native-target",
+          "threadId": "target-thread",
+          "workspaceId": "workspace-a"
+        },
+        "serverId": "catalog-alias",
+        "threadId": "target-thread",
+        "workspacePath": "/owned/workspace"
+      }
+    }
+  ],
+  "CrossSessionMessageSendParams": [
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "mode": "enqueue_only",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      },
+      "name": "enqueue-original-target",
+      "value": {
+        "clientMessageId": "request-1",
+        "mode": "enqueue_only",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "expectedTurnId": "turn-original",
+        "mode": "enqueue_only",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      },
+      "name": "turn-bound-enqueue",
+      "value": {
+        "clientMessageId": "request-1",
+        "expectedTurnId": "turn-original",
+        "mode": "enqueue_only",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "mode": "enqueue_only",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      },
+      "name": "explicit-null-expected-turn",
+      "value": {
+        "clientMessageId": "request-1",
+        "expectedTurnId": null,
+        "mode": "enqueue_only",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "mode": "wake_if_idle",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      },
+      "name": "wake-explicit-mode",
+      "value": {
+        "clientMessageId": "request-1",
+        "mode": "wake_if_idle",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      }
+    },
+    {
+      "decoded": {
+        "clientMessageId": "request-1",
+        "mode": "enqueue_only",
+        "replyToMessageId": "original-inbound-message",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      },
+      "name": "linked-original-peer-message",
+      "value": {
+        "clientMessageId": "request-1",
+        "mode": "enqueue_only",
+        "replyToMessageId": "original-inbound-message",
+        "targetThreadId": "thread-b",
+        "text": "Protocol findings are ready."
+      }
+    }
+  ],
+  "CrossSessionMessageSendRpcParams": [
+    {
+      "decoded": {
+        "message": {
+          "clientMessageId": "request-a",
+          "mode": "enqueue_only",
+          "targetAddress": {
+            "targetId": "native-target",
+            "threadId": "target-thread",
+            "workspaceId": "workspace-a"
+          },
+          "targetThreadId": "target-thread",
+          "text": "message"
+        },
+        "sourceThreadId": "source-thread"
+      },
+      "name": "full-destination",
+      "value": {
+        "message": {
+          "clientMessageId": "request-a",
+          "mode": "enqueue_only",
+          "targetAddress": {
+            "targetId": "native-target",
+            "threadId": "target-thread",
+            "workspaceId": "workspace-a"
+          },
+          "targetThreadId": "target-thread",
+          "text": "message"
+        },
+        "sourceThreadId": "source-thread"
+      }
+    },
+    {
+      "decoded": {
+        "message": {
+          "clientMessageId": "request-a",
+          "mode": "enqueue_only",
+          "replyToMessageId": "original-inbound-message",
+          "targetAddress": {
+            "targetId": "native-target",
+            "threadId": "target-thread",
+            "workspaceId": "workspace-a"
+          },
+          "targetThreadId": "target-thread",
+          "text": "message"
+        },
+        "sourceThreadId": "source-thread"
+      },
+      "name": "linked-original-peer-message",
+      "value": {
+        "message": {
+          "clientMessageId": "request-a",
+          "mode": "enqueue_only",
+          "replyToMessageId": "original-inbound-message",
+          "targetAddress": {
+            "targetId": "native-target",
+            "threadId": "target-thread",
+            "workspaceId": "workspace-a"
+          },
+          "targetThreadId": "target-thread",
+          "text": "message"
+        },
+        "sourceThreadId": "source-thread"
+      }
+    }
+  ],
+  "CrossSessionMessageSessionReadOutcome": [
+    {
+      "decoded": {
+        "result": {
+          "address": {
+            "targetId": "host-b",
+            "threadId": "peer-thread",
+            "workspaceId": "space-b"
+          },
+          "archived": false,
+          "hasEarlierTurns": true,
+          "otherWorkspace": false,
+          "resident": true,
+          "threadId": "peer-thread",
+          "title": "安装包",
+          "turns": [
+            {
+              "items": [
+                {
+                  "kind": "user_message",
+                  "text": "进度？"
+                },
+                {
+                  "kind": "assistant_message",
+                  "partial": true,
+                  "text": "正在构建"
+                }
+              ],
+              "omittedItems": 0,
+              "partial": true,
+              "startedAtMs": 1,
+              "status": "running",
+              "turnId": "turn-3"
+            }
+          ]
+        }
+      },
+      "name": "bounded-window",
+      "value": {
+        "result": {
+          "address": {
+            "targetId": "host-b",
+            "threadId": "peer-thread",
+            "workspaceId": "space-b"
+          },
+          "archived": false,
+          "hasEarlierTurns": true,
+          "otherWorkspace": false,
+          "resident": true,
+          "threadId": "peer-thread",
+          "title": "安装包",
+          "turns": [
+            {
+              "items": [
+                {
+                  "kind": "user_message",
+                  "text": "进度？"
+                },
+                {
+                  "kind": "assistant_message",
+                  "partial": true,
+                  "text": "正在构建"
+                }
+              ],
+              "omittedItems": 0,
+              "partial": true,
+              "startedAtMs": 1,
+              "status": "running",
+              "turnId": "turn-3"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "decoded": {
+        "refused": "session_read_not_permitted"
+      },
+      "name": "owner-refusal",
+      "value": {
+        "refused": "session_read_not_permitted"
+      }
+    }
+  ],
+  "CrossSessionMessageSessionReadRpcParams": [
+    {
+      "decoded": {
+        "read": {
+          "targetAddress": {
+            "targetId": "host-b",
+            "threadId": "peer-thread",
+            "workspaceId": "space-b"
+          },
+          "threadId": "peer-thread"
+        },
+        "sourceThreadId": "source-thread"
+      },
+      "name": "routed-newest-turns",
+      "value": {
+        "read": {
+          "targetAddress": {
+            "targetId": "host-b",
+            "threadId": "peer-thread",
+            "workspaceId": "space-b"
+          },
+          "threadId": "peer-thread"
+        },
+        "sourceThreadId": "source-thread"
+      }
+    },
+    {
+      "decoded": {
+        "read": {
+          "beforeTurnId": "turn-3",
+          "includeAttachments": true,
+          "includeOutputs": true,
+          "targetAddress": {
+            "targetId": "host-b",
+            "threadId": "peer-thread",
+            "workspaceId": "space-b"
+          },
+          "threadId": "peer-thread",
+          "turns": 5
+        },
+        "sourceThreadId": "source-thread"
+      },
+      "name": "routed-older-page-with-outputs",
+      "value": {
+        "read": {
+          "beforeTurnId": "turn-3",
+          "includeAttachments": true,
+          "includeOutputs": true,
+          "targetAddress": {
+            "targetId": "host-b",
+            "threadId": "peer-thread",
+            "workspaceId": "space-b"
+          },
+          "threadId": "peer-thread",
+          "turns": 5
+        },
+        "sourceThreadId": "source-thread"
+      }
+    }
+  ],
+  "CrossSessionMessageStatus": [
+    {
+      "decoded": "queued",
+      "name": "queued",
+      "value": "queued"
+    },
+    {
+      "decoded": "delivering",
+      "name": "delivering",
+      "value": "delivering"
+    },
+    {
+      "decoded": "applied",
+      "name": "applied",
+      "value": "applied"
+    },
+    {
+      "decoded": "rejected",
+      "name": "rejected",
+      "value": "rejected"
+    },
+    {
+      "decoded": "expired",
+      "name": "expired",
+      "value": "expired"
+    },
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    }
+  ],
+  "CrossSessionMessageTarget": [
+    {
+      "decoded": {
+        "allowedModes": [],
+        "presence": "unknown",
+        "status": "unknown",
+        "threadId": "thread-b"
+      },
+      "name": "unknown-with-no-send-mode",
+      "value": {
+        "allowedModes": [],
+        "presence": "unknown",
+        "status": "unknown",
+        "threadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "allowedModes": [],
+        "lastTurn": {
+          "endedAtMs": 1200,
+          "status": "failed",
+          "turnId": "turn-before"
+        },
+        "presence": "resident",
+        "runSummary": {
+          "activeJobs": 1,
+          "mainTurn": "idle",
+          "pendingApprovals": 0,
+          "pendingFollowups": 0,
+          "pendingGoals": null,
+          "pendingQuestions": 0,
+          "tasksPending": 0,
+          "tasksRunning": 1
+        },
+        "status": "background",
+        "threadId": "thread-b",
+        "title": "Task B"
+      },
+      "name": "background-with-failed-last-turn",
+      "value": {
+        "allowedModes": [],
+        "lastTurn": {
+          "endedAtMs": 1200,
+          "status": "failed",
+          "turnId": "turn-before"
+        },
+        "presence": "resident",
+        "runSummary": {
+          "activeJobs": 1,
+          "mainTurn": "idle",
+          "pendingApprovals": 0,
+          "pendingFollowups": 0,
+          "pendingGoals": null,
+          "pendingQuestions": 0,
+          "tasksPending": 0,
+          "tasksRunning": 1
+        },
+        "status": "background",
+        "threadId": "thread-b",
+        "title": "Task B"
+      }
+    },
+    {
+      "decoded": {
+        "allowedModes": [],
+        "presence": "not_resident",
+        "status": "idle",
+        "threadId": "thread-b"
+      },
+      "name": "not-resident-does-not-mean-completed",
+      "value": {
+        "allowedModes": [],
+        "presence": "not_resident",
+        "status": "idle",
+        "threadId": "thread-b"
+      }
+    },
+    {
+      "decoded": {
+        "allowedModes": [],
+        "presence": "unknown",
+        "status": "unknown",
+        "threadId": "thread-b"
+      },
+      "name": "explicit-null-optional-observations",
+      "value": {
+        "allowedModes": [],
+        "archivedAt": null,
+        "lastTurn": null,
+        "presence": "unknown",
+        "runSummary": null,
+        "status": "unknown",
+        "threadId": "thread-b",
+        "title": null
+      }
+    }
+  ],
+  "CrossSessionMessageTargetPresence": [
+    {
+      "decoded": "resident",
+      "name": "resident",
+      "value": "resident"
+    },
+    {
+      "decoded": "not_resident",
+      "name": "not_resident",
+      "value": "not_resident"
+    },
+    {
+      "decoded": "unknown",
+      "name": "unknown",
+      "value": "unknown"
+    }
+  ],
+  "CrossSessionMessageTargetRunSummary": [
+    {
+      "decoded": {
+        "activeJobs": null,
+        "mainTurn": "unknown",
+        "pendingApprovals": null,
+        "pendingFollowups": null,
+        "pendingGoals": null,
+        "pendingQuestions": null,
+        "tasksPending": null,
+        "tasksRunning": null
+      },
+      "name": "unknown-counts-retained",
+      "value": {
+        "activeJobs": null,
+        "mainTurn": "unknown",
+        "pendingApprovals": null,
+        "pendingFollowups": null,
+        "pendingGoals": null,
+        "pendingQuestions": null,
+        "tasksPending": null,
+        "tasksRunning": null
+      }
+    },
+    {
+      "decoded": {
+        "activeJobs": 1,
+        "mainTurn": "idle",
+        "pendingApprovals": 0,
+        "pendingFollowups": 0,
+        "pendingGoals": null,
+        "pendingQuestions": 0,
+        "tasksPending": 0,
+        "tasksRunning": 1
+      },
+      "name": "background-with-idle-main",
+      "value": {
+        "activeJobs": 1,
+        "mainTurn": "idle",
+        "pendingApprovals": 0,
+        "pendingFollowups": 0,
+        "pendingGoals": null,
+        "pendingQuestions": 0,
+        "tasksPending": 0,
+        "tasksRunning": 1
+      }
+    },
+    {
+      "decoded": {
+        "activeJobs": null,
+        "mainTurn": "unknown",
+        "pendingApprovals": null,
+        "pendingFollowups": null,
+        "pendingGoals": null,
+        "pendingQuestions": null,
+        "tasksPending": null,
+        "tasksRunning": null
+      },
+      "name": "omitted-counts-serialize-unknown",
+      "value": {
+        "mainTurn": "unknown"
+      }
+    }
+  ],
+  "CrossSessionMessageTargetsParams": [
+    {
+      "decoded": {},
+      "name": "default-page",
+      "value": {}
+    },
+    {
+      "decoded": {
+        "cursor": "opaque-page"
+      },
+      "name": "opaque-cursor",
+      "value": {
+        "cursor": "opaque-page"
+      }
+    },
+    {
+      "decoded": {},
+      "name": "explicit-null-cursor",
+      "value": {
+        "cursor": null
+      }
+    },
+    {
+      "decoded": {
+        "allowedMode": "enqueue_only",
+        "limit": 30,
+        "presence": "not_resident",
+        "query": "Windows",
+        "status": "idle",
+        "targetId": "studio-target",
+        "title": "安装包"
+      },
+      "name": "title-query-and-page-size",
+      "value": {
+        "allowedMode": "enqueue_only",
+        "limit": 30,
+        "presence": "not_resident",
+        "query": "Windows",
+        "status": "idle",
+        "targetId": "studio-target",
+        "title": "安装包"
+      }
+    },
+    {
+      "decoded": {
+        "cursor": "opaque",
+        "limit": 256
+      },
+      "name": "maximum-page-size",
+      "value": {
+        "cursor": "opaque",
+        "limit": 256
+      }
+    }
+  ],
+  "CrossSessionMessageTargetsResult": [
+    {
+      "decoded": {
+        "completeness": "unknown",
+        "coverage": "resident_only",
+        "observedAtMs": 1400,
+        "targets": [
+          {
+            "allowedModes": [],
+            "lastTurn": {
+              "endedAtMs": 1200,
+              "status": "failed",
+              "turnId": "turn-before"
+            },
+            "presence": "resident",
+            "runSummary": {
+              "activeJobs": 1,
+              "mainTurn": "idle",
+              "pendingApprovals": 0,
+              "pendingFollowups": 0,
+              "pendingGoals": null,
+              "pendingQuestions": 0,
+              "tasksPending": 0,
+              "tasksRunning": 1
+            },
+            "status": "background",
+            "threadId": "thread-b",
+            "title": "Task B"
+          },
+          {
+            "allowedModes": [],
+            "presence": "unknown",
+            "status": "unknown",
+            "threadId": "thread-b"
+          }
+        ]
+      },
+      "name": "bounded-resident-page",
+      "value": {
+        "coverage": "resident_only",
+        "observedAtMs": 1400,
+        "targets": [
+          {
+            "allowedModes": [],
+            "lastTurn": {
+              "endedAtMs": 1200,
+              "status": "failed",
+              "turnId": "turn-before"
+            },
+            "presence": "resident",
+            "runSummary": {
+              "activeJobs": 1,
+              "mainTurn": "idle",
+              "pendingApprovals": 0,
+              "pendingFollowups": 0,
+              "pendingGoals": null,
+              "pendingQuestions": 0,
+              "tasksPending": 0,
+              "tasksRunning": 1
+            },
+            "status": "background",
+            "threadId": "thread-b",
+            "title": "Task B"
+          },
+          {
+            "allowedModes": [],
+            "presence": "unknown",
+            "status": "unknown",
+            "threadId": "thread-b"
+          }
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "completeness": "unknown",
+        "coverage": "resident_only",
+        "observedAtMs": 1400,
+        "targets": []
+      },
+      "name": "empty-resident-page-is-not-history-coverage",
+      "value": {
+        "coverage": "resident_only",
+        "observedAtMs": 1400,
+        "targets": []
+      }
+    },
+    {
+      "decoded": {
+        "completeness": "unknown",
+        "coverage": "workspace_history",
+        "nextCursor": "opaque-next",
+        "observedAtMs": 1400,
+        "targets": [
+          {
+            "allowedModes": [],
+            "lastTurn": {
+              "endedAtMs": 1200,
+              "status": "failed",
+              "turnId": "turn-before"
+            },
+            "presence": "resident",
+            "runSummary": {
+              "activeJobs": 1,
+              "mainTurn": "idle",
+              "pendingApprovals": 0,
+              "pendingFollowups": 0,
+              "pendingGoals": null,
+              "pendingQuestions": 0,
+              "tasksPending": 0,
+              "tasksRunning": 1
+            },
+            "status": "background",
+            "threadId": "thread-b",
+            "title": "Task B"
+          },
+          {
+            "allowedModes": [],
+            "presence": "unknown",
+            "status": "unknown",
+            "threadId": "thread-b"
+          }
+        ]
+      },
+      "name": "workspace-history-wire-shape",
+      "value": {
+        "coverage": "workspace_history",
+        "nextCursor": "opaque-next",
+        "observedAtMs": 1400,
+        "targets": [
+          {
+            "allowedModes": [],
+            "lastTurn": {
+              "endedAtMs": 1200,
+              "status": "failed",
+              "turnId": "turn-before"
+            },
+            "presence": "resident",
+            "runSummary": {
+              "activeJobs": 1,
+              "mainTurn": "idle",
+              "pendingApprovals": 0,
+              "pendingFollowups": 0,
+              "pendingGoals": null,
+              "pendingQuestions": 0,
+              "tasksPending": 0,
+              "tasksRunning": 1
+            },
+            "status": "background",
+            "threadId": "thread-b",
+            "title": "Task B"
+          },
+          {
+            "allowedModes": [],
+            "presence": "unknown",
+            "status": "unknown",
+            "threadId": "thread-b"
+          }
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "completeness": "unknown",
+        "coverage": "resident_only",
+        "observedAtMs": 1400,
+        "targets": [
+          {
+            "allowedModes": [],
+            "lastTurn": {
+              "endedAtMs": 1200,
+              "status": "failed",
+              "turnId": "turn-before"
+            },
+            "presence": "resident",
+            "runSummary": {
+              "activeJobs": 1,
+              "mainTurn": "idle",
+              "pendingApprovals": 0,
+              "pendingFollowups": 0,
+              "pendingGoals": null,
+              "pendingQuestions": 0,
+              "tasksPending": 0,
+              "tasksRunning": 1
+            },
+            "status": "background",
+            "threadId": "thread-b",
+            "title": "Task B"
+          },
+          {
+            "allowedModes": [],
+            "presence": "unknown",
+            "status": "unknown",
+            "threadId": "thread-b"
+          }
+        ]
+      },
+      "name": "explicit-null-next-cursor",
+      "value": {
+        "coverage": "resident_only",
+        "nextCursor": null,
+        "observedAtMs": 1400,
+        "targets": [
+          {
+            "allowedModes": [],
+            "lastTurn": {
+              "endedAtMs": 1200,
+              "status": "failed",
+              "turnId": "turn-before"
+            },
+            "presence": "resident",
+            "runSummary": {
+              "activeJobs": 1,
+              "mainTurn": "idle",
+              "pendingApprovals": 0,
+              "pendingFollowups": 0,
+              "pendingGoals": null,
+              "pendingQuestions": 0,
+              "tasksPending": 0,
+              "tasksRunning": 1
+            },
+            "status": "background",
+            "threadId": "thread-b",
+            "title": "Task B"
+          },
+          {
+            "allowedModes": [],
+            "presence": "unknown",
+            "status": "unknown",
+            "threadId": "thread-b"
+          }
+        ]
+      }
+    }
+  ],
+  "CrossSessionMessageTargetsRpcParams": [
+    {
+      "decoded": {
+        "cursor": "opaque-page",
+        "sourceThreadId": "source-thread"
+      },
+      "name": "source-and-cursor",
+      "value": {
+        "cursor": "opaque-page",
+        "sourceThreadId": "source-thread"
+      }
+    },
+    {
+      "decoded": {
+        "sourceThreadId": "source-thread"
+      },
+      "name": "source-only",
+      "value": {
+        "sourceThreadId": "source-thread"
+      }
+    },
+    {
+      "decoded": {
+        "allowedMode": "enqueue_only",
+        "limit": 30,
+        "presence": "not_resident",
+        "query": "Windows",
+        "sourceThreadId": "caller",
+        "status": "idle",
+        "targetId": "studio-target",
+        "title": "安装包"
+      },
+      "name": "title-query-and-page-size",
+      "value": {
+        "allowedMode": "enqueue_only",
+        "limit": 30,
+        "presence": "not_resident",
+        "query": "Windows",
+        "sourceThreadId": "caller",
+        "status": "idle",
+        "targetId": "studio-target",
+        "title": "安装包"
+      }
+    },
+    {
+      "decoded": {
+        "cursor": "opaque",
+        "limit": 256,
+        "sourceThreadId": "caller"
+      },
+      "name": "maximum-page-size",
+      "value": {
+        "cursor": "opaque",
+        "limit": 256,
+        "sourceThreadId": "caller"
+      }
+    }
+  ],
+  "PeerAgentMessageV1": [
+    {
+      "decoded": {
+        "bodySha256": "410382bbf9ad39c24a23ebc63343eb54b17394479443fd953eb676c42823cb65",
+        "createdAtMs": 1,
+        "messageId": "peer-message-a",
+        "sourceAddress": {
+          "targetId": "source-target",
+          "threadId": "source-thread",
+          "workspaceId": "source-workspace"
+        },
+        "sourceThreadId": "source-thread",
+        "targetAddress": {
+          "targetId": "destination-target",
+          "threadId": "target-thread",
+          "workspaceId": "destination-workspace"
+        },
+        "targetThreadId": "target-thread",
+        "version": 1
+      },
+      "name": "addressed-peer-provenance",
+      "value": {
+        "bodySha256": "410382bbf9ad39c24a23ebc63343eb54b17394479443fd953eb676c42823cb65",
+        "createdAtMs": 1,
+        "messageId": "peer-message-a",
+        "sourceAddress": {
+          "targetId": "source-target",
+          "threadId": "source-thread",
+          "workspaceId": "source-workspace"
+        },
+        "sourceThreadId": "source-thread",
+        "targetAddress": {
+          "targetId": "destination-target",
+          "threadId": "target-thread",
+          "workspaceId": "destination-workspace"
+        },
+        "targetThreadId": "target-thread",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "bodySha256": "410382bbf9ad39c24a23ebc63343eb54b17394479443fd953eb676c42823cb65",
+        "createdAtMs": 1,
+        "messageId": "peer-message-a",
+        "sourceThreadId": "source-thread",
+        "targetThreadId": "target-thread",
+        "version": 1
+      },
+      "name": "legacy-explicit-null-addresses",
+      "value": {
+        "bodySha256": "410382bbf9ad39c24a23ebc63343eb54b17394479443fd953eb676c42823cb65",
+        "createdAtMs": 1,
+        "messageId": "peer-message-a",
+        "sourceAddress": null,
+        "sourceThreadId": "source-thread",
+        "targetAddress": null,
+        "targetThreadId": "target-thread",
+        "version": 1
+      }
+    },
+    {
+      "decoded": {
+        "bodySha256": "410382bbf9ad39c24a23ebc63343eb54b17394479443fd953eb676c42823cb65",
+        "createdAtMs": 1,
+        "messageId": "peer-message-a",
+        "replyToMessageId": "original-inbound-message",
+        "sourceAddress": {
+          "targetId": "source-target",
+          "threadId": "source-thread",
+          "workspaceId": "source-workspace"
+        },
+        "sourceThreadId": "source-thread",
+        "targetAddress": {
+          "targetId": "destination-target",
+          "threadId": "target-thread",
+          "workspaceId": "destination-workspace"
+        },
+        "targetThreadId": "target-thread",
+        "version": 1
+      },
+      "name": "linked-original-peer-message",
+      "value": {
+        "bodySha256": "410382bbf9ad39c24a23ebc63343eb54b17394479443fd953eb676c42823cb65",
+        "createdAtMs": 1,
+        "messageId": "peer-message-a",
+        "replyToMessageId": "original-inbound-message",
+        "sourceAddress": {
+          "targetId": "source-target",
+          "threadId": "source-thread",
+          "workspaceId": "source-workspace"
+        },
+        "sourceThreadId": "source-thread",
+        "targetAddress": {
+          "targetId": "destination-target",
+          "threadId": "target-thread",
+          "workspaceId": "destination-workspace"
+        },
+        "targetThreadId": "target-thread",
+        "version": 1
+      }
+    }
+  ]
+}

@@ -1,0 +1,930 @@
+{
+  "ContinuousWorkListParams": {
+    "valid": [
+      {
+        "name": "default",
+        "value": {}
+      },
+      {
+        "name": "bounded-filter",
+        "value": {
+          "cursor": "opaque",
+          "updatedAfterMs": 123,
+          "phase": "running",
+          "query": "report",
+          "allowPartial": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "forged-scope",
+        "value": {
+          "targetId": "other"
+        }
+      },
+      {
+        "name": "wrong-time",
+        "value": {
+          "updatedAfterMs": "tomorrow"
+        }
+      }
+    ]
+  },
+  "ContinuousWorkReadParams": {
+    "valid": [
+      {
+        "name": "read",
+        "value": {
+          "workId": "work-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "forged-account",
+        "value": {
+          "workId": "work-1",
+          "accountId": "other"
+        }
+      },
+      {
+        "name": "missing-work",
+        "value": {}
+      }
+    ]
+  },
+  "ContinuousWorkView": {
+    "valid": [
+      {
+        "name": "running",
+        "value": {
+          "workId": "work-1",
+          "threadId": "thread-1",
+          "phase": "running",
+          "revision": 3,
+          "requirementsRevision": 2,
+          "freshness": "current"
+        }
+      },
+      {
+        "name": "future-status",
+        "value": {
+          "workId": "work-1",
+          "threadId": "thread-1",
+          "phase": "future_status",
+          "revision": 3,
+          "requirementsRevision": 2,
+          "freshness": "current"
+        }
+      },
+      {
+        "name": "pending-requirements",
+        "value": {
+          "workId": "work-1",
+          "threadId": "thread-1",
+          "phase": "running",
+          "revision": 3,
+          "requirementsRevision": 2,
+          "freshness": "partial",
+          "unconsumedInputs": 3,
+          "pendingInputs": [
+            {
+              "inputId": "input-1",
+              "sequence": 1,
+              "state": "queued"
+            },
+            {
+              "inputId": "input-2",
+              "sequence": 2,
+              "state": "rejected"
+            },
+            {
+              "inputId": "input-3",
+              "sequence": 3,
+              "state": "future_state"
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-revision",
+        "value": {
+          "workId": "work-1",
+          "threadId": "thread-1",
+          "phase": "running",
+          "revision": "3",
+          "requirementsRevision": 2,
+          "freshness": "current"
+        }
+      },
+      {
+        "name": "missing-thread",
+        "value": {
+          "workId": "work-1",
+          "phase": "running",
+          "revision": 3,
+          "requirementsRevision": 2,
+          "freshness": "current"
+        }
+      }
+    ]
+  },
+  "ContinuousWorkWaitView": {
+    "valid": [
+      {
+        "name": "pending-user",
+        "value": {
+          "kind": "user",
+          "reference": "question-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-original-reference",
+        "value": {
+          "kind": "user"
+        }
+      }
+    ]
+  },
+  "ContinuousWorkDeliveryRequirement": {
+    "valid": [
+      {
+        "name": "not-required",
+        "value": "not_required"
+      },
+      {
+        "name": "required",
+        "value": "required"
+      },
+      {
+        "name": "unobserved",
+        "value": "unknown"
+      },
+      {
+        "name": "future-label",
+        "value": "future_requirement"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "not-text",
+        "value": 42
+      },
+      {
+        "name": "label-too-long",
+        "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    ]
+  },
+  "ContinuousWorkResultView": {
+    "valid": [
+      {
+        "name": "ready-with-artifact",
+        "value": {
+          "resultId": "result-1",
+          "ready": true,
+          "requiredDeliveryState": "unknown_outcome",
+          "artifactRefs": [
+            "artifact-1"
+          ]
+        }
+      },
+      {
+        "name": "delivery-not-observed",
+        "value": {
+          "resultId": "result-1",
+          "ready": true,
+          "artifactRefs": []
+        }
+      },
+      {
+        "name": "explicit-no-required-delivery",
+        "value": {
+          "resultId": "result-2",
+          "ready": true,
+          "deliveryRequirement": "not_required",
+          "artifactRefs": []
+        }
+      },
+      {
+        "name": "required-delivery-unobserved",
+        "value": {
+          "resultId": "result-3",
+          "ready": true,
+          "deliveryRequirement": "required",
+          "artifactRefs": []
+        }
+      },
+      {
+        "name": "future-delivery-requirement",
+        "value": {
+          "resultId": "result-4",
+          "ready": true,
+          "deliveryRequirement": "future_requirement",
+          "artifactRefs": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-artifacts",
+        "value": {
+          "resultId": "result-1",
+          "ready": true
+        }
+      }
+    ]
+  },
+  "ContinuousWorkListResult": {
+    "valid": [
+      {
+        "name": "single",
+        "value": {
+          "items": [
+            {
+              "workId": "work-1",
+              "threadId": "thread-1",
+              "phase": "running",
+              "revision": 3,
+              "requirementsRevision": 2,
+              "freshness": "current"
+            }
+          ],
+          "nextCursor": "cursor-1",
+          "partial": true
+        }
+      },
+      {
+        "name": "empty",
+        "value": {
+          "items": []
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-items",
+        "value": {
+          "items": "not-an-array"
+        }
+      }
+    ]
+  },
+  "ContinuousWorkReadResult": {
+    "valid": [
+      {
+        "name": "found",
+        "value": {
+          "work": {
+            "workId": "work-1",
+            "threadId": "thread-1",
+            "phase": "running",
+            "revision": 3,
+            "requirementsRevision": 2,
+            "freshness": "current"
+          }
+        }
+      },
+      {
+        "name": "not-observed",
+        "value": {
+          "work": null
+        }
+      },
+      {
+        "name": "proven-present",
+        "value": {
+          "work": {
+            "workId": "work-1",
+            "threadId": "thread-1",
+            "phase": "running",
+            "revision": 3,
+            "requirementsRevision": 2,
+            "freshness": "current"
+          },
+          "presence": "present"
+        }
+      },
+      {
+        "name": "proven-absent",
+        "value": {
+          "work": null,
+          "presence": "confirmed_absent"
+        }
+      },
+      {
+        "name": "unreadable",
+        "value": {
+          "work": null,
+          "presence": "unreadable"
+        }
+      },
+      {
+        "name": "future",
+        "value": {
+          "work": null,
+          "presence": "future_observation"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-work",
+        "value": {
+          "work": 3
+        }
+      }
+    ]
+  },
+  "ContinuousWorkInputSubmitParams": {
+    "valid": [
+      {
+        "name": "text",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "expectedRevision": 3,
+          "text": "Continue the task"
+        }
+      },
+      {
+        "name": "retained-attachment",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "expectedRevision": 3,
+          "retention": {
+            "references": [
+              {
+                "retentionId": "r1.root.1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "expectedRevision": 1,
+                "entryIds": [
+                  "entry-1"
+                ]
+              }
+            ],
+            "attachments": [
+              {
+                "entryId": "entry-1",
+                "filename": "report.txt",
+                "mimeType": "text/plain"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "answer-original-question",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "expectedRevision": 3,
+          "text": "Continue the task",
+          "interaction": {
+            "attemptId": "attempt-1",
+            "selector": {
+              "serverId": "server-1",
+              "threadId": "thread-1",
+              "turnId": "turn-1",
+              "requestId": 1,
+              "appServerEpoch": "epoch-1",
+              "kind": "question",
+              "questionId": "question-1"
+            }
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "client-authority",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "expectedRevision": 3,
+          "text": "Continue the task",
+          "authority": "forged"
+        }
+      },
+      {
+        "name": "arbitrary-attachment-path",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "expectedRevision": 3,
+          "text": "Continue the task",
+          "retention": {
+            "references": [
+              {
+                "retentionId": "r1.root.1.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "expectedRevision": 1,
+                "entryIds": [
+                  "entry-1"
+                ]
+              }
+            ],
+            "attachments": [
+              {
+                "entryId": "entry-1",
+                "filename": "report.txt",
+                "mimeType": "text/plain",
+                "path": "/other/profile/file"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "missing-input-id",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "requestId": "request-1",
+          "expectedRevision": 3,
+          "text": "Continue the task"
+        }
+      },
+      {
+        "name": "forged-interaction-authority",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "expectedRevision": 3,
+          "text": "Continue the task",
+          "interaction": {
+            "attemptId": "attempt-1",
+            "selector": {
+              "serverId": "server-1",
+              "threadId": "thread-1",
+              "turnId": "turn-1",
+              "requestId": 1,
+              "appServerEpoch": "epoch-1",
+              "kind": "question",
+              "questionId": "question-1",
+              "authority": "forged"
+            }
+          }
+        }
+      }
+    ]
+  },
+  "ContinuousWorkInputReadParams": {
+    "valid": [
+      {
+        "name": "lookup-original",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "forged-owner",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "owner": "forged"
+        }
+      },
+      {
+        "name": "missing-input",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1"
+        }
+      }
+    ]
+  },
+  "ContinuousWorkInputReceiptView": {
+    "valid": [
+      {
+        "name": "queued-not-applied",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "sequence": 1,
+          "state": "queued",
+          "requirementsRevision": 2
+        }
+      },
+      {
+        "name": "future-state",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "sequence": 1,
+          "state": "future_pending",
+          "requirementsRevision": 2
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-sequence",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "inputId": "input-1",
+          "requestId": "request-1",
+          "sequence": "1",
+          "state": "queued",
+          "requirementsRevision": 2
+        }
+      }
+    ]
+  },
+  "ContinuousWorkInputResult": {
+    "valid": [
+      {
+        "name": "queued",
+        "value": {
+          "receipt": {
+            "threadId": "thread-1",
+            "workId": "work-1",
+            "inputId": "input-1",
+            "requestId": "request-1",
+            "sequence": 1,
+            "state": "queued",
+            "requirementsRevision": 2
+          }
+        }
+      },
+      {
+        "name": "unknown-receipt",
+        "value": {
+          "receipt": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-receipt",
+        "value": {
+          "receipt": []
+        }
+      }
+    ]
+  },
+  "ContinuousWorkControlAction": {
+    "valid": [
+      {
+        "name": "pause",
+        "value": "pause"
+      },
+      {
+        "name": "reconcile",
+        "value": "reconcile"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-action",
+        "value": "delete_everything"
+      }
+    ]
+  },
+  "ContinuousWorkControlTarget": {
+    "valid": [
+      {
+        "name": "work",
+        "value": {
+          "kind": "work"
+        }
+      },
+      {
+        "name": "original-turn",
+        "value": {
+          "kind": "turn",
+          "threadId": "thread-1",
+          "turnId": "turn-1",
+          "attemptId": "attempt-1"
+        }
+      },
+      {
+        "name": "operation",
+        "value": {
+          "kind": "operation",
+          "operationId": "op-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "forged-authority",
+        "value": {
+          "kind": "work",
+          "approved": true
+        }
+      },
+      {
+        "name": "unknown-kind",
+        "value": {
+          "kind": "new_target"
+        }
+      }
+    ]
+  },
+  "ContinuousWorkControlParams": {
+    "valid": [
+      {
+        "name": "pause",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "requestId": "control-1",
+          "expectedRevision": 3,
+          "action": "pause",
+          "target": {
+            "kind": "work"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-action",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "requestId": "control-1",
+          "expectedRevision": 3,
+          "action": "delete_everything",
+          "target": {
+            "kind": "work"
+          }
+        }
+      },
+      {
+        "name": "forged-owner",
+        "value": {
+          "threadId": "thread-1",
+          "workId": "work-1",
+          "requestId": "control-1",
+          "expectedRevision": 3,
+          "action": "pause",
+          "target": {
+            "kind": "work"
+          },
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "ContinuousWorkControlResult": {
+    "valid": [
+      {
+        "name": "settling",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "settling",
+          "target": {
+            "kind": "work"
+          }
+        }
+      },
+      {
+        "name": "future-state",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "future_state",
+          "target": {
+            "kind": "work"
+          }
+        }
+      },
+      {
+        "name": "superseded-intent",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "superseded",
+          "target": {
+            "kind": "work"
+          }
+        }
+      },
+      {
+        "name": "future-target-read-only",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "settling",
+          "target": {
+            "kind": "future_target",
+            "originalRef": {
+              "revision": 2
+            }
+          }
+        }
+      },
+      {
+        "name": "unicode-future-target",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "settling",
+          "target": {
+            "kind": "未来动作",
+            "detail": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "bad-epoch",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": "2",
+          "state": "settling",
+          "target": {
+            "kind": "work"
+          }
+        }
+      },
+      {
+        "name": "target-without-kind",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "settling",
+          "target": {
+            "originalRef": "opaque"
+          }
+        }
+      },
+      {
+        "name": "empty-target-kind",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "settling",
+          "target": {
+            "kind": " "
+          }
+        }
+      },
+      {
+        "name": "oversized-future-target",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "settling",
+          "target": {
+            "kind": "future",
+            "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          }
+        }
+      },
+      {
+        "name": "unsafe-future-number",
+        "value": {
+          "workId": "work-1",
+          "requestId": "control-1",
+          "action": "pause",
+          "revision": 4,
+          "controlEpoch": 2,
+          "state": "settling",
+          "target": {
+            "kind": "future",
+            "value": 9007199254740992
+          }
+        }
+      }
+    ]
+  },
+  "ContinuousWorkChanged": {
+    "valid": [
+      {
+        "name": "change",
+        "value": {
+          "workId": "work-1",
+          "revision": 4,
+          "eventId": "event-1"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-event",
+        "value": {
+          "workId": "work-1",
+          "revision": 4
+        }
+      }
+    ]
+  },
+  "ContinuousWorkCapability": {
+    "valid": [
+      {
+        "name": "work",
+        "value": "continuousWorkV1"
+      },
+      {
+        "name": "read-only",
+        "value": "continuousWorkReadV1"
+      },
+      {
+        "name": "partial-list",
+        "value": "continuousWorkPartialListV1"
+      },
+      {
+        "name": "no-ephemeral",
+        "value": "continuousWorkNoEphemeralV1"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-capability",
+        "value": "arbitraryGrant"
+      }
+    ]
+  },
+  "ContinuousWorkPresence": {
+    "valid": [
+      {
+        "name": "present",
+        "value": "present"
+      },
+      {
+        "name": "absent",
+        "value": "confirmed_absent"
+      },
+      {
+        "name": "unreadable",
+        "value": "unreadable"
+      },
+      {
+        "name": "unknown",
+        "value": "unknown"
+      },
+      {
+        "name": "future",
+        "value": "future_observation"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong-type",
+        "value": 7
+      },
+      {
+        "name": "too-long",
+        "value": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    ]
+  }
+}

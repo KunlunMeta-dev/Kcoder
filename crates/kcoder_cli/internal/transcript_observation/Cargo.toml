@@ -1,0 +1,31 @@
+[package]
+name = "kcoder_transcript_observation"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[lib]
+path = "../../src/app_server/transcript_observation_artifacts.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+dunce = { workspace = true }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_attachment_retention = { path = "../attachment_retention" }
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_thread_metadata = { path = "../thread_metadata" }
+kcoder_transcript = { path = "../transcript" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

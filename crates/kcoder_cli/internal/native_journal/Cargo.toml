@@ -1,0 +1,32 @@
+[package]
+name = "kcoder_native_journal"
+description = "Native operation journals and original remote receipt verification."
+version.workspace = true
+publish = false
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+test-oracle = ["kcoder_native_receipts/test-oracle"]
+
+[dependencies]
+anyhow.workspace = true
+kcoder_acp = { path = "../../../kcoder_acp" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_native_receipts = { path = "../native_receipts" }
+kcoder_native_scope = { path = "../native_scope" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lib]
+path = "../../src/internal/native_journal/lib.rs"

@@ -1,0 +1,39 @@
+[package]
+name = "kcoder_mcp_app_runtime"
+description = "Dedicated MCP App connections and app tool adapters."
+version = { workspace = true }
+publish = false
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+base64 = "0.22"
+kcoder_app_interactions = { path = "../app_interactions" }
+kcoder_app_rpc_codec = { path = "../../../kcoder_app_protocol/internal/app_rpc_codec" }
+kcoder_host_transport = { path = "../host_transport" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_permissions = { path = "../../../kcoder_permissions" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_mcp = { path = "../../../kcoder_mcp" }
+kcoder_mcp_app_storage = { path = "../mcp_app_storage" }
+kcoder_plugin_rpc = { path = "../plugin_rpc" }
+kcoder_plugins = { path = "../../../kcoder_plugins" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_tools = { path = "../../../kcoder_tools" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+
+[dev-dependencies]
+kcoder_app_events = { path = "../app_events" }
+
+[lib]
+path = "../../src/internal/mcp_app_runtime/lib.rs"

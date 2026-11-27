@@ -1,0 +1,1593 @@
+use super::*;
+
+#[test]
+fn open_or_create_handles_existing_directories_and_creates_missing_components() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().join("profile");
+    std::fs::create_dir(&root).unwrap();
+    let directory = PrivateDirectory::open_or_create(&root).unwrap();
+    drop(directory);
+    PrivateDirectory::open_or_create(&root.join("new/child")).unwrap();
+    assert!(root.join("new/child").is_dir());
+}
+
+#[test]
+fn append_writes_bytes_to_existing_file() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_or_create(root.path()).unwrap();
+    let path = root.path().join("history.jsonl");
+    directory
+        .append(OsStr::new("history.jsonl"), b"first\n")
+        .unwrap();
+    assert!(path.is_file());
+    directory
+        .append(OsStr::new("history.jsonl"), b"second\n")
+        .unwrap();
+    assert_eq!(std::fs::read(&path).unwrap(), b"first\nsecond\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn directory_metadata_remains_bound_to_open_handle_after_path_replacement() {
+    use std::os::unix::fs::MetadataExt;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("original");
+    let moved = root.path().join("moved");
+    std::fs::create_dir(&path).unwrap();
+    let directory = PrivateDirectory::open_existing(&path).unwrap();
+    let before = directory.directory_metadata().unwrap();
+    std::fs::rename(&path, &moved).unwrap();
+    std::fs::create_dir(&path).unwrap();
+    let replacement = std::fs::metadata(&path).unwrap();
+    let held = directory.directory_metadata().unwrap();
+    assert_eq!((held.dev(), held.ino()), (before.dev(), before.ino()));
+    assert_ne!(
+        (held.dev(), held.ino()),
+        (replacement.dev(), replacement.ino())
+    );
+}
+
+#[test]
+fn entry_handle_verifies_child_directory_identity_and_preserves_entry_kind() {
+    let root = tempfile::tempdir().unwrap();
+    let child_path = root.path().join("child");
+    let file_path = root.path().join("ordinary.txt");
+    std::fs::create_dir(&child_path).unwrap();
+    std::fs::write(&file_path, b"ordinary file").unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+
+    let child_entry = directory.open_entry_handle(OsStr::new("child")).unwrap();
+    assert!(child_entry.metadata().is_dir());
+    assert!(
+        child_entry
+            .open_child_directory()
+            .unwrap()
+            .directory_metadata()
+            .unwrap()
+            .is_dir()
+    );
+
+    let file_entry = directory
+        .open_entry_handle(OsStr::new("ordinary.txt"))
+        .unwrap();
+    assert!(file_entry.metadata().is_file());
+    assert!(file_entry.open_child_directory().is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn entry_handle_rejects_same_name_directory_replacement_while_identity_is_held() {
+    let root = tempfile::tempdir().unwrap();
+    let child_path = root.path().join("child");
+    std::fs::create_dir(&child_path).unwrap();
+    std::fs::write(child_path.join("original.txt"), b"original").unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    let entry = directory.open_entry_handle(OsStr::new("child")).unwrap();
+
+    std::fs::remove_dir_all(&child_path).unwrap();
+    std::fs::create_dir(&child_path).unwrap();
+    std::fs::write(child_path.join("replacement.txt"), b"replacement").unwrap();
+
+    let error = entry.open_child_directory().unwrap_err();
+    assert!(error.to_string().contains("directory entry changed"));
+}
+
+#[cfg(unix)]
+#[test]
+fn reusing_private_directory_requires_confirmed_sync_without_changing_file_bytes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_or_create(tmp.path()).unwrap();
+    directory
+        .atomic_replace(OsStr::new("owned.txt"), b"stable complete bytes")
+        .unwrap();
+    UNIX_TEST_FAILURE_POINT.with(|failure| failure.set(UnixFailurePoint::DirectorySynced as u8));
+    assert!(
+        directory.sync().is_err(),
+        "confirmation errors must not be hidden by the reuse path"
+    );
+    assert_eq!(
+        std::fs::read(tmp.path().join("owned.txt")).unwrap(),
+        b"stable complete bytes"
+    );
+    directory.sync().unwrap();
+}
+
+#[test]
+fn streamed_publication_never_replaces_without_confirmation_and_cleans_failed_writes() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    let name = OsStr::new("document.bin");
+    assert_eq!(
+        directory
+            .atomic_publish_from_reader(name, &mut &b"original"[..], false, || Ok(()))
+            .unwrap(),
+        8
+    );
+    assert!(
+        directory
+            .atomic_publish_from_reader(name, &mut &b"unconfirmed"[..], false, || Ok(()))
+            .is_err()
+    );
+    assert_eq!(std::fs::read(root.path().join(name)).unwrap(), b"original");
+    assert!(
+        directory
+            .atomic_publish_from_reader(name, &mut &b"rejected"[..], true, || anyhow::bail!(
+                "revision changed"
+            ))
+            .is_err()
+    );
+    assert_eq!(std::fs::read(root.path().join(name)).unwrap(), b"original");
+    directory
+        .atomic_publish_from_reader(name, &mut &b"confirmed"[..], true, || Ok(()))
+        .unwrap();
+    assert_eq!(std::fs::read(root.path().join(name)).unwrap(), b"confirmed");
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn positional_file_open_preserves_bytes_and_requires_explicit_creation() {
+    use std::io::{Read, Seek, SeekFrom};
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    let name = OsStr::new("index.db");
+    assert!(directory.open_read_write_file(name, false).is_err());
+    assert!(!root.path().join(name).exists());
+    let mut created = directory.open_read_write_file(name, true).unwrap();
+    created.write_all(b"abcdef").unwrap();
+    created.sync_all().unwrap();
+    drop(created);
+    assert!(directory.open_read_write_file(name, true).is_err());
+    let mut reopened = directory.open_read_write_file(name, false).unwrap();
+    reopened.seek(SeekFrom::Start(2)).unwrap();
+    reopened.write_all(b"XY").unwrap();
+    reopened.rewind().unwrap();
+    let mut bytes = Vec::new();
+    reopened.read_to_end(&mut bytes).unwrap();
+    assert_eq!(bytes, b"abXYef");
+    for invalid in ["", ".", "..", "child/file"] {
+        assert!(
+            directory
+                .open_read_write_file(OsStr::new(invalid), true)
+                .is_err()
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn positional_file_open_is_rooted_and_rejects_links() {
+    use std::os::unix::fs::symlink;
+    let root = tempfile::tempdir().unwrap();
+    let active = root.path().join("active");
+    let parked = root.path().join("parked");
+    let outside = root.path().join("outside");
+    std::fs::create_dir(&active).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    let directory = PrivateDirectory::open_existing(&active).unwrap();
+    std::fs::rename(&active, &parked).unwrap();
+    symlink(&outside, &active).unwrap();
+    let mut file = directory
+        .open_read_write_file(OsStr::new("data"), true)
+        .unwrap();
+    file.write_all(b"inside").unwrap();
+    drop(file);
+    assert_eq!(std::fs::read(parked.join("data")).unwrap(), b"inside");
+    assert!(!outside.join("data").exists());
+    assert!(std::fs::metadata(parked.join("data")).unwrap().is_file());
+    symlink(parked.join("data"), parked.join("link")).unwrap();
+    std::fs::hard_link(parked.join("data"), parked.join("hard")).unwrap();
+    for name in ["link", "hard"] {
+        assert!(
+            directory
+                .open_read_write_file(OsStr::new(name), false)
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn open_child_creates_only_when_requested_and_reopens_existing_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let private = PrivateDirectory::open_existing(root.path()).unwrap();
+    assert!(private.open_child(OsStr::new("child"), false).is_err());
+    assert!(!root.path().join("child").exists());
+    let child = private.open_child(OsStr::new("child"), true).unwrap();
+    child.append(OsStr::new("content"), b"kept").unwrap();
+    let reopened = private.open_child(OsStr::new("child"), false).unwrap();
+    reopened.remove_regular_file(OsStr::new("content")).unwrap();
+    assert!(!root.path().join("child/content").exists());
+}
+
+#[test]
+fn open_child_rejects_links_files_and_non_leaf_names() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("file"), b"unchanged").unwrap();
+    create_directory_symlink(outside.path(), &root.path().join("link")).unwrap();
+    let private = PrivateDirectory::open_existing(root.path()).unwrap();
+    for create_missing in [false, true] {
+        for name in ["link", "file", "", ".", "..", "nested/child"] {
+            assert!(
+                private
+                    .open_child(OsStr::new(name), create_missing)
+                    .is_err(),
+                "{name}"
+            );
+        }
+    }
+    assert_eq!(
+        std::fs::read(root.path().join("file")).unwrap(),
+        b"unchanged"
+    );
+    assert!(std::fs::read_dir(outside.path()).unwrap().next().is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn open_child_uses_parent_handle_after_path_replacement() {
+    use std::os::unix::fs::symlink;
+    let root = tempfile::tempdir().unwrap();
+    let active = root.path().join("active");
+    let parked = root.path().join("parked");
+    let outside = root.path().join("outside");
+    std::fs::create_dir_all(active.join("existing")).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    let private = PrivateDirectory::open_existing(&active).unwrap();
+    std::fs::rename(&active, &parked).unwrap();
+    symlink(&outside, &active).unwrap();
+    private.open_child(OsStr::new("existing"), true).unwrap();
+    let child = private.open_child(OsStr::new("created"), true).unwrap();
+    child.append(OsStr::new("content"), b"private").unwrap();
+    assert_eq!(
+        std::fs::read(parked.join("created/content")).unwrap(),
+        b"private"
+    );
+    assert!(!outside.join("created").exists());
+    assert!(std::fs::metadata(parked.join("created")).unwrap().is_dir());
+}
+
+#[test]
+fn remove_regular_file_deletes_only_the_named_file() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("target.jsonl"), b"target").unwrap();
+    std::fs::write(root.path().join("keep.jsonl"), b"keep").unwrap();
+    let private = PrivateDirectory::open_existing(root.path()).unwrap();
+
+    private
+        .remove_regular_file(OsStr::new("target.jsonl"))
+        .unwrap();
+
+    assert!(!root.path().join("target.jsonl").exists());
+    assert_eq!(
+        std::fs::read(root.path().join("keep.jsonl")).unwrap(),
+        b"keep"
+    );
+    assert!(
+        private
+            .remove_regular_file(OsStr::new("missing.jsonl"))
+            .is_err()
+    );
+}
+
+#[test]
+fn remove_regular_file_rejects_directories_and_non_leaf_names() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::create_dir(root.path().join("directory")).unwrap();
+    let private = PrivateDirectory::open_existing(root.path()).unwrap();
+    for name in ["directory", "", ".", "..", "directory/child"] {
+        assert!(
+            private.remove_regular_file(OsStr::new(name)).is_err(),
+            "{name}"
+        );
+    }
+    assert!(root.path().join("directory").is_dir());
+}
+
+#[cfg(unix)]
+#[test]
+fn remove_regular_file_rejects_symlinks_and_sockets() {
+    use std::os::unix::{fs::symlink, net::UnixListener};
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("outside");
+    std::fs::write(&target, b"untouched").unwrap();
+    symlink(&target, root.path().join("link")).unwrap();
+    let _socket = UnixListener::bind(root.path().join("socket")).unwrap();
+    let private = PrivateDirectory::open_existing(root.path()).unwrap();
+    assert!(private.remove_regular_file(OsStr::new("link")).is_err());
+    assert!(private.remove_regular_file(OsStr::new("socket")).is_err());
+    assert!(
+        root.path()
+            .join("link")
+            .symlink_metadata()
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert!(root.path().join("socket").exists());
+    assert_eq!(std::fs::read(target).unwrap(), b"untouched");
+}
+
+#[cfg(unix)]
+#[test]
+fn remove_regular_file_uses_parent_handle_after_path_replacement() {
+    use std::os::unix::fs::symlink;
+    let root = tempfile::tempdir().unwrap();
+    let active = root.path().join("active");
+    let parked = root.path().join("parked");
+    let outside = root.path().join("outside");
+    std::fs::create_dir(&active).unwrap();
+    std::fs::create_dir(&outside).unwrap();
+    std::fs::write(active.join("target"), b"remove").unwrap();
+    std::fs::write(outside.join("target"), b"keep").unwrap();
+    let private = PrivateDirectory::open_existing(&active).unwrap();
+    std::fs::rename(&active, &parked).unwrap();
+    symlink(&outside, &active).unwrap();
+
+    private.remove_regular_file(OsStr::new("target")).unwrap();
+
+    assert!(!parked.join("target").exists());
+    assert_eq!(std::fs::read(outside.join("target")).unwrap(), b"keep");
+}
+
+#[cfg(unix)]
+#[test]
+fn remove_regular_file_reports_parent_sync_failure_after_unlink() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(root.path().join("target"), b"remove").unwrap();
+    let private = PrivateDirectory::open_existing(root.path()).unwrap();
+    UNIX_TEST_FAILURE_POINT.with(|failure| failure.set(UnixFailurePoint::DirectorySynced as u8));
+    let error = private
+        .remove_regular_file(OsStr::new("target"))
+        .unwrap_err();
+    assert!(format!("{error:#}").contains("DirectorySynced"));
+    assert!(!root.path().join("target").exists());
+}
+
+#[cfg(windows)]
+#[test]
+fn remove_regular_file_rejects_reparse_points() {
+    use std::os::windows::fs::{symlink_dir, symlink_file};
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("target");
+    std::fs::write(&target, b"untouched").unwrap();
+    symlink_file(&target, root.path().join("link")).unwrap();
+    symlink_dir(outside.path(), root.path().join("linked-dir")).unwrap();
+    let private = PrivateDirectory::open_existing(root.path()).unwrap();
+    for name in ["link", "linked-dir"] {
+        assert!(
+            private.remove_regular_file(OsStr::new(name)).is_err(),
+            "{name}"
+        );
+    }
+    assert!(root.path().join("link").symlink_metadata().is_ok());
+    assert!(root.path().join("linked-dir").symlink_metadata().is_ok());
+    assert_eq!(std::fs::read(target).unwrap(), b"untouched");
+}
+
+fn ensure_private_artifact_directory(path: &Path) -> Result<()> {
+    PrivateDirectory::open_or_create(path)?;
+    Ok(())
+}
+
+fn write_private_artifact_file(path: &Path, bytes: &[u8]) -> Result<()> {
+    let parent = path.parent().context("artifact file has no parent")?;
+    let name = path.file_name().context("artifact file has no name")?;
+    PrivateDirectory::open_or_create(parent)?.atomic_replace(name, bytes)
+}
+
+#[test]
+fn append_preserves_existing_bytes() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&directory).unwrap();
+
+    private.append(OsStr::new("audit.log"), b"first\n").unwrap();
+    private
+        .append(OsStr::new("audit.log"), b"second\n")
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read(directory.join("audit.log")).unwrap(),
+        b"first\nsecond\n"
+    );
+}
+
+#[test]
+fn append_held_keeps_the_actual_written_object_after_name_replacement() {
+    use std::io::Read;
+    let root = tempfile::tempdir().unwrap();
+    let private = PrivateDirectory::open_or_create(&root.path().join("private")).unwrap();
+    let name = OsStr::new("history.jsonl");
+    let held = private.append_held(name, b"first\n").unwrap();
+    let original_identity = private_file_identity(&held).unwrap();
+    let mut original_reader = private.open_regular_file(name).unwrap();
+    assert_eq!(
+        private_file_identity(&original_reader).unwrap(),
+        original_identity
+    );
+
+    private.atomic_replace(name, b"replacement\n").unwrap();
+    let replacement = private.open_regular_file(name).unwrap();
+    assert_ne!(
+        private_file_identity(&replacement).unwrap(),
+        original_identity
+    );
+    assert_eq!(private_file_identity(&held).unwrap(), original_identity);
+    let mut original_bytes = Vec::new();
+    original_reader.read_to_end(&mut original_bytes).unwrap();
+    assert_eq!(original_bytes, b"first\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn concurrent_first_append_to_one_directory_creates_one_lock_file() {
+    use std::{
+        os::unix::fs::MetadataExt,
+        sync::{Arc, Barrier},
+    };
+
+    let root = tempfile::tempdir().unwrap();
+    PrivateDirectory::open_or_create(root.path()).unwrap();
+    let directories = (0..2)
+        .map(|_| PrivateDirectory::open_existing(root.path()).unwrap())
+        .collect::<Vec<_>>();
+    let barrier = Arc::new(Barrier::new(3));
+    let workers = directories
+        .into_iter()
+        .map(|directory| {
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                let file = directory
+                    .append_held(OsStr::new("state.lock"), b"")
+                    .unwrap();
+                assert_eq!(file.metadata().unwrap().nlink(), 1);
+                private_file_identity(&file).unwrap()
+            })
+        })
+        .collect::<Vec<_>>();
+    barrier.wait();
+    let results = workers
+        .into_iter()
+        .map(|worker| worker.join())
+        .collect::<Vec<_>>();
+    let identities = results
+        .into_iter()
+        .collect::<std::thread::Result<Vec<_>>>()
+        .unwrap();
+
+    assert_eq!(identities[0], identities[1]);
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    let opened = directory
+        .open_regular_file(OsStr::new("state.lock"))
+        .unwrap();
+    assert_eq!(private_file_identity(&opened).unwrap(), identities[0]);
+    assert_eq!(opened.metadata().unwrap().nlink(), 1);
+    assert!(
+        std::fs::read(root.path().join("state.lock"))
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
+fn append_held_failure_does_not_erase_or_claim_unwritten_bytes() {
+    for (point, expected) in [
+        (AppendFailurePoint::AfterPrefix, b"original\napp".as_slice()),
+        (
+            AppendFailurePoint::FileSync,
+            b"original\nappend\n".as_slice(),
+        ),
+        (
+            AppendFailurePoint::DirectorySync,
+            b"original\nappend\n".as_slice(),
+        ),
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("private");
+        let private = PrivateDirectory::open_or_create(&path).unwrap();
+        let name = OsStr::new("history.jsonl");
+        private.append(name, b"original\n").unwrap();
+        APPEND_FAILURE_POINT.with(|failure| failure.set(point as u8));
+
+        assert!(private.append_held(name, b"append\n").is_err());
+        assert_eq!(std::fs::read(path.join(name)).unwrap(), expected);
+    }
+}
+
+#[test]
+fn append_held_rejects_hard_link_without_modifying_the_original() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&path).unwrap();
+    let outside = root.path().join("outside");
+    std::fs::write(&outside, b"outside\n").unwrap();
+    std::fs::hard_link(&outside, path.join("linked")).unwrap();
+
+    assert!(private.append_held(OsStr::new("linked"), b"no\n").is_err());
+    assert_eq!(std::fs::read(outside).unwrap(), b"outside\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn append_held_rejects_fifo_without_waiting_for_a_reader() {
+    use std::ffi::CString;
+    use std::os::unix::ffi::OsStrExt;
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&path).unwrap();
+    let fifo = CString::new(path.join("fifo").as_os_str().as_bytes()).unwrap();
+    // SAFETY: fifo is a valid NUL-terminated path inside this test's directory.
+    assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+    let (tx, rx) = std::sync::mpsc::channel();
+    let worker = std::thread::spawn(move || {
+        let _ = tx.send(private.append_held(OsStr::new("fifo"), b"no").is_err());
+    });
+    assert!(rx.recv_timeout(std::time::Duration::from_secs(2)).unwrap());
+    worker.join().unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn unix_first_append_reaches_parent_directory_sync_after_file_sync() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&directory).unwrap();
+    UNIX_TEST_FAILURE_POINT.with(|failure| failure.set(UnixFailurePoint::DirectorySynced as u8));
+
+    let error = private
+        .append(OsStr::new("audit.log"), b"first\n")
+        .unwrap_err();
+
+    assert!(format!("{error:#}").contains("DirectorySynced"));
+    assert_eq!(
+        std::fs::read(directory.join("audit.log")).unwrap(),
+        b"first\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn append_rejects_a_symlink_without_writing_outside() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&directory).unwrap();
+    let outside = root.path().join("outside.log");
+    std::fs::write(&outside, b"outside\n").unwrap();
+    symlink(&outside, directory.join("audit.log")).unwrap();
+
+    private
+        .append(OsStr::new("audit.log"), b"private\n")
+        .unwrap_err();
+
+    assert_eq!(std::fs::read(outside).unwrap(), b"outside\n");
+}
+
+#[cfg(unix)]
+#[test]
+fn open_regular_files_reopens_by_handle_and_skips_symlinks() {
+    use std::io::Read;
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&directory).unwrap();
+    private
+        .atomic_replace(OsStr::new("safe.jsonl"), b"safe")
+        .unwrap();
+    let outside = root.path().join("outside.jsonl");
+    std::fs::write(&outside, b"outside").unwrap();
+    symlink(&outside, directory.join("linked.jsonl")).unwrap();
+
+    let mut files = private
+        .open_regular_files(|name| Path::new(name).extension() == Some(OsStr::new("jsonl")))
+        .unwrap();
+
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].0, OsStr::new("safe.jsonl"));
+    let mut contents = String::new();
+    files[0].1.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "safe");
+}
+
+#[test]
+fn open_existing_regular_file_is_read_only_and_does_not_create_missing_paths() {
+    use std::io::Read;
+
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("reports");
+    std::fs::create_dir(&directory).unwrap();
+    std::fs::write(directory.join("goal.md"), b"report").unwrap();
+
+    let private = PrivateDirectory::open_existing(&directory).unwrap();
+    let mut file = private.open_regular_file(OsStr::new("goal.md")).unwrap();
+    let mut contents = String::new();
+    file.read_to_string(&mut contents).unwrap();
+
+    assert_eq!(contents, "report");
+    assert!(PrivateDirectory::open_existing(&root.path().join("missing")).is_err());
+    assert!(!root.path().join("missing").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn open_regular_file_rejects_leaf_and_ancestor_symlinks() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("goal.md"), b"outside").unwrap();
+
+    let directory = root.path().join("reports");
+    std::fs::create_dir(&directory).unwrap();
+    symlink(outside.path().join("goal.md"), directory.join("goal.md")).unwrap();
+    let private = PrivateDirectory::open_existing(&directory).unwrap();
+    assert!(private.open_regular_file(OsStr::new("goal.md")).is_err());
+
+    let linked_directory = root.path().join("linked-reports");
+    symlink(outside.path(), &linked_directory).unwrap();
+    assert!(PrivateDirectory::open_existing(&linked_directory).is_err());
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_open_regular_file_rejects_leaf_and_ancestor_reparse_points() {
+    use std::io::Read;
+    use std::os::windows::fs::{symlink_dir, symlink_file};
+
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    std::fs::write(outside.path().join("goal.md"), b"outside").unwrap();
+
+    let directory = root.path().join("reports");
+    std::fs::create_dir(&directory).unwrap();
+    std::fs::write(directory.join("safe.md"), b"safe").unwrap();
+    std::fs::create_dir(directory.join("directory.md")).unwrap();
+    symlink_file(outside.path().join("goal.md"), directory.join("linked.md")).unwrap();
+
+    let private = PrivateDirectory::open_existing(&directory).unwrap();
+    let mut safe = private.open_regular_file(OsStr::new("safe.md")).unwrap();
+    let mut contents = String::new();
+    safe.read_to_string(&mut contents).unwrap();
+    assert_eq!(contents, "safe");
+    assert!(private.open_regular_file(OsStr::new("linked.md")).is_err());
+    assert!(
+        private
+            .open_regular_file(OsStr::new("directory.md"))
+            .is_err()
+    );
+    assert!(private.open_regular_file(OsStr::new("missing.md")).is_err());
+    assert!(!directory.join("missing.md").exists());
+
+    let linked_directory = root.path().join("linked-reports");
+    symlink_dir(outside.path(), &linked_directory).unwrap();
+    assert!(PrivateDirectory::open_existing(&linked_directory).is_err());
+}
+
+#[test]
+fn atomic_replace_keeps_distinct_names_independent() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&directory).unwrap();
+
+    private
+        .atomic_replace(OsStr::new("one.jsonl"), b"one")
+        .unwrap();
+    private
+        .atomic_replace(OsStr::new("two.jsonl"), b"two")
+        .unwrap();
+    private
+        .atomic_replace(OsStr::new("one.jsonl"), b"new-one")
+        .unwrap();
+
+    assert_eq!(
+        std::fs::read(directory.join("one.jsonl")).unwrap(),
+        b"new-one"
+    );
+    assert_eq!(std::fs::read(directory.join("two.jsonl")).unwrap(), b"two");
+}
+
+#[test]
+fn concurrent_readers_never_observe_a_partial_atomic_replacement() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("private");
+    let private = Arc::new(PrivateDirectory::open_or_create(&directory).unwrap());
+    let first = vec![b'a'; 64 * 1024];
+    let second = vec![b'b'; 64 * 1024];
+    private
+        .atomic_replace(OsStr::new("state.bin"), &first)
+        .unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let reader_stop = Arc::clone(&stop);
+    let reader_path = directory.join("state.bin");
+    let first_for_reader = first.clone();
+    let second_for_reader = second.clone();
+    let reader = std::thread::spawn(move || {
+        while !reader_stop.load(Ordering::Acquire) {
+            let bytes = std::fs::read(&reader_path).unwrap();
+            assert!(bytes == first_for_reader || bytes == second_for_reader);
+        }
+    });
+
+    for index in 0..100 {
+        let bytes = if index % 2 == 0 { &second } else { &first };
+        private
+            .atomic_replace(OsStr::new("state.bin"), bytes)
+            .unwrap();
+    }
+    stop.store(true, Ordering::Release);
+    reader.join().unwrap();
+}
+
+#[test]
+fn public_operations_reject_non_basename_names() {
+    let root = tempfile::tempdir().unwrap();
+    let private = PrivateDirectory::open_or_create(&root.path().join("private")).unwrap();
+
+    for name in ["", ".", "..", "nested/file", "../outside"] {
+        assert!(
+            private.atomic_replace(OsStr::new(name), b"no").is_err(),
+            "{name}"
+        );
+        assert!(private.append(OsStr::new(name), b"no").is_err(), "{name}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_rejects_reserved_and_ambiguous_names() {
+    let root = tempfile::tempdir().unwrap();
+    let private = PrivateDirectory::open_or_create(&root.path().join("private")).unwrap();
+
+    for name in [
+        "CON",
+        "nul.txt",
+        "COM1.jsonl",
+        "LPT9",
+        "trail.",
+        "trail ",
+        "a:b",
+    ] {
+        assert!(
+            private.atomic_replace(OsStr::new(name), b"no").is_err(),
+            "{name}"
+        );
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_append_and_loader_reject_file_reparse_points() {
+    use std::os::windows::fs::symlink_file;
+
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("private");
+    let private = PrivateDirectory::open_or_create(&directory).unwrap();
+    let outside = root.path().join("outside.jsonl");
+    std::fs::write(&outside, b"outside\n").unwrap();
+    symlink_file(&outside, directory.join("linked.jsonl")).unwrap();
+
+    private
+        .append(OsStr::new("linked.jsonl"), b"private\n")
+        .unwrap_err();
+    let files = private
+        .open_regular_files(|name| name == OsStr::new("linked.jsonl"))
+        .unwrap();
+
+    assert!(files.is_empty());
+    assert_eq!(std::fs::read(outside).unwrap(), b"outside\n");
+}
+
+#[test]
+fn private_write_replaces_atomically_without_leaving_temporary_files() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("nested").join("artifacts");
+    let target = directory.join("state.json");
+
+    write_private_artifact_file(&target, b"first").unwrap();
+    write_private_artifact_file(&target, b"second").unwrap();
+
+    assert_eq!(std::fs::read(&target).unwrap(), b"second");
+    assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 1);
+}
+
+#[test]
+fn failed_replace_removes_its_unique_temporary_file() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("artifacts");
+    let target = directory.join("occupied");
+    ensure_private_artifact_directory(&target).unwrap();
+
+    write_private_artifact_file(&target, b"cannot replace a directory").unwrap_err();
+
+    assert!(target.is_dir());
+    assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn unix_temporary_guard_removes_create_failures_without_replacing_target() {
+    use std::os::unix::fs::symlink;
+
+    for point in [UnixFailurePoint::AfterTemporaryCreate] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("artifacts");
+        ensure_private_artifact_directory(&directory).unwrap();
+        let outside = root.path().join("outside.json");
+        std::fs::write(&outside, b"outside").unwrap();
+        let target = directory.join("state.json");
+        symlink(&outside, &target).unwrap();
+        UNIX_TEST_FAILURE_POINT.with(|failure| failure.set(point as u8));
+
+        let error = write_private_artifact_file(&target, b"private").unwrap_err();
+
+        assert!(format!("{error:#}").contains(&format!("{point:?}")));
+        assert!(
+            std::fs::symlink_metadata(&target)
+                .unwrap()
+                .file_type()
+                .is_symlink(),
+            "{point:?}"
+        );
+        assert_eq!(std::fs::read(&target).unwrap(), b"outside", "{point:?}");
+        assert_eq!(std::fs::read(&outside).unwrap(), b"outside", "{point:?}");
+        let names = std::fs::read_dir(&directory)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name())
+            .collect::<Vec<_>>();
+        assert_eq!(names, [OsString::from("state.json")], "{point:?}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_verbatim_paths_preserve_drive_and_unc_anchors() {
+    for (path, expected_anchor) in [
+        (r"\\?\C:\private\artifacts", r"\\?\C:\"),
+        (
+            r"\\?\UNC\server\share\private\artifacts",
+            r"\\?\UNC\server\share\",
+        ),
+    ] {
+        let (anchor, components) = absolute_path_components(Path::new(path)).unwrap();
+        assert_eq!(anchor, PathBuf::from(expected_anchor));
+        assert_eq!(
+            components,
+            vec![OsString::from("private"), OsString::from("artifacts")]
+        );
+    }
+    let mut long = PathBuf::from(r"\\?\C:\");
+    for _ in 0..6 {
+        long.push("long-directory-component".repeat(3));
+    }
+    let (anchor, components) = absolute_path_components(&long).unwrap();
+    assert_eq!(anchor, PathBuf::from(r"\\?\C:\"));
+    assert_eq!(components.len(), 6);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_prefix_policy_accepts_drive_and_unc_but_rejects_namespaces() {
+    let (drive, drive_components) =
+        absolute_path_components(Path::new(r"C:\private\artifacts")).unwrap();
+    assert_eq!(drive, Path::new(r"C:\"));
+    assert_eq!(
+        drive_components,
+        [OsString::from("private"), OsString::from("artifacts")]
+    );
+
+    let (unc, unc_components) =
+        absolute_path_components(Path::new(r"\\server\share\private\artifacts")).unwrap();
+    assert_eq!(unc, Path::new(r"\\server\share\"));
+    assert_eq!(
+        unc_components,
+        [OsString::from("private"), OsString::from("artifacts")]
+    );
+
+    for unsupported in [
+        r"\\.\PhysicalDrive0\artifacts",
+        r"\\?\GLOBALROOT\Device\HarddiskVolume1\artifacts",
+    ] {
+        assert!(
+            absolute_path_components(Path::new(unsupported)).is_err(),
+            "namespace path must be rejected: {unsupported}"
+        );
+    }
+    assert!(absolute_path_components(Path::new(r"C:relative\artifacts")).is_err());
+}
+
+#[test]
+fn identity_reopen_requires_the_original_directory() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let first = temp.path().join("first");
+    let second = temp.path().join("second");
+    let original = PrivateDirectory::open_or_create(&first)?;
+    PrivateDirectory::open_or_create(&second)?;
+    let identity = original.directory_identity()?;
+    assert_eq!(
+        PrivateDirectory::reopen_with_identity(&first, &identity)?.directory_identity()?,
+        identity
+    );
+    assert!(PrivateDirectory::reopen_with_identity(&second, &identity).is_err());
+    Ok(())
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_reparse_safe_path_open_rejects_link_ancestors() -> Result<()> {
+    let owned = tempfile::tempdir()?;
+    let original = owned.path().join("ordinary").join("leaf");
+    let expected = PrivateDirectory::open_or_create(&original)?;
+    let (anchor, components) = absolute_path_components(&original)?;
+    let root = windows_native::open_absolute_directory(&anchor)?;
+    let actual = PrivateDirectory {
+        directory: windows_native::open_directory_without_reparse(&root, &components)?,
+    };
+    let identity = expected.directory_identity()?;
+    assert_eq!(actual.directory_identity()?, identity);
+
+    let link = owned.path().join("alias");
+    match std::os::windows::fs::symlink_dir(owned.path().join("ordinary"), &link) {
+        Ok(()) => {}
+        Err(error) if error.raw_os_error() == Some(1314) => {
+            eprintln!("link-ancestor check skipped because this account cannot create a symlink");
+            return Ok(());
+        }
+        Err(error) => return Err(error.into()),
+    }
+    let redirected = link.join("leaf");
+    let (_, redirected_components) = absolute_path_components(&redirected)?;
+    assert!(windows_native::open_directory_without_reparse(&root, &redirected_components).is_err());
+    assert!(PrivateDirectory::reopen_with_identity(&redirected, &identity).is_err());
+    Ok(())
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_verbatim_directory_writes_support_long_paths() {
+    use std::io::Read;
+    let temp = tempfile::tempdir().unwrap();
+    let mut canonical = std::fs::canonicalize(temp.path()).unwrap();
+    for _ in 0..6 {
+        canonical.push("long-directory-component".repeat(3));
+    }
+    std::fs::create_dir_all(&canonical).unwrap();
+    let private = PrivateDirectory::open_existing(&canonical).unwrap();
+    let name = OsStr::new("history.jsonl");
+    private.append(name, b"first\n").unwrap();
+    let mut old = private.open_regular_file(name).unwrap();
+    private.atomic_replace(name, b"replacement\n").unwrap();
+    assert_eq!(
+        std::fs::read(canonical.join(name)).unwrap(),
+        b"replacement\n"
+    );
+    let mut old_bytes = Vec::new();
+    old.read_to_end(&mut old_bytes).unwrap();
+    assert_eq!(old_bytes, b"first\n");
+    drop(old);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_temporary_handle_guard_removes_every_injected_failure() {
+    for point in [
+        WindowsFailurePoint::AfterTemporaryCreate,
+        WindowsFailurePoint::BeforeRename,
+    ] {
+        let root = tempfile::tempdir().unwrap();
+        let directory = root.path().join("artifacts");
+        ensure_private_artifact_directory(&directory).unwrap();
+        WINDOWS_TEST_FAILURE_POINT.with(|failure| failure.set(Some(point)));
+
+        write_private_artifact_file(&directory.join("state.json"), b"private").unwrap_err();
+
+        assert_eq!(
+            std::fs::read_dir(&directory).unwrap().count(),
+            0,
+            "{point:?}"
+        );
+    }
+}
+
+#[cfg(windows)]
+fn assert_windows_handle_relative_rename_supports_basename(target_name: &str) {
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("artifacts");
+    ensure_private_artifact_directory(&directory).unwrap();
+    let parent = open_private_artifact_directory(&directory, true).unwrap();
+    let source_name = OsStr::new("source.tmp");
+    let mut source = windows_native::create_new_file(&parent, source_name).unwrap();
+    source.write_all(b"private").unwrap();
+    source.sync_all().unwrap();
+
+    windows_native::rename_handle_relative(&source, &parent, OsStr::new(target_name)).unwrap();
+    drop(source);
+
+    assert!(!directory.join(source_name).exists());
+    assert_eq!(
+        std::fs::read(directory.join(target_name)).unwrap(),
+        b"private"
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_handle_relative_rename_supports_single_bmp_basename() {
+    assert_windows_handle_relative_rename_supports_basename("文");
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_handle_relative_rename_supports_non_bmp_basename() {
+    assert_windows_handle_relative_rename_supports_basename("🦀");
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_final_rename_remains_bound_to_the_open_parent_handle() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let active = root.path().join("active");
+    let artifacts = active.join("artifacts");
+    ensure_private_artifact_directory(&artifacts).unwrap();
+    let outside_artifacts = outside.path().join("artifacts");
+    std::fs::create_dir(&outside_artifacts).unwrap();
+
+    let sequence = 4_000_000_000u64;
+    TEMPORARY_FILE_SEQUENCE.store(sequence, Ordering::Release);
+    let temporary_name = format!(".state.json.{}.{}.tmp", std::process::id(), sequence);
+    let outside_target = outside_artifacts.join("state.json");
+    let outside_temporary = outside_artifacts.join(&temporary_name);
+    std::fs::write(&outside_target, b"outside-target").unwrap();
+    std::fs::write(&outside_temporary, b"outside-temporary").unwrap();
+
+    WINDOWS_TEST_RENAME_REACHED.store(false, Ordering::Release);
+    WINDOWS_TEST_PAUSE_BEFORE_RENAME.store(true, Ordering::Release);
+    let target = artifacts.join("state.json");
+    let writer = std::thread::spawn(move || {
+        WINDOWS_TEST_RENAME_SELECTED.with(|selected| selected.set(true));
+        write_private_artifact_file(&target, b"private")
+    });
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while !WINDOWS_TEST_RENAME_REACHED.load(Ordering::Acquire) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "writer did not reach the final rename window"
+        );
+        std::thread::yield_now();
+    }
+
+    let parked = root.path().join("parked");
+    let root_handle = PrivateDirectory::open_existing(root.path()).unwrap();
+    // MoveFileEx refuses an ancestor with open children. Exercise the stronger
+    // POSIX rename attack through the same native, handle-relative primitive.
+    let relocation = root_handle.rename_no_replace(OsStr::new("active"), OsStr::new("parked"));
+    if relocation.is_ok() {
+        if let Err(error) = create_directory_symlink(outside.path(), &active) {
+            WINDOWS_TEST_PAUSE_BEFORE_RENAME.store(false, Ordering::Release);
+            let _ = writer.join();
+            panic!("failed to install the directory symlink during the rename window: {error}");
+        }
+    }
+    WINDOWS_TEST_PAUSE_BEFORE_RENAME.store(false, Ordering::Release);
+    writer.join().unwrap().unwrap();
+    let original = match relocation {
+        Ok(()) => parked.as_path(),
+        Err(error) => {
+            // Some Windows filesystems prevent moving an ancestor with open
+            // children. Verify that denial and the completed write; do not skip.
+            assert!(
+                error.chain().any(|cause| cause
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|cause| cause.kind() == std::io::ErrorKind::PermissionDenied)),
+                "{error:#}"
+            );
+            assert!(!parked.exists());
+            active.as_path()
+        }
+    };
+
+    assert_eq!(std::fs::read(&outside_target).unwrap(), b"outside-target");
+    assert_eq!(
+        std::fs::read(&outside_temporary).unwrap(),
+        b"outside-temporary"
+    );
+    assert_eq!(
+        std::fs::read(original.join("artifacts").join("state.json")).unwrap(),
+        b"private"
+    );
+    if original == parked {
+        std::fs::remove_dir(&active).unwrap();
+        std::fs::rename(&parked, &active).unwrap();
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn private_write_replaces_a_target_symlink_without_following_it() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join("artifacts");
+    ensure_private_artifact_directory(&directory).unwrap();
+    let outside = root.path().join("outside.txt");
+    std::fs::write(&outside, b"outside").unwrap();
+    let target = directory.join("state.json");
+    symlink(&outside, &target).unwrap();
+
+    write_private_artifact_file(&target, b"private").unwrap();
+
+    assert_eq!(std::fs::read(&outside).unwrap(), b"outside");
+    assert_eq!(std::fs::read(&target).unwrap(), b"private");
+    assert!(
+        !std::fs::symlink_metadata(&target)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn private_directory_rejects_a_symlinked_ancestor() {
+    use std::os::unix::fs::symlink;
+
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let link = root.path().join("linked");
+    symlink(outside.path(), &link).unwrap();
+
+    let error = ensure_private_artifact_directory(&link.join("artifacts")).unwrap_err();
+
+    assert!(format!("{error:#}").contains("symlink"));
+    assert!(!outside.path().join("artifacts").exists());
+
+    let ordinary = outside.path().join("artifacts");
+    std::fs::create_dir(&ordinary).unwrap();
+    assert!(PrivateDirectory::open_existing(&ordinary).is_ok());
+    assert!(PrivateDirectory::open_existing(&link).is_err());
+    assert!(PrivateDirectory::open_existing(&link.join("artifacts")).is_err());
+    assert!(PrivateDirectory::open_existing(&ordinary.join("..")).is_err());
+}
+
+#[cfg(any(unix, windows))]
+#[test]
+fn concurrent_parent_symlink_replacement_never_writes_outside() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let active = root.path().join("volatile");
+    std::fs::create_dir(&active).unwrap();
+    std::fs::write(outside.path().join("marker"), b"outside").unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let swaps = Arc::new(AtomicUsize::new(0));
+    let attacker_stop = Arc::clone(&stop);
+    let attacker_swaps = Arc::clone(&swaps);
+    let active_for_attacker = active.clone();
+    let outside_for_attacker = outside.path().to_path_buf();
+    let attacker = std::thread::spawn(move || {
+        let mut sequence = 0u64;
+        while !attacker_stop.load(Ordering::Acquire) {
+            sequence += 1;
+            let parked = active_for_attacker.with_extension(format!("parked-{sequence}"));
+            if std::fs::rename(&active_for_attacker, &parked).is_err() {
+                std::thread::yield_now();
+                continue;
+            }
+            if create_directory_symlink(&outside_for_attacker, &active_for_attacker).is_ok() {
+                attacker_swaps.fetch_add(1, Ordering::Relaxed);
+                std::thread::sleep(std::time::Duration::from_micros(50));
+                let _ = std::fs::remove_file(&active_for_attacker);
+            }
+            let _ = std::fs::rename(&parked, &active_for_attacker);
+        }
+    });
+
+    for index in 0..1_000 {
+        let _ = write_private_artifact_file(
+            &active.join("artifacts").join("state.json"),
+            format!("private-{index}").as_bytes(),
+        );
+    }
+    stop.store(true, Ordering::Release);
+    attacker.join().unwrap();
+
+    assert!(swaps.load(Ordering::Relaxed) > 0);
+    assert_eq!(
+        std::fs::read(outside.path().join("marker")).unwrap(),
+        b"outside"
+    );
+    assert!(!outside.path().join("artifacts").exists());
+    assert!(!outside.path().join("state.json").exists());
+}
+
+#[cfg(unix)]
+fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::unix::fs::symlink(target, link)
+}
+
+#[cfg(windows)]
+fn create_directory_symlink(target: &Path, link: &Path) -> std::io::Result<()> {
+    std::os::windows::fs::symlink_dir(target, link)
+}
+
+#[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
+#[test]
+fn no_replace_rename_preserves_existing_files_and_directories() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    for is_directory in [false, true] {
+        let source = root.path().join("source");
+        let target = root.path().join("target");
+        if is_directory {
+            std::fs::create_dir(&source).unwrap();
+            std::fs::create_dir(&target).unwrap();
+            std::fs::write(source.join("child"), b"source").unwrap();
+            std::fs::write(target.join("child"), b"target").unwrap();
+        } else {
+            std::fs::write(&source, b"source").unwrap();
+            std::fs::write(&target, b"target").unwrap();
+        }
+        assert!(
+            directory
+                .rename_no_replace(OsStr::new("source"), OsStr::new("target"))
+                .is_err()
+        );
+        assert_eq!(
+            std::fs::read(if is_directory {
+                target.join("child")
+            } else {
+                target.clone()
+            })
+            .unwrap(),
+            b"target"
+        );
+        if is_directory {
+            std::fs::remove_dir_all(&target).unwrap();
+        } else {
+            std::fs::remove_file(&target).unwrap();
+        }
+        directory
+            .rename_no_replace(OsStr::new("source"), OsStr::new("target"))
+            .unwrap();
+        assert!(!source.exists());
+        assert_eq!(
+            std::fs::read(if is_directory {
+                target.join("child")
+            } else {
+                target.clone()
+            })
+            .unwrap(),
+            b"source"
+        );
+        if is_directory {
+            std::fs::remove_dir_all(&target).unwrap();
+        } else {
+            std::fs::remove_file(&target).unwrap();
+        }
+    }
+}
+
+#[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
+#[test]
+fn retained_publication_preserves_actual_old_entry_and_restores_on_recheck_failure() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    let name = OsStr::new("note.txt");
+    let previous = OsStr::new("previous.txt");
+    std::fs::write(root.path().join(name), b"original").unwrap();
+    let saved = directory
+        .publish_retaining_previous(name, &mut &b"new"[..], previous, |file| {
+            anyhow::ensure!(
+                file.metadata()?.is_file(),
+                "expected regular previous entry"
+            );
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(saved.metadata().unwrap().len(), 3);
+    assert_eq!(
+        std::fs::read(root.path().join(previous)).unwrap(),
+        b"original"
+    );
+    assert_eq!(std::fs::read(root.path().join(name)).unwrap(), b"new");
+    drop(saved);
+    std::fs::remove_file(root.path().join(previous)).unwrap();
+    let mut checks = 0;
+    assert!(
+        directory
+            .publish_retaining_previous(name, &mut &b"rejected"[..], previous, |file| {
+                checks += 1;
+                if checks == 2 {
+                    anyhow::bail!("changed after staging");
+                }
+                anyhow::ensure!(
+                    file.metadata()?.is_file(),
+                    "expected regular previous entry"
+                );
+                Ok(())
+            })
+            .is_err()
+    );
+    assert_eq!(checks, 2);
+    assert_eq!(std::fs::read(root.path().join(name)).unwrap(), b"new");
+    assert!(!root.path().join(previous).exists());
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+}
+
+#[cfg(any(target_os = "linux", target_vendor = "apple", windows))]
+#[test]
+fn failed_retained_publication_never_overwrites_an_external_new_destination() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    let name = OsStr::new("note.txt");
+    let previous = OsStr::new("previous.txt");
+    std::fs::write(root.path().join(name), b"original").unwrap();
+    let mut checks = 0;
+    let error = directory
+        .publish_retaining_previous(name, &mut &b"proposed"[..], previous, |file| {
+            checks += 1;
+            if checks == 2 {
+                std::fs::write(root.path().join(name), b"external new entry")?;
+            }
+            anyhow::ensure!(
+                file.metadata()?.is_file(),
+                "expected regular previous entry"
+            );
+            Ok(())
+        })
+        .unwrap_err();
+    assert!(error.to_string().contains("previous.txt"), "{error:#}");
+    assert_eq!(
+        std::fs::read(root.path().join(name)).unwrap(),
+        b"external new entry"
+    );
+    assert_eq!(
+        std::fs::read(root.path().join(previous)).unwrap(),
+        b"original"
+    );
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 2);
+}
+
+#[cfg(any(target_os = "linux", target_vendor = "apple"))]
+#[test]
+fn no_replace_rename_moves_a_leaf_link_without_following_its_target() {
+    let root = tempfile::tempdir().unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    let external = outside.path().join("external");
+    std::fs::write(&external, b"external").unwrap();
+    std::os::unix::fs::symlink(&external, root.path().join("source")).unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    assert!(
+        directory
+            .entry_metadata(OsStr::new("source"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    directory
+        .rename_no_replace(OsStr::new("source"), OsStr::new("target"))
+        .unwrap();
+    assert!(
+        directory
+            .entry_metadata(OsStr::new("target"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+    assert_eq!(
+        std::fs::read_link(root.path().join("target")).unwrap(),
+        external
+    );
+    assert_eq!(std::fs::read(&external).unwrap(), b"external");
+}
+
+#[cfg(unix)]
+#[test]
+fn retained_publication_restores_previous_when_directory_sync_fails_after_move() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_existing(root.path()).unwrap();
+    std::fs::write(root.path().join("note.txt"), b"original").unwrap();
+    UNIX_TEST_FAILURE_POINT.with(|failure| failure.set(UnixFailurePoint::DirectorySynced as u8));
+    let error = directory
+        .publish_retaining_previous(
+            OsStr::new("note.txt"),
+            &mut &b"new"[..],
+            OsStr::new("previous"),
+            |file| {
+                anyhow::ensure!(
+                    file.metadata()?.is_file(),
+                    "expected regular previous entry"
+                );
+                Ok(())
+            },
+        )
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("previous version restored"),
+        "{error:#}"
+    );
+    assert_eq!(
+        std::fs::read(root.path().join("note.txt")).unwrap(),
+        b"original"
+    );
+    assert_eq!(std::fs::read_dir(root.path()).unwrap().count(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn atomic_journal_snapshot_keeps_an_opened_unlinked_inode_without_accepting_aliases() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_or_create(root.path()).unwrap();
+    directory
+        .atomic_replace(OsStr::new("entry"), b"old")
+        .unwrap();
+    let mut opened = directory.open_regular_file(OsStr::new("entry")).unwrap();
+    directory
+        .atomic_replace(OsStr::new("entry"), b"new")
+        .unwrap();
+    assert!(verify_reader_links(&opened, false).is_err());
+    verify_reader_links(&opened, true).unwrap();
+    let mut content = Vec::new();
+    std::io::Read::read_to_end(&mut opened, &mut content).unwrap();
+    assert_eq!(content, b"old");
+    let mut current = directory
+        .open_regular_file_snapshot(OsStr::new("entry"))
+        .unwrap();
+    content.clear();
+    std::io::Read::read_to_end(&mut current, &mut content).unwrap();
+    assert_eq!(content, b"new");
+    std::fs::hard_link(root.path().join("entry"), root.path().join("alias")).unwrap();
+    assert!(
+        directory
+            .open_regular_file_snapshot(OsStr::new("entry"))
+            .is_err()
+    );
+    std::fs::remove_file(root.path().join("entry")).unwrap();
+    std::os::unix::fs::symlink(root.path().join("alias"), root.path().join("entry")).unwrap();
+    assert!(
+        directory
+            .open_regular_file_snapshot(OsStr::new("entry"))
+            .is_err()
+    );
+}
+
+#[test]
+fn short_exclusive_lock_waits_for_a_transient_holder_but_not_a_lasting_one() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_or_create(&root.path().join("locks")).unwrap();
+    let name = OsStr::new("short.lock");
+    let holder = directory.try_exclusive_lock(name).unwrap().unwrap();
+    let release = std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        drop(holder);
+    });
+    assert!(
+        directory
+            .exclusive_lock_within(name, std::time::Duration::from_secs(5))
+            .unwrap()
+            .is_some(),
+        "a holder that releases within the wait must not read as busy"
+    );
+    release.join().unwrap();
+    let _lasting = directory.try_exclusive_lock(name).unwrap().unwrap();
+    let started = std::time::Instant::now();
+    assert!(
+        directory
+            .exclusive_lock_within(name, std::time::Duration::from_millis(150))
+            .unwrap()
+            .is_none()
+    );
+    assert!(started.elapsed() >= std::time::Duration::from_millis(150));
+}
+/// A child forked from this process, parked between fork and exec while it
+/// still carries every descriptor inherited from the parent.
+#[cfg(unix)]
+struct ChildBeforeExec {
+    gate: std::io::PipeWriter,
+    spawner: std::thread::JoinHandle<std::process::Child>,
+}
+
+#[cfg(unix)]
+impl ChildBeforeExec {
+    fn fork() -> Self {
+        use std::io::Read;
+        use std::os::fd::AsRawFd;
+        use std::os::unix::process::CommandExt;
+        let (gate_reader, gate) = std::io::pipe().unwrap();
+        let (mut ready_reader, ready_writer) = std::io::pipe().unwrap();
+        let (gate_fd, ready_fd) = (gate_reader.as_raw_fd(), ready_writer.as_raw_fd());
+        let mut command = std::process::Command::new("/bin/sh");
+        command.args(["-c", ":"]);
+        // SAFETY: the hook only calls async-signal-safe write/read on pipe
+        // descriptors that stay open until the spawner thread is joined.
+        unsafe {
+            command.pre_exec(move || {
+                let mut byte = 0_u8;
+                libc::write(ready_fd, (&raw const byte).cast(), 1);
+                libc::read(gate_fd, (&raw mut byte).cast(), 1);
+                Ok(())
+            });
+        }
+        // `spawn` returns only after exec, so it runs on its own thread.
+        let spawner = std::thread::spawn(move || {
+            let child = command.spawn().unwrap();
+            drop((gate_reader, ready_writer));
+            child
+        });
+        let mut ready = [0_u8];
+        ready_reader.read_exact(&mut ready).unwrap();
+        Self { gate, spawner }
+    }
+
+    fn exec_and_wait(mut self) {
+        use std::io::Write;
+        self.gate.write_all(&[1]).unwrap();
+        assert!(self.spawner.join().unwrap().wait().unwrap().success());
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn lock_guard_releases_a_lock_still_inherited_by_a_child_before_exec() {
+    let root = tempfile::tempdir().unwrap();
+    let directory = PrivateDirectory::open_or_create(&root.path().join("locks")).unwrap();
+    let name = OsStr::new("ledger.lock");
+
+    // Closing a plain lock handle leaves the lock owned by the child's
+    // inherited duplicate until exec; this is the false "busy" window.
+    let plain = directory.try_exclusive_lock(name).unwrap().unwrap();
+    let child = ChildBeforeExec::fork();
+    drop(plain);
+    let while_inherited = directory.try_exclusive_lock(name).unwrap();
+    child.exec_and_wait();
+    assert!(
+        while_inherited.is_none(),
+        "the fixture must reproduce an inherited flock"
+    );
+
+    let guard = directory.try_exclusive_lock_guard(name).unwrap().unwrap();
+    let child = ChildBeforeExec::fork();
+    drop(guard);
+    let exclusive_acquired = directory.try_exclusive_lock_guard(name).unwrap().is_some();
+    let shared_acquired = directory.try_shared_lock_guard(name).unwrap().is_some();
+    child.exec_and_wait();
+    assert!(
+        exclusive_acquired && shared_acquired,
+        "a released guard must not stay owned by an inherited descriptor"
+    );
+
+    // Explicit release must not weaken exclusion against a live owner.
+    let _owner = directory.try_exclusive_lock_guard(name).unwrap().unwrap();
+    assert!(directory.try_exclusive_lock_guard(name).unwrap().is_none());
+    assert!(directory.try_shared_lock_guard(name).unwrap().is_none());
+}

@@ -1,0 +1,24 @@
+[package]
+name = "kcoder_document_parsers"
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[dependencies]
+kcoder_tool_error = { path = "../tool_error" }
+chrono = { workspace = true }
+encoding_rs = "0.8.35"
+html5ever = "0.38"
+percent-encoding = "2.3"
+quick-xml = "0.39.4"
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+zip = { version = "2.4.2", default-features = false, features = ["deflate"] }
+
+[lib]
+path = "../../src/internal/document_parsers/lib.rs"

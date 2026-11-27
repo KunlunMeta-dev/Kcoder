@@ -1,0 +1,81 @@
+[package]
+name = "kcoder_cli"
+default-run = "kcoder"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "kcoder"
+path = "src/main.rs"
+
+[[bin]]
+name = "kcoder-e2e-stdio-driver"
+path = "src/e2e_stdio_driver.rs"
+required-features = ["e2e-http-transport"]
+
+[features]
+web-network-test-fixture = ["kcoder_cli_runtime/web-network-test-fixture"]
+e2e-http-transport = ["kcoder_cli_runtime/e2e-http-transport"]
+
+[dependencies]
+anyhow.workspace = true
+kcoder_cli_runtime = { path = "internal/cli_runtime" }
+kcoder_cli_headless = { path = "internal/cli_headless" }
+kcoder_repl = { path = "../kcoder_repl" }
+
+[dev-dependencies]
+kcoder_acp = { path = "../kcoder_acp" }
+kcoder_evolution = { path = "../kcoder_evolution" }
+kcoder_process_supervisor = { path = "../kcoder_process_supervisor" }
+kcoder_computer_use = { path = "../kcoder_computer_use" }
+kcoder_types = { path = "../kcoder_types" }
+kcoder_app_protocol = { path = "../kcoder_app_protocol" }
+kcoder_api = { path = "../kcoder_api" }
+kcoder_state = { path = "../kcoder_state" }
+kcoder_tools = { path = "../kcoder_tools" }
+kcoder_workflow = { path = "../kcoder_workflow" }
+kcoder_knowledge = { path = "../kcoder_knowledge" }
+kcoder_skills = { path = "../kcoder_skills" }
+kcoder_plugins = { path = "../kcoder_plugins" }
+kcoder_migration = { path = "../kcoder_migration" }
+kcoder_native_scope = { path = "internal/native_scope", features = ["native-identity-test-hooks"] }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+sha2 = { workspace = true }
+chrono = { workspace = true }
+dunce = { workspace = true }
+base64 = "0.22"
+fs2 = "0.4"
+libc = { workspace = true }
+reqwest = { workspace = true }
+which = { workspace = true }
+walkdir = { workspace = true }
+rusqlite = { workspace = true }
+kcoder_test_harness = { path = "../../tests/harness" }
+kcoder_config = { path = "../kcoder_config", features = ["private-file-test-hooks", "provider-test-fixtures"] }
+jsonschema = { workspace = true }
+tempfile = { workspace = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-sys = { version = "0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Pipes",
+    "Win32_System_SystemInformation",
+    "Win32_System_IO",
+    "Win32_System_Ioctl",
+    "Win32_System_Threading",
+    "Win32_Security",
+  "Win32_Security_Authorization",
+    "Win32_System_Console",
+    "Win32_System_Diagnostics_ToolHelp",
+] }

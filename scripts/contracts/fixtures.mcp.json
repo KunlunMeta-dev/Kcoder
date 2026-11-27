@@ -1,0 +1,323 @@
+{
+  "McpConnectionAttempt": {
+    "valid": [
+      {
+        "name": "legacy_missing_reason",
+        "value": {
+          "status": "unavailable"
+        }
+      },
+      {
+        "name": "explicit_null_reason",
+        "value": {
+          "status": "timedOut",
+          "failureReason": null
+        }
+      },
+      {
+        "name": "connectionFailed",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "connectionFailed"
+        }
+      },
+      {
+        "name": "protocolFailed",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "protocolFailed"
+        }
+      },
+      {
+        "name": "authorizationRequired",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "authorizationRequired"
+        }
+      },
+      {
+        "name": "timedOut",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "timedOut"
+        }
+      },
+      {
+        "name": "unavailable",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "unavailable"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_reason",
+        "value": {
+          "status": "unavailable",
+          "failureReason": "futureReason"
+        }
+      },
+      {
+        "name": "unknown_status",
+        "value": {
+          "status": "future"
+        }
+      },
+      {
+        "name": "non_string_reason",
+        "value": {
+          "status": "unavailable",
+          "failureReason": 42
+        }
+      }
+    ]
+  },
+  "McpFailureReason": {
+    "valid": [
+      {
+        "name": "connectionFailed",
+        "value": "connectionFailed"
+      },
+      {
+        "name": "protocolFailed",
+        "value": "protocolFailed"
+      },
+      {
+        "name": "authorizationRequired",
+        "value": "authorizationRequired"
+      },
+      {
+        "name": "timedOut",
+        "value": "timedOut"
+      },
+      {
+        "name": "unavailable",
+        "value": "unavailable"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_failure_label",
+        "value": "futureReason"
+      },
+      {
+        "name": "raw_sensitive_details",
+        "value": "fixture-secret"
+      },
+      {
+        "name": "numeric",
+        "value": 1
+      },
+      {
+        "name": "null",
+        "value": null
+      }
+    ]
+  },
+  "McpServerParams": {
+    "valid": [
+      {
+        "name": "original_selector",
+        "value": {
+          "name": "owned-original",
+          "pluginId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "no_endpoint_override",
+        "value": {
+          "name": "owned-original",
+          "endpoint": "https://untrusted.invalid/"
+        }
+      }
+    ]
+  },
+  "McpServerSummary": {
+    "valid": [
+      {
+        "name": "legacy_without_failure_fields",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable"
+        }
+      },
+      {
+        "name": "explicit_null_failure",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionAttempt": null,
+          "lastConnectionFailure": null
+        }
+      },
+      {
+        "name": "protocol_failure",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionAttempt": "unavailable",
+          "lastConnectionFailure": "protocolFailed"
+        }
+      },
+      {
+        "name": "authorization_required",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "reauthorizationRequired",
+          "lastConnectionAttempt": "unavailable",
+          "lastConnectionFailure": "authorizationRequired"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_failure_label",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionFailure": "futureReason"
+        }
+      },
+      {
+        "name": "raw_authorization_text",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "fixture-secret"
+        }
+      },
+      {
+        "name": "wrong_attempt_type",
+        "value": {
+          "name": "fixture",
+          "transport": "stdio",
+          "authorization": "notApplicable",
+          "lastConnectionAttempt": 3
+        }
+      }
+    ]
+  },
+  "McpSetEnabledParams": {
+    "valid": [
+      {
+        "name": "standalone_disable",
+        "value": {
+          "name": "search",
+          "enabled": false
+        }
+      },
+      {
+        "name": "plugin_enable",
+        "value": {
+          "name": "plugin.demo.search",
+          "pluginId": "demo",
+          "enabled": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_enabled",
+        "value": {
+          "name": "search"
+        }
+      },
+      {
+        "name": "string_flag",
+        "value": {
+          "name": "search",
+          "enabled": "false"
+        }
+      },
+      {
+        "name": "unknown_field",
+        "value": {
+          "name": "search",
+          "enabled": false,
+          "other": true
+        }
+      }
+    ]
+  },
+  "McpSetEnabledResult": {
+    "valid": [
+      {
+        "name": "disabled",
+        "value": {
+          "name": "search",
+          "enabled": false,
+          "appliesToNewConversations": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_flag",
+        "value": {
+          "name": "search",
+          "appliesToNewConversations": true
+        }
+      }
+    ]
+  },
+  "ThreadMcpServerV1": {
+    "valid": [
+      {
+        "name": "minimal_stdio",
+        "value": {
+          "name": "editor",
+          "command": "/usr/bin/node"
+        }
+      },
+      {
+        "name": "private_windows_launch",
+        "value": {
+          "name": "origincut",
+          "command": "D:\\Test App\\node.exe",
+          "args": [
+            "D:\\Test App\\tool.js"
+          ],
+          "env": {
+            "TEST_TOKEN": "fixture-private-value"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing_command",
+        "value": {
+          "name": "editor"
+        }
+      },
+      {
+        "name": "not_a_launch",
+        "value": []
+      },
+      {
+        "name": "environment_is_not_a_map",
+        "value": {
+          "name": "editor",
+          "command": "node",
+          "env": []
+        }
+      },
+      {
+        "name": "unsupported_transport_field",
+        "value": {
+          "name": "editor",
+          "command": "node",
+          "transport": "http"
+        }
+      }
+    ]
+  }
+}

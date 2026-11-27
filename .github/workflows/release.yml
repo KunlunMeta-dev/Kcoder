@@ -1,0 +1,143 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  COREPACK_ENABLE_AUTO_PIN: "0"
+
+jobs:
+  studio-windows:
+    name: KCoder Studio Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 120
+    outputs:
+      installer: ${{ steps.artifact.outputs.installer }}
+      sha256: ${{ steps.artifact.outputs.sha256 }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: "1.95"
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          key: release-studio-windows
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check the product version and release tag
+        shell: pwsh
+        run: |
+          $version = node scripts/release/client-version.mjs --check
+          if ($LASTEXITCODE -ne 0) { throw "Client version validation failed" }
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw "Release tag does not match Studio product version" }
+          $sourceCommit = git rev-parse 'HEAD^{commit}'
+          if ($LASTEXITCODE -ne 0) { throw "Cannot resolve the frozen source commit" }
+          "KCODER_RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "KCODER_RELEASE_EXPECTED_COMMIT=$sourceCommit" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Install JavaScript dependencies
+        shell: pwsh
+        run: |
+          corepack enable
+          if ($LASTEXITCODE -ne 0) { throw "Corepack setup failed" }
+          corepack prepare pnpm@11.24.0 --activate
+          if ($LASTEXITCODE -ne 0) { throw "Pinned pnpm setup failed" }
+          pnpm --dir apps/kcoder-studio install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "Studio dependency installation failed" }
+          pnpm --dir apps/kcoder-studio/renderer install --frozen-lockfile
+          if ($LASTEXITCODE -ne 0) { throw "Renderer dependency installation failed" }
+          pnpm --dir apps/kcoder-studio/skill-runtime install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw "Skill runtime dependency installation failed" }
+      - name: Prepare the pinned lark-cli
+        shell: pwsh
+        run: |
+          # Hash-verified official release binary; beforePack reuses this verified copy.
+          node scripts/release/prepare-lark-cli.mjs --platform win-x64 --dest target/packages/kcoder-studio/windows-input/lark-cli
+          if ($LASTEXITCODE -ne 0) { throw "lark-cli preparation failed" }
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          pnpm --dir apps/kcoder-studio desktop:pack:win
+          if ($LASTEXITCODE -ne 0) { throw "Windows installer build failed" }
+      - name: Verify actual packaged resources
+        shell: pwsh
+        run: |
+          $packageRoot = "target/packages/kcoder-studio/windows/win-unpacked"
+          node scripts/release/artifact-manifest.mjs --verify "$packageRoot/resources" $env:KCODER_RELEASE_EXPECTED_COMMIT
+          if ($LASTEXITCODE -ne 0) { throw "Packaged resource verification failed" }
+          $env:KCODER_E2E_PACKAGED_DIR = (Resolve-Path $packageRoot).Path
+          $env:KCODER_STUDIO_WINDOWS_PACKAGED_DIR = $env:KCODER_E2E_PACKAGED_DIR
+          $env:KCODER_E2E_PROCESS_SUPERVISOR_BIN = Join-Path $env:KCODER_E2E_PACKAGED_DIR "resources/bin/kcoder-process-supervisor.exe"
+          $env:KCODER_E2E_PACKAGED_WIDGET_LIFECYCLE = '1'
+          node --test apps/kcoder-studio/desktop/windows-packaged-artifact.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Packaged Windows inventory acceptance failed" }
+          node apps/kcoder-studio/e2e/run-all.mjs --model-independent --suite packaged-desktop-smoke
+          if ($LASTEXITCODE -ne 0) { throw "Packaged Studio acceptance failed" }
+      - name: Select only the Windows setup executable
+        id: artifact
+        shell: pwsh
+        run: |
+          $version = $env:KCODER_RELEASE_VERSION
+          $installer = "target/packages/kcoder-studio/windows/KCoder-Studio-Setup-$version-win-x64.exe"
+          if (-not (Test-Path -LiteralPath $installer -PathType Leaf)) { throw "Windows installer is missing" }
+          $out = "target/dist/studio-windows"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item -LiteralPath $installer -Destination $out
+          $filename = [System.IO.Path]::GetFileName($installer)
+          $sha256 = (Get-FileHash -LiteralPath (Join-Path $out $filename) -Algorithm SHA256).Hash.ToLowerInvariant()
+          "installer=$filename" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "sha256=$sha256" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          "Installer SHA256: $sha256 ($filename)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kcoder-studio-windows-installer
+          path: target/dist/studio-windows/${{ steps.artifact.outputs.installer }}
+          if-no-files-found: error
+
+  publish:
+    needs: studio-windows
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: kcoder-studio-windows-installer
+          path: artifacts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify downloaded installer identity before publishing
+        env:
+          EXPECTED_INSTALLER: ${{ needs.studio-windows.outputs.installer }}
+          EXPECTED_SHA256: ${{ needs.studio-windows.outputs.sha256 }}
+        run: |
+          node --input-type=module <<'EOF'
+          import { readFile } from 'node:fs/promises';
+          import { createHash } from 'node:crypto';
+          const filename = process.env.EXPECTED_INSTALLER;
+          const expected = process.env.EXPECTED_SHA256;
+          if (!/^KCoder-Studio-Setup-[0-9A-Za-z.+-]+-win-x64\.exe$/.test(filename ?? '') ||
+              !/^[a-f0-9]{64}$/.test(expected ?? '')) throw new Error('Missing frozen installer identity');
+          const actual = createHash('sha256').update(await readFile(`artifacts/${filename}`)).digest('hex');
+          if (actual !== expected) throw new Error('Downloaded installer differs from the verified build output');
+          console.log(`Verified installer SHA256: ${actual}`);
+          EOF
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: artifacts/${{ needs.studio-windows.outputs.installer }}

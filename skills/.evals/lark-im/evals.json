@@ -1,0 +1,81 @@
+{
+  "skill_name": "lark-im",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "给『产品周会』群发一条消息，内容是本周发布清单（三条要点，带标题）。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Find the chat_id with +chat-search, then send a --markdown message with +messages-send.",
+      "expectations": [
+        "Resolves the group's chat_id with +chat-search instead of guessing it",
+        "Sends with im +messages-send using --chat-id",
+        "Uses --markdown for the formatted list"
+      ],
+      "assertions": [
+        {
+          "contains": "+messages-send"
+        },
+        {
+          "contains": "+chat-search"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Find the messages from last week where someone mentioned \"invoice\" in any chat I am in. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Search across chats with +messages-search using the keyword and a time range.",
+      "expectations": [
+        "Uses im +messages-search with the keyword invoice",
+        "Restricts the search to last week's time range",
+        "Uses user identity because it searches the user's own chats"
+      ],
+      "assertions": [
+        {
+          "contains": "+messages-search"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "回复消息 om_abc123，在它的话题里说『已修复，请复测』。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Reply with +messages-reply --reply-in-thread to the given message id.",
+      "expectations": [
+        "Uses im +messages-reply with --message-id om_abc123",
+        "Adds --reply-in-thread so the reply appears in the thread"
+      ],
+      "assertions": [
+        {
+          "contains": "--reply-in-thread"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Download the PDF attachment from message om_file789 in chat oc_team42. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Download with +messages-resources-download using the message id and file key.",
+      "expectations": [
+        "Uses im +messages-resources-download for the attachment",
+        "Gets the file key from the message (for example with +messages-mget) before downloading"
+      ],
+      "assertions": [
+        {
+          "contains": "+messages-resources-download"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "把飞书文档 https://example.feishu.cn/docx/DocIm001 的内容原样发到群 oc_ops01。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Fetch the document with --doc-format im-markdown and send the fetched text unchanged with --markdown.",
+      "expectations": [
+        "Fetches the document with docs +fetch --doc-format im-markdown",
+        "Sends the fetched content unchanged with +messages-send --markdown to oc_ops01",
+        "Keeps user cite tags in the content instead of stripping them"
+      ],
+      "assertions": [
+        {
+          "contains": "im-markdown"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1428 @@
+import { createLocalCodexPluginApi } from '@/api/local/codexPlugins'
+import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
+import type { RuntimeInputRecovery } from '@/kcoder/runtimeTaskCreationError'
+import { navigateTo } from '@/lib/navigation'
+import { isTerminalInput } from '@/features/workbench/inputDelivery'
+import { useStudioWorkMode } from '@/features/workbench/studioWorkMode'
+import { requestLocalExecutor } from '@/host/localExecutor'
+import { readModelConfiguration } from '../../../../shared/modelConfiguration'
+import { ComputerUseSubmit } from '@/features/computer-use/ComputerUseSubmit'
+import { ComputerUseStatus } from '@/features/computer-use/ComputerUseStatus'
+import { WorkflowReusePicker } from '@/features/workflows/WorkflowReusePicker'
+import type { WorkflowComposerIntent } from '@/features/workflows/useWorkflowComposerIntent'
+import { ClipboardList, Files, Layers, GitBranch } from 'lucide-react'
+import { SettingsSelect } from '@/components/settings/SettingsSelect'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Button } from '@/components/ui/button'
+import { useTranslation } from '@/hooks/useTranslation'
+import { useTransientNotice } from '@/hooks/useTransientNotice'
+import { visibleRuntimeGoal } from '@/lib/runtime-goal'
+import type {
+  Attachment,
+  AttachmentUploadError,
+  DeviceInfo,
+  LocalDeviceApp,
+  LocalDeviceSkill,
+  ModelOptions,
+  PluginPathComponent,
+  ProjectExecutionMode,
+  ProjectWithTasks,
+  RuntimeContextUsage,
+  RuntimeGoal,
+  RuntimeExecutionModes,
+  RuntimeSessionMode,
+  RuntimeSessionModesResponse,
+  RuntimePlanEventPayload,
+  RuntimeTaskAddress,
+  RuntimeWorkListResponse,
+  SkillRef,
+  UnifiedModel,
+  UnifiedSkill,
+} from '@/types/api'
+import type {
+  GuidanceWorkbenchMessage,
+  QueuedWorkbenchMessage,
+  WorkbenchMessage,
+} from '@/types/workbench'
+import { composerInputHistory } from './composer/composerInputHistory'
+import type { CodeCommentContext, WorkspaceFileApi, WorkspaceTarget } from '@/types/workspace-files'
+import { parseComposerSlashInput, type SlashCommand } from './composer/composerAutocomplete'
+import type { CloudProject } from '@/api/deliveries'
+import type { ComposerCloudMentionCandidate } from './composer/composerMentionCandidates'
+import {
+  buildConversationMentionCandidates,
+  type ConversationMentionCandidate,
+} from '@/lib/conversation-mentions'
+import { ConversationQueuePanel } from './ConversationQueuePanel'
+import { CompactChatComposer } from './composer/CompactChatComposer'
+import { GoalStatusBar } from './composer/GoalStatusBar'
+import { ComposerModePill } from './composer/GoalDraftPill'
+import { ExecutionModeInfo } from './composer/ExecutionModeInfo'
+import type { ComposerExecutionMode } from './composer/composerExecutionModes'
+import { ProjectChatComposer } from './composer/ProjectChatComposer'
+import { TaskPlanProgress } from './composer/TaskPlanProgress'
+import {
+  ComposerStatusItem,
+  ComposerStatusNotice,
+  ComposerStatusRegion,
+  useComposerStatusItem,
+} from './composer/ComposerStatusRegion'
+
+export type ProjectCreateMode = 'scratch' | 'existing' | 'git'
+
+export interface ProjectChatControls {
+  scopeKey?: string
+  models: UnifiedModel[]
+  skills: UnifiedSkill[]
+  selectedModel: UnifiedModel | null
+  activeModel?: UnifiedModel | null
+  selectedModelOptions: ModelOptions
+  isModelSelectionReady?: boolean
+  trialTemplates?: PluginPathComponent[]
+  selectedSkills: SkillRef[]
+  attachments: Attachment[]
+  uploadingFiles: Map<string, { file: File; progress: number; cancel?: () => void }>
+  errors: Map<string, AttachmentUploadError>
+  contextUsage?: RuntimeContextUsage
+  isOptionsLocked: boolean
+  modelSelectorOpenSignal?: number
+  requestModelSelectorOpen?: () => void
+  onModelSelectorOpenChange?: (open: boolean) => void
+  setSelectedModel: (model: UnifiedModel | null) => void
+  setSelectedModelAndOptions?: (model: UnifiedModel, options: ModelOptions) => void
+  queueActiveTurnModelSelection?: (model: UnifiedModel) => Promise<boolean>
+  setSelectedModelOption: (optionId: string, value: string) => void
+  getSelectedModel?: () => UnifiedModel | null
+  getSelectedModelOptions?: () => ModelOptions
+  onBlockedModelSelect?: (model: UnifiedModel, message?: string) => void
+  toggleSkill: (skill: SkillRef) => void
+  handleFileSelect: (files: File | File[]) => Promise<void>
+  cancelUpload?: (fileId: string) => void
+  removeAttachment: (attachmentId: number) => Promise<void>
+  listLocalSkills: () => Promise<LocalDeviceSkill[]>
+  listLocalApps?: () => Promise<LocalDeviceApp[]>
+}
+
+export interface ProjectWorkControls {
+  projects: ProjectWithTasks[]
+  devices: DeviceInfo[]
+  runtimeWork?: RuntimeWorkListResponse | null
+  currentProject?: ProjectWithTasks | null
+  currentProjectId?: number
+  currentStandaloneDeviceId?: string | null
+  standaloneWorkspacePath?: string | null
+  currentRuntimeDeviceId?: string | null
+  currentRuntimeTask?: RuntimeTaskAddress | null
+  selectedDeviceWorkspaceId?: number | null
+  pendingProjectWorkspaceProjectId?: number | null
+  executionMode: ProjectExecutionMode
+  executionModeLocked?: boolean
+  isGitProject?: boolean
+  onSelectProject: (projectId: number | null) => void
+  onSelectStandaloneDevice: (deviceId: string | null) => void
+  onSelectProjectWorkspace?: (projectId: number, deviceWorkspaceId: number | null) => void
+  onBindProjectWorkspace?: (projectId: number) => void
+  onExecutionModeChange: (mode: ProjectExecutionMode) => void
+  onCreateProjectMode?: (mode: ProjectCreateMode) => void
+  branchName?: string
+  branchLoading?: boolean
+  onRefreshBranch?: () => Promise<void>
+  onListBranches?: () => Promise<string[]>
+  onCheckoutBranch?: (branchName: string) => Promise<void>
+  onCreateBranch?: (branchName: string) => Promise<void>
+  worktreeBranch?: string | null
+  onWorktreeBranchChange?: (branchName: string | null) => void
+  projectMenuOpenSignal?: number
+  projectMenuAnchorElement?: HTMLElement | null
+}
+
+export interface ChatInputProps {
+  slashActions?: readonly SlashCommand[]
+  historyMessages?: readonly WorkbenchMessage[]
+  inputHistoryScope?: string
+  workflowNavigationActive?: boolean
+  workflowIntent?: WorkflowComposerIntent & { onChange: (value: WorkflowComposerIntent) => void }
+  sessionMode?: RuntimeSessionMode
+  /** Read-only template badge for a running session; the choice stays frozen. */
+  settingsTemplateBadge?: {
+    name: string
+    status: 'current' | 'drifted' | 'missing'
+  }
+  /** Session settings template choice for a not-yet-started conversation. */
+  settingsTemplatePicker?: {
+    value?: string
+    placeholder: string
+    options: Array<{ id: string; name: string; isDefault: boolean }>
+    onChange: (id?: string) => void
+  }
+  onInspectExecutionModes?: () => Promise<RuntimeSessionModesResponse>
+  value: string
+  onChange: (value: string) => void
+  onSubmit: (valueOverride?: string, options?: ChatSubmitOptions) => void | Promise<void>
+  disabled: boolean
+  submitDisabled?: boolean
+  error?: string | null
+  errorRecovery?: RuntimeInputRecovery
+  onRetryError?: () => void
+  retryingError?: boolean
+  disabledReason?: string
+  placeholder?: string
+  variant?: 'compact' | 'desktop'
+  projectChat?: ProjectChatControls
+  projectWork?: ProjectWorkControls
+  showProjectWorkBar?: boolean
+  queuedMessages?: QueuedWorkbenchMessage[]
+  guidanceMessages?: GuidanceWorkbenchMessage[]
+  codeComments?: CodeCommentContext[]
+  onCancelQueuedMessage?: (id: string) => void
+  onSendQueuedAsGuidance?: (id: string) => void
+  onInterruptAndSendQueuedMessage?: (id: string) => void
+  onEditQueuedMessage?: (id: string) => void
+  onReorderQueuedMessages?: (sourceId: string, targetId: string) => void
+  queuePaused?: boolean
+  onResumeQueue?: () => void
+  onResumeQueueWithInput?: (
+    valueOverride?: string,
+    options?: ChatSubmitOptions
+  ) => void | Promise<void>
+  onClearQueue?: () => void
+  onCancelGuidanceMessage?: (id: string) => void
+  onClearCodeComments?: () => void
+  onOpenSkillFile?: (path: string) => void
+  workspaceTarget?: WorkspaceTarget | null
+  workspaceFileApi?: WorkspaceFileApi
+  cloudMentionCandidates?: ComposerCloudMentionCandidate[]
+  cloudProjectCandidates?: ComposerCloudMentionCandidate[]
+  cloudSpaceEnabled?: boolean
+  onSelectCloudProject?: (project: CloudProject) => void
+  isStreaming?: boolean
+  onPause?: () => void | Promise<void>
+  onShortenWait?: () => void
+  shortenWaitAvailable?: boolean
+  toolbarLeadingContext?: ReactNode
+  projectContext?: ReactNode
+  onCompactContext?: () => void | Promise<void>
+  goal?: RuntimeGoal | null
+  goalContinuing?: boolean
+  taskPlan?: RuntimePlanEventPayload | null
+  taskPlanStale?: boolean
+  goalDraftActive?: boolean
+  goalDraftMode?: RuntimeGoal['mode']
+  onSetGoal?: (mode?: RuntimeGoal['mode']) => void
+  onCancelGoalDraft?: () => void
+  onEditGoal?: () => void
+  onPauseGoal?: () => void
+  onResumeGoal?: () => void
+  onClearGoal?: () => void
+}
+
+export interface ChatSubmitOptions extends RuntimeExecutionModes {
+  computerUse?: import('@/types/api').RuntimeComputerUseAuthorization
+  onExecutionModeAccepted?: () => void
+  guideWhenBusy?: boolean
+  interruptWhenBusy?: boolean
+}
+
+interface PendingQueuedSend {
+  valueOverride?: string
+  options?: ChatSubmitOptions
+}
+
+interface PendingModelSelection {
+  scope: string
+  model: UnifiedModel | null
+  options?: ModelOptions
+}
+
+function isSameModel(left: UnifiedModel | null | undefined, right: UnifiedModel | null): boolean {
+  return left?.name === right?.name && left?.type === right?.type
+}
+
+function PluginTrialTemplateStrip({
+  templates,
+  presentation,
+}: {
+  templates: PluginPathComponent[]
+  presentation?: 'detail' | 'embedded'
+}) {
+  const { t } = useTranslation('common')
+  const visibleTemplates = templates.filter(template => !template.unavailableReason).slice(0, 8)
+  if (visibleTemplates.length === 0) return null
+
+  const detail = (
+    <section
+      className={
+        presentation === 'embedded' || presentation === 'detail'
+          ? 'min-w-0'
+          : 'studio-card-spacing mb-2 rounded-2xl border border-border/70 bg-background shadow-[0_10px_32px_rgba(0,0,0,0.06)]'
+      }
+      data-testid="plugin-trial-template-strip"
+      aria-label={t('workbench.plugin_trial_templates', '模板')}
+    >
+      {!presentation && (
+        <div className="mb-2 text-sm font-medium leading-5 text-text-muted">
+          {t('workbench.plugin_trial_templates', '模板')}
+        </div>
+      )}
+      <div className="flex gap-3 overflow-x-auto pb-1">
+        {visibleTemplates.map(template => (
+          <div
+            key={template.path}
+            className="w-[132px] shrink-0 rounded-xl border border-border/70 bg-surface/50 p-3"
+            data-testid="plugin-trial-template-card"
+          >
+            <div className="mb-3 flex h-[72px] items-center justify-center rounded-lg border border-border/60 bg-background">
+              {template.logoUrl || template.logoUrlDark ? (
+                <img
+                  src={template.logoUrl || template.logoUrlDark || ''}
+                  alt=""
+                  className="h-9 w-9 object-contain"
+                />
+              ) : (
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-sm font-medium text-text-secondary">
+                  {template.name.slice(0, 1).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <div className="truncate text-sm font-medium leading-5 text-text-primary">
+              {template.name}
+            </div>
+            {template.description ? (
+              <div className="mt-0.5 line-clamp-2 text-xs leading-4 text-text-muted">
+                {template.description}
+              </div>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+
+  if (presentation === 'detail') return detail
+  if (presentation === 'embedded') {
+    return (
+      <ComposerStatusItem
+        id="templates"
+        title={t('workbench.plugin_trial_templates', 'Templates')}
+        count={visibleTemplates.length}
+        icon={Files}
+      >
+        {detail}
+      </ComposerStatusItem>
+    )
+  }
+  return detail
+}
+
+export function ChatInput({
+  historyMessages,
+  inputHistoryScope,
+  slashActions,
+  value,
+  onChange,
+  onSubmit,
+  disabled,
+  submitDisabled = false,
+  error,
+  errorRecovery,
+  onRetryError,
+  retryingError = false,
+  disabledReason,
+  placeholder,
+  variant = 'compact',
+  projectChat,
+  projectWork,
+  showProjectWorkBar = true,
+  queuedMessages = [],
+  guidanceMessages = [],
+  codeComments = [],
+  onCancelQueuedMessage,
+  onSendQueuedAsGuidance,
+  onInterruptAndSendQueuedMessage,
+  onEditQueuedMessage,
+  onReorderQueuedMessages,
+  queuePaused,
+  onResumeQueue,
+  onResumeQueueWithInput,
+  onClearQueue,
+  onCancelGuidanceMessage,
+  onClearCodeComments,
+  onOpenSkillFile,
+  workspaceTarget,
+  workspaceFileApi,
+  cloudMentionCandidates,
+  cloudProjectCandidates,
+  cloudSpaceEnabled,
+  onSelectCloudProject,
+  isStreaming = false,
+  onPause,
+  onShortenWait,
+  shortenWaitAvailable,
+  toolbarLeadingContext,
+  projectContext,
+  onCompactContext,
+  goal,
+  goalContinuing = false,
+  taskPlan,
+  taskPlanStale,
+  goalDraftActive: suppliedGoalDraftActive = false,
+  goalDraftMode = 'standard',
+  onSetGoal: suppliedOnSetGoal,
+  sessionMode,
+  workflowIntent,
+  workflowNavigationActive = true,
+  settingsTemplatePicker,
+  settingsTemplateBadge,
+  onInspectExecutionModes,
+  onCancelGoalDraft,
+  onEditGoal,
+  onPauseGoal,
+  onResumeGoal,
+  onClearGoal,
+}: ChatInputProps) {
+  const hasComposerStatusRegion = useComposerStatusItem('queue').available
+  const [slashSubmitError, setSlashSubmitError] = useState<string | null>(null)
+  const [executionDraft, setExecutionDraft] = useState<{
+    scope: string
+    mode: ComposerExecutionMode
+  } | null>(null)
+  const { t } = useTranslation('common')
+  const { t: tChat } = useTranslation('chat')
+  const supportsGoal = useStudioWorkMode(projectWork?.currentRuntimeTask) === 'kcoder'
+  const onSetGoal = supportsGoal ? suppliedOnSetGoal : undefined
+  const goalDraftActive = supportsGoal && suppliedGoalDraftActive
+  const [pendingQueuedSend, setPendingQueuedSend] = useState<PendingQueuedSend | null>(null)
+  const [pendingModelSelection, setPendingModelSelection] = useState<PendingModelSelection | null>(
+    null
+  )
+  const hasPendingQueuedMessages = queuedMessages.some(message => !isTerminalInput(message.status))
+  const displayedGoal = supportsGoal ? visibleRuntimeGoal(goal) : null
+  const inputPlaceholder = goalDraftActive
+    ? goalDraftMode === 'strict'
+      ? t('workbench.goal_pro_input_placeholder', '输入需要独立验证完成情况的目标')
+      : goalDraftMode === 'arrangement'
+        ? t('workbench.ultgoal_input_placeholder', '输入需要多智能体编排完成的目标')
+        : t('workbench.goal_input_placeholder', 'KCoder Studio 应该往哪个方向努力?')
+    : (placeholder ?? t('workbench.input_placeholder', '随心输入'))
+  const pluginTargetId =
+    workspaceTarget?.deviceId ??
+    projectWork?.currentRuntimeTask?.deviceId ??
+    projectWork?.currentRuntimeDeviceId ??
+    projectWork?.currentStandaloneDeviceId ??
+    undefined
+  const pluginWorkspacePath =
+    workspaceTarget?.path ?? projectWork?.currentRuntimeTask?.workspacePath ?? undefined
+  const pluginScope = usePluginTargetScope(pluginTargetId, pluginWorkspacePath)
+  const pluginSources = useMemo(() => {
+    if (!pluginTargetId) return undefined
+    const api = createLocalCodexPluginApi({
+      deviceId: pluginTargetId,
+      workspacePath: pluginWorkspacePath,
+      isScopeCurrent: pluginScope.isCurrent,
+    })
+    return {
+      plugins: async () => (await api.listInstalledPlugins()).items,
+      skills: () => api.listSkills({ cwds: pluginWorkspacePath ? [pluginWorkspacePath] : [] }),
+    }
+  }, [pluginTargetId, pluginWorkspacePath, pluginScope.isCurrent])
+  const controls: ProjectChatControls = projectChat ?? {
+    models: [],
+    skills: [],
+    selectedModel: null,
+    selectedModelOptions: {},
+    isModelSelectionReady: true,
+    trialTemplates: [],
+    selectedSkills: [],
+    attachments: [],
+    uploadingFiles: new Map(),
+    errors: new Map(),
+    contextUsage: undefined,
+    isOptionsLocked: false,
+    modelSelectorOpenSignal: undefined,
+    requestModelSelectorOpen: undefined,
+    setSelectedModel: () => {},
+    setSelectedModelOption: () => {},
+    onBlockedModelSelect: () => {},
+    toggleSkill: () => {},
+    handleFileSelect: async () => {},
+    cancelUpload: () => {},
+    removeAttachment: async () => {},
+    listLocalSkills: async () => [],
+    listLocalApps: async () => [],
+  }
+  const conversationMentionCandidates = useMemo(
+    () =>
+      buildConversationMentionCandidates(
+        projectWork?.runtimeWork,
+        projectWork?.currentRuntimeTask
+      ).map(candidate => conversationMentionCandidate(candidate, t)),
+    [projectWork?.currentRuntimeTask, projectWork?.runtimeWork, t]
+  )
+
+  const planModeActive = controls.selectedModelOptions.collaborationMode === 'plan'
+  const handleSetPlanMode = () => {
+    if (goalDraftActive) {
+      onCancelGoalDraft?.()
+    }
+    controls.setSelectedModelOption('collaborationMode', 'plan')
+  }
+  const handleClearPlanMode = () => {
+    controls.setSelectedModelOption('collaborationMode', 'default')
+  }
+  const handleCompactContext = onCompactContext
+    ? () => {
+        void onCompactContext()
+      }
+    : undefined
+
+  const applyModelSelection = (model: UnifiedModel | null, options?: ModelOptions) => {
+    if (options && model && controls.setSelectedModelAndOptions) {
+      controls.setSelectedModelAndOptions(model, options)
+      return
+    }
+    controls.setSelectedModel(model)
+  }
+
+  const executionScope = `${controls.scopeKey ?? workspaceTarget?.path ?? ''}:${projectWork?.currentRuntimeTask?.taskId ?? 'draft'}`
+  const executionMode = executionDraft?.scope === executionScope ? executionDraft.mode : null
+  const modeQueryRef = useRef(0)
+  const executionScopeRef = useRef(executionScope)
+  useLayoutEffect(() => {
+    executionScopeRef.current = executionScope
+  }, [executionScope])
+  const [modelSwitching, setModelSwitching] = useState<{ scope: string } | null>(null)
+  const [modelSwitchNotice, setModelSwitchNotice] = useState<string | null>(null)
+  // Each shown notice is a fresh entry so a repeated switch restarts its timer.
+  const modelNoticeEntry = useMemo(
+    () => (modelSwitchNotice === null ? null : { scope: modelSwitchNotice }),
+    [modelSwitchNotice]
+  )
+  const clearModelNotice = useCallback(
+    (entry: { scope: string }) =>
+      setModelSwitchNotice(current => (current === entry.scope ? null : current)),
+    []
+  )
+  const modelNoticeFading = useTransientNotice(modelNoticeEntry, clearModelNotice)
+  const modelSwitchFlight = useRef<{ scope: string } | null>(null)
+  const [stoppingScope, setStoppingScope] = useState<{ scope: string } | null>(null)
+  const stopFlight = useRef<{ scope: string } | null>(null)
+  useLayoutEffect(() => () => {
+    modelSwitchFlight.current = null
+    stopFlight.current = null
+  }, [executionScope])
+
+  const requestModelSelection = (model: UnifiedModel | null, options?: ModelOptions) => {
+    if (modelSwitchFlight.current?.scope === executionScope) return
+    setModelSwitchNotice(null)
+    const selectionChangesModel = !isSameModel(controls.selectedModel, model)
+    if (selectionChangesModel && controls.activeModel &&
+      !isSameModel(controls.activeModel, model)) {
+      setPendingModelSelection({ scope: executionScope, model, options })
+      return
+    }
+    applyModelSelection(model, options)
+  }
+
+  const confirmModelSelection = async () => {
+    if (pendingModelSelection?.scope !== executionScope ||
+      modelSwitchFlight.current?.scope === executionScope) return
+    const { model, options } = pendingModelSelection
+    const queue = model && controls.activeModel && controls.queueActiveTurnModelSelection
+    const flight = { scope: executionScope }
+    modelSwitchFlight.current = flight
+    setSlashSubmitError(null)
+    setModelSwitching(flight)
+    try {
+      const queued = queue && model ? await queue(model) : false
+      if (modelSwitchFlight.current !== flight) return
+      applyModelSelection(model, options)
+      setModelSwitchNotice(queued ? null : executionScope)
+    } catch (error) {
+      if (modelSwitchFlight.current !== flight) return
+      setSlashSubmitError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (modelSwitchFlight.current === flight) {
+        modelSwitchFlight.current = null
+      }
+      setModelSwitching(current => current === flight ? null : current)
+      setPendingModelSelection(current => current === pendingModelSelection ? null : current)
+    }
+  }
+
+  const stopResponse = onPause ? async () => {
+    if (stopFlight.current?.scope === executionScope) return
+    const flight = { scope: executionScope }
+    stopFlight.current = flight
+    setStoppingScope(flight)
+    try {
+      await onPause()
+    } catch (error) {
+      if (stopFlight.current === flight)
+        setSlashSubmitError(error instanceof Error ? error.message : String(error))
+    } finally {
+      if (stopFlight.current === flight) stopFlight.current = null
+      setStoppingScope(current => current === flight ? null : current)
+    }
+  } : undefined
+  const stopping = isStreaming && stoppingScope?.scope === executionScope
+
+  const [modeInfo, setModeInfo] = useState<{ scope: string; text: string } | null>(null)
+  const [localWorkflowIntent, setLocalWorkflowIntent] = useState<WorkflowComposerIntent>({
+    active: false,
+  })
+  const workflowDraftIntent = workflowIntent ?? localWorkflowIntent
+  const setWorkflowIntent = workflowIntent?.onChange ?? setLocalWorkflowIntent
+  const workflowDefinitionId = workflowDraftIntent.definitionId
+  useEffect(() => {
+    if (!workflowNavigationActive) return
+    const select = () => {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('workflow') === 'new' && !workflowIntent) {
+        const draft = params.get('workflowDraft')
+        setWorkflowIntent({
+          active: true,
+          definitionId: draft && /^[a-zA-Z0-9_-]{1,128}$/.test(draft) ? draft : undefined,
+        })
+      }
+    }
+    select()
+    window.addEventListener('popstate', select)
+    return () => window.removeEventListener('popstate', select)
+  }, [
+    executionScope,
+    onChange,
+    projectWork?.currentRuntimeTask,
+    t,
+    workflowIntent,
+    setWorkflowIntent,
+    workflowNavigationActive,
+  ])
+  const workflowSelected = workflowDraftIntent.active && !projectWork?.currentRuntimeTask
+  const canSelectOrchestrate = !projectWork?.currentRuntimeTask && !isStreaming
+  const selectExecutionMode = (mode: ComposerExecutionMode) => {
+    setWorkflowIntent({ active: false })
+    if (mode === 'orchestrate' && !canSelectOrchestrate) {
+      setSlashSubmitError(t('workbench.orchestrate_before_first_message'))
+      return
+    }
+    setSlashSubmitError(null)
+    onCancelGoalDraft?.()
+    handleClearPlanMode()
+    setExecutionDraft({ scope: executionScope, mode })
+    setModeInfo(null)
+    const query = ++modeQueryRef.current
+    if (mode !== 'orchestrate' && onInspectExecutionModes) {
+      void onInspectExecutionModes()
+        .then(result => {
+          if (query !== modeQueryRef.current || executionScopeRef.current !== executionScope) return
+          if (mode === 'moa-plan' && result.moaPlanError) {
+            setSlashSubmitError(result.moaPlanError)
+          } else {
+            setModeInfo({
+              scope: executionScope,
+              text: mode === 'moa' ? result.moaSummary : result.moaPlanPlanners.join('\n'),
+            })
+          }
+        })
+        .catch(error => {
+          if (query === modeQueryRef.current && executionScopeRef.current === executionScope) {
+            setSlashSubmitError(error instanceof Error ? error.message : String(error))
+          }
+        })
+    }
+  }
+  const executionModes =
+    onSetGoal && sessionMode !== 'workflow_draft'
+      ? { canSelectOrchestrate, onSelect: selectExecutionMode }
+      : undefined
+  const selectGoal = onSetGoal
+    ? (mode?: RuntimeGoal['mode']) => {
+        setWorkflowIntent({ active: false })
+        modeQueryRef.current += 1
+        setModeInfo(null)
+        setExecutionDraft(null)
+        onSetGoal(mode)
+      }
+    : undefined
+  const selectPlanMode = () => {
+    setWorkflowIntent({ active: false })
+    modeQueryRef.current += 1
+    setModeInfo(null)
+    setExecutionDraft(null)
+    handleSetPlanMode()
+  }
+
+  const handleSubmit = (valueOverride?: string, options?: ChatSubmitOptions) => {
+    if (
+      options?.computerUse &&
+      (isStreaming ||
+        hasPendingQueuedMessages ||
+        queuePaused ||
+        executionMode ||
+        workflowSelected ||
+        goalDraftActive)
+    ) {
+      setSlashSubmitError(t('computerUse.immediateOnly'))
+      return
+    }
+    const submittedValue = (valueOverride ?? value).trim()
+    const slashInput = parseComposerSlashInput(submittedValue)
+    if (slashInput) {
+      const goalMode =
+        slashInput.name === '/goal-pro'
+          ? 'strict'
+          : slashInput.name === '/ultgoal'
+            ? 'arrangement'
+            : slashInput.name === '/goal'
+              ? 'standard'
+              : null
+      if (slashInput.name === '/') {
+        setSlashSubmitError(t('workbench.slash_command_required', '请输入 slash 指令名称'))
+        return
+      }
+      if (goalMode && onSetGoal) {
+        setSlashSubmitError(null)
+        selectGoal?.(goalMode)
+        onChange(slashInput.args ?? '')
+        return
+      }
+      if (slashInput.name === '/plan') {
+        setSlashSubmitError(null)
+        selectPlanMode()
+        onChange(slashInput.args ?? '')
+        return
+      }
+      if (executionModes && ['/orchestrate', '/moa', '/moa-plan'].includes(slashInput.name)) {
+        const mode = slashInput.name.slice(1) as ComposerExecutionMode
+        if (mode === 'orchestrate' && slashInput.args) {
+          setSlashSubmitError(t('workbench.orchestrate_no_arguments'))
+          return
+        }
+        selectExecutionMode(mode)
+        onChange(slashInput.args ?? '')
+        return
+      }
+      if (slashInput.name === '/compact' && !slashInput.args && handleCompactContext) {
+        setSlashSubmitError(null)
+        onChange('')
+        handleCompactContext()
+        return
+      }
+      if (slashInput.name === '/model' && !slashInput.args && controls.requestModelSelectorOpen) {
+        setSlashSubmitError(null)
+        onChange('')
+        controls.requestModelSelectorOpen()
+        return
+      }
+      setSlashSubmitError(
+        t(
+          'workbench.slash_command_unknown_or_incomplete',
+          `未知或不完整的 slash 指令：${slashInput.name}`,
+          { command: slashInput.name }
+        )
+      )
+      return
+    }
+    // Enter can arrive directly from the editor before a toolbar render. Keep
+    // the draft while the target's authoritative model catalog is loading.
+    if (controls.isModelSelectionReady === false) return
+    setSlashSubmitError(null)
+    if (settingsTemplatePicker?.value) {
+      options = { ...options, settingsTemplate: settingsTemplatePicker.value }
+    }
+    if (workflowSelected) {
+      options = {
+        ...options,
+        sessionMode: 'workflow_draft',
+        workflowDefinitionId,
+        guideWhenBusy: false,
+      }
+    }
+    if (executionMode && !workflowSelected) {
+      if (!submittedValue) {
+        setSlashSubmitError(t('workbench.execution_mode_prompt_required'))
+        return
+      }
+      if (executionMode === 'orchestrate' && !canSelectOrchestrate) {
+        setSlashSubmitError(t('workbench.orchestrate_before_first_message'))
+        return
+      }
+      if (executionMode === 'moa-plan' && controls.attachments.length > 0) {
+        setSlashSubmitError(t('workbench.moa_plan_text_only'))
+        return
+      }
+      const submittedDraft = executionDraft
+      const submittedQuery = modeQueryRef.current
+      options = {
+        ...options,
+        ...(executionMode === 'orchestrate'
+          ? { sessionMode: 'orchestrate' }
+          : { turnMode: executionMode }),
+        guideWhenBusy: false,
+        onExecutionModeAccepted: () => {
+          if (modeQueryRef.current === submittedQuery) modeQueryRef.current += 1
+          setExecutionDraft(current => (current === submittedDraft ? null : current))
+        },
+      }
+    }
+    if (queuePaused && hasPendingQueuedMessages && submittedValue) {
+      setPendingQueuedSend({ valueOverride, options })
+      return
+    }
+    if (options === undefined) {
+      void onSubmit(valueOverride)
+      return
+    }
+    void onSubmit(valueOverride, options)
+  }
+
+  const sendWithQueue = (clearQueue: boolean) => {
+    if (!pendingQueuedSend) return
+    const { valueOverride, options } = pendingQueuedSend
+    setPendingQueuedSend(null)
+    if (clearQueue) {
+      onClearQueue?.()
+      void onSubmit(valueOverride, options)
+      return
+    }
+    if (onResumeQueueWithInput) {
+      onChange('')
+      void onResumeQueueWithInput(valueOverride, options)
+      return
+    }
+    void Promise.resolve(onSubmit(valueOverride, options)).finally(() => onResumeQueue?.())
+  }
+
+  const inputHistory = useMemo(() => composerInputHistory(historyMessages ?? []), [historyMessages])
+  const composerProps = {
+    inputHistory,
+    inputHistoryScope: inputHistoryScope ?? projectChat?.scopeKey,
+    slashActions,
+    contextUsage: controls.contextUsage,
+    executionModes,
+    value,
+    onChange: (nextValue: string) => {
+      setSlashSubmitError(null)
+      onChange(nextValue)
+    },
+    onSubmit: handleSubmit,
+    disabled,
+    submitDisabled,
+    disabledReason,
+    placeholder: disabledReason ? '' : inputPlaceholder,
+    onOpenSkillFile,
+    workspaceTarget,
+    workspaceFileApi,
+    cloudMentionCandidates,
+    conversationMentionCandidates,
+    cloudProjectCandidates,
+    cloudSpaceEnabled,
+    onSelectCloudProject,
+  }
+  const displayedError = slashSubmitError ?? (
+    errorRecovery && pluginTargetId && errorRecovery.deviceId !== pluginTargetId ? null : error
+  )
+  const settingsTemplateSelect = settingsTemplatePicker ? (
+    <SettingsSelect
+      density="compact"
+      icon={<Layers />}
+      data-testid="chat-settings-template"
+      aria-label={t('configTemplates.sessionChoice')}
+      value={settingsTemplatePicker.value ?? ''}
+      onChange={event => settingsTemplatePicker.onChange(event.target.value || undefined)}
+    >
+      <option value="">{settingsTemplatePicker.placeholder}</option>
+      {settingsTemplatePicker.options.map(option => (
+        <option key={option.id} value={option.id}>
+          {option.isDefault ? `${option.name} ★` : option.name}
+        </option>
+      ))}
+    </SettingsSelect>
+  ) : null
+  const settingsTemplateBadgeChip = settingsTemplateBadge ? (
+    <div
+      data-testid="chat-settings-template-badge"
+      data-status={settingsTemplateBadge.status}
+      className="flex min-w-0 items-center gap-1 rounded-md border border-border px-1 py-0.5 text-xs text-text-secondary"
+      title={t(
+        settingsTemplateBadge.status === 'missing'
+          ? 'configTemplates.boundMissing'
+          : settingsTemplateBadge.status === 'drifted'
+            ? 'configTemplates.boundDrifted'
+            : 'configTemplates.boundCurrent',
+        { name: settingsTemplateBadge.name }
+      )}
+    >
+      <span className="max-w-[10rem] truncate">{settingsTemplateBadge.name}</span>
+      {settingsTemplateBadge.status !== 'current' && <span aria-hidden>!</span>}
+    </div>
+  ) : null
+  const computerUseTarget =
+    projectWork?.currentRuntimeTask?.deviceId ??
+    projectWork?.currentRuntimeDeviceId ??
+    projectWork?.currentStandaloneDeviceId
+  const computerUseControl = computerUseTarget ? (
+    <ComputerUseSubmit
+      key={`${executionScope}:${computerUseTarget}`}
+      serverId={computerUseTarget}
+      taskId={projectWork?.currentRuntimeTask?.taskId}
+      modelSupportsImages={
+        readModelConfiguration(controls.selectedModel?.config?.modelConfiguration)?.vision
+      }
+      onRevoke={() => {
+        const taskId = projectWork?.currentRuntimeTask?.taskId
+        if (taskId)
+          void requestLocalExecutor('runtime.computerUse.revoke', {
+            serverId: computerUseTarget,
+            taskId,
+          }).catch(() => {
+            setSlashSubmitError(t('computerUse.recovery.revokeUnconfirmed'))
+          })
+        if (isStreaming) void stopResponse?.()
+      }}
+      prompt={value}
+      disabled={
+        isStreaming ||
+        hasPendingQueuedMessages ||
+        queuePaused ||
+        !!executionMode ||
+        workflowSelected ||
+        !!goalDraftActive
+      }
+      onConfirm={() =>
+        handleSubmit(value, { computerUse: { approved: true, target: 'local_windows_desktop' } })
+      }
+    />
+  ) : null
+  const workflowReuseControl =
+    workflowNavigationActive &&
+    projectWork?.currentRuntimeTask &&
+    sessionMode !== 'workflow_draft' &&
+    !workflowSelected ? (
+      <WorkflowReusePicker
+        key={projectWork.currentRuntimeTask.taskId}
+        serverId={projectWork.currentRuntimeTask.deviceId}
+        disabled={isStreaming}
+        onInsert={text => onChange(value.trim() ? `${value}\n\n${text}` : text)}
+      />
+    ) : null
+  const workflowModeControl =
+    !projectWork?.currentRuntimeTask && !isStreaming && sessionMode !== 'workflow_draft' ? (
+      <Button
+        type="button"
+        size="sm"
+        variant={workflowSelected ? 'secondary' : 'ghost'}
+        data-testid="composer-workflow-mode"
+        data-composer-action
+        aria-label={t('workflowCanvas.composerMode')}
+        aria-pressed={workflowSelected}
+        title={t('workflowCanvas.composerHint')}
+        onClick={() => {
+          setWorkflowIntent({ active: !workflowSelected })
+          setExecutionDraft(null)
+          setModeInfo(null)
+          if (goalDraftActive) onCancelGoalDraft?.()
+          controls.setSelectedModelOption('collaborationMode', 'default')
+          if (window.location.search.includes('workflow='))
+            window.history.replaceState(null, '', window.location.pathname)
+        }}
+      >
+        <GitBranch />
+        <span data-composer-label>{t('workflowCanvas.composerMode')}</span>
+      </Button>
+    ) : null
+  const executionModePill =
+    executionMode || sessionMode === 'orchestrate' || sessionMode === 'workflow_draft' ? (
+      <div className="flex min-w-0 items-center gap-1" data-testid="execution-mode-footer">
+        <ComposerModePill
+          label={
+            sessionMode === 'workflow_draft'
+              ? t('workflowCanvas.draftSession')
+              : `/${executionMode ?? 'orchestrate'}`
+          }
+          testId="execution-mode-draft"
+          icon={ClipboardList}
+          className="min-w-0 shrink font-normal [&>span]:truncate"
+          onCancel={
+            executionMode
+              ? () => {
+                  modeQueryRef.current += 1
+                  setExecutionDraft(null)
+                  setModeInfo(null)
+                }
+              : undefined
+          }
+          cancelLabel={t('workbench.execution_mode_cancel')}
+          title={t(
+            executionMode === 'orchestrate'
+              ? 'workbench.orchestrate_before_first_message'
+              : 'workbench.execution_mode_next_turn'
+          )}
+        />
+        {executionMode && modeInfo?.scope === executionScope && (
+          <ExecutionModeInfo text={modeInfo.text} />
+        )}
+      </div>
+    ) : null
+  const errorBanner = displayedError ? (
+    <div
+      className="mb-2 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+      data-testid="chat-input-error"
+      role="alert"
+    >
+      {displayedError}
+      {!slashSubmitError && onRetryError ? (
+        <Button
+          type="button"
+          variant="link"
+          size="sm"
+          className="ml-2"
+          data-testid="chat-input-error-retry"
+          disabled={retryingError}
+          onClick={() => {
+            if (pluginScope.isCurrent()) onRetryError()
+          }}
+        >
+          {t('common.retry')}
+        </Button>
+      ) : null}
+      {!slashSubmitError && errorRecovery?.kind === 'configure-model' &&
+        (!pluginTargetId || errorRecovery.deviceId === pluginTargetId) && (
+          <Button
+            type="button"
+            variant="link"
+            size="sm"
+            className="ml-2"
+            onClick={() => {
+              if (pluginScope.isCurrent()) {
+                navigateTo(`/settings/model-settings?target=${encodeURIComponent(errorRecovery.deviceId)}`)
+              }
+            }}
+          >
+            {t('workbench.open_model_settings')}
+          </Button>
+        )}
+    </div>
+  ) : null
+  const desktopStatus = projectWork?.currentRuntimeTask ? (
+    <ComputerUseStatus
+      serverId={projectWork.currentRuntimeTask.deviceId}
+      taskId={projectWork.currentRuntimeTask.taskId}
+      presentation={variant === 'desktop' || hasComposerStatusRegion ? 'embedded' : undefined}
+      onStop={stopResponse}
+      onRecover={async previousTurnId => {
+        await requestLocalExecutor('runtime.computerUse.recover', {
+          serverId: projectWork.currentRuntimeTask!.deviceId,
+          taskId: projectWork.currentRuntimeTask!.taskId,
+          previousTurnId,
+        })
+      }}
+    />
+  ) : null
+  const queuePanel = (
+    <ConversationQueuePanel
+      queuedMessages={queuedMessages}
+      guidanceMessages={guidanceMessages}
+      onCancelQueuedMessage={onCancelQueuedMessage}
+      onSendQueuedAsGuidance={onSendQueuedAsGuidance}
+      onInterruptAndSendQueuedMessage={onInterruptAndSendQueuedMessage}
+      onEditQueuedMessage={onEditQueuedMessage}
+      onReorderQueuedMessages={onReorderQueuedMessages}
+      queuePaused={queuePaused}
+      onResumeQueue={onResumeQueue}
+      onCancelGuidanceMessage={onCancelGuidanceMessage}
+      presentation={variant === 'desktop' || hasComposerStatusRegion ? 'embedded' : undefined}
+    />
+  )
+  const queueResumeDialog = pendingQueuedSend ? (
+    <QueueResumeDialog
+      t={tChat}
+      onCancel={() => setPendingQueuedSend(null)}
+      onPreserve={() => sendWithQueue(false)}
+      onClear={() => sendWithQueue(true)}
+    />
+  ) : null
+  const modelSwitchWarningDialog = pendingModelSelection?.scope === executionScope ? (
+    <ModelSwitchWarningDialog
+      t={t}
+      targetModelLabel={
+        pendingModelSelection.model?.displayName ||
+        pendingModelSelection.model?.name ||
+        t('workbench.model_auto_select', 'Auto select')
+      }
+      onCancel={() => setPendingModelSelection(null)}
+      pending={modelSwitching?.scope === executionScope}
+      onConfirm={() => void confirmModelSelection()}
+    />
+  ) : null
+
+  // The notice floats above the composer in a zero-height anchor so showing
+  // or hiding it never changes layout; it fades out after a short delay.
+  const modelNotice = modelSwitchNotice === executionScope ? (
+    <div className="relative h-0" data-testid="model-switch-notice-anchor">
+      <p
+        role="status"
+        data-fading={modelNoticeFading || undefined}
+        className="pointer-events-none absolute bottom-full left-2 right-2 mb-1 w-fit max-w-full rounded-lg border border-border bg-background px-2 py-1 text-sm text-text-secondary shadow-sm transition-opacity duration-300 data-[fading]:opacity-0 motion-reduce:transition-none"
+      >
+        {t('workbench.model_switch_next_message')}
+      </p>
+    </div>
+  ) : null
+
+  if (variant === 'desktop') {
+    const ownerKey = JSON.stringify([
+      projectWork?.currentRuntimeTask?.deviceId ?? '',
+      projectWork?.currentRuntimeTask?.taskId ?? controls.scopeKey ?? projectChat?.scopeKey ?? '',
+      projectWork?.currentRuntimeTask?.threadId ?? null,
+    ])
+    return (
+      <div className="w-full min-w-0">
+        <ComposerStatusNotice>{errorBanner}{modelNotice}</ComposerStatusNotice>
+        <ComposerStatusRegion ownerKey={ownerKey}>
+          <TaskPlanProgress plan={taskPlan} stale={taskPlanStale} presentation="embedded" />
+          {queuePanel}
+          {desktopStatus}
+          <PluginTrialTemplateStrip
+            templates={controls.trialTemplates ?? []}
+            presentation="embedded"
+          />
+          {displayedGoal && !goalDraftActive && (
+            <GoalStatusBar
+              goal={displayedGoal}
+              continuing={goalContinuing}
+              presentation="embedded"
+              onEditGoal={onEditGoal}
+              onPauseGoal={onPauseGoal}
+              onResumeGoal={onResumeGoal}
+              onClearGoal={onClearGoal}
+            />
+          )}
+          <ProjectChatComposer
+            {...composerProps}
+            models={controls.models}
+            selectedModel={controls.selectedModel}
+            activeModel={controls.activeModel}
+            selectedModelOptions={controls.selectedModelOptions}
+            modelSelectorOpenSignal={controls.modelSelectorOpenSignal}
+            onModelSelectorOpenChange={controls.onModelSelectorOpenChange}
+            isModelSelectionReady={controls.isModelSelectionReady ?? true}
+            attachments={controls.attachments}
+            codeComments={codeComments}
+            uploadingFiles={controls.uploadingFiles}
+            onCancelUpload={controls.cancelUpload}
+            attachmentErrors={controls.errors}
+            contextUsageScopeKey={controls.scopeKey ?? ownerKey}
+            onSelectModel={model => requestModelSelection(model)}
+            onSelectModelAndOptions={(model, options) => requestModelSelection(model, options)}
+            onSelectModelOption={controls.setSelectedModelOption}
+            onBlockedModelSelect={controls.onBlockedModelSelect}
+            onFileSelect={files => {
+              void controls.handleFileSelect(files)
+            }}
+            planModeActive={planModeActive}
+            onSetPlanMode={selectPlanMode}
+            onClearPlanMode={handleClearPlanMode}
+            onSetGoal={selectGoal}
+            onCompactContext={handleCompactContext}
+            goalDraftActive={goalDraftActive}
+            goalDraftMode={goalDraftMode}
+            onCancelGoalDraft={onCancelGoalDraft}
+            onRemoveAttachment={attachmentId => {
+              void controls.removeAttachment(attachmentId)
+            }}
+            onClearCodeComments={onClearCodeComments}
+            projectWork={
+              projectWork ?? {
+                projects: [],
+                devices: [],
+                runtimeWork: null,
+                currentProject: null,
+                currentProjectId: undefined,
+                currentStandaloneDeviceId: null,
+                selectedDeviceWorkspaceId: null,
+                pendingProjectWorkspaceProjectId: null,
+                executionMode: 'current_workspace',
+                executionModeLocked: false,
+                onSelectProject: () => {},
+                onSelectStandaloneDevice: () => {},
+                onSelectProjectWorkspace: () => {},
+                onBindProjectWorkspace: () => {},
+                onExecutionModeChange: () => {},
+                onCreateProjectMode: undefined,
+              }
+            }
+            showProjectWorkBar={showProjectWorkBar}
+            onListLocalSkills={pluginSources?.skills ?? controls.listLocalSkills}
+            onListLocalApps={controls.listLocalApps}
+            onListLocalPlugins={pluginSources?.plugins}
+            isStreaming={isStreaming}
+            onPause={stopResponse}
+            stopping={stopping}
+            onShortenWait={onShortenWait}
+            shortenWaitAvailable={shortenWaitAvailable}
+            toolbarLeadingContext={toolbarLeadingContext}
+            projectContext={projectContext}
+            modeStatus={
+              <>
+                {settingsTemplateSelect}
+                {settingsTemplateBadgeChip}
+                {computerUseControl}
+                {workflowModeControl}
+                {workflowReuseControl}
+                {executionModePill}
+              </>
+            }
+          />
+          {queueResumeDialog}
+          {modelSwitchWarningDialog}
+        </ComposerStatusRegion>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full min-w-0">
+      <TaskPlanProgress
+        plan={taskPlan}
+        stale={taskPlanStale}
+        presentation={hasComposerStatusRegion ? 'embedded' : undefined}
+      />
+      {queuePanel}
+      {errorBanner}
+      {modelNotice}
+      {desktopStatus}
+      <PluginTrialTemplateStrip
+        templates={controls.trialTemplates ?? []}
+        presentation={hasComposerStatusRegion ? 'embedded' : undefined}
+      />
+      {displayedGoal && !goalDraftActive && (
+        <GoalStatusBar
+          goal={displayedGoal}
+          continuing={goalContinuing}
+          presentation={hasComposerStatusRegion ? 'embedded' : undefined}
+          onEditGoal={onEditGoal}
+          onPauseGoal={onPauseGoal}
+          onResumeGoal={onResumeGoal}
+          onClearGoal={onClearGoal}
+        />
+      )}
+      <CompactChatComposer
+        {...composerProps}
+        attachments={controls.attachments}
+        codeComments={codeComments}
+        uploadingFiles={controls.uploadingFiles}
+        onCancelUpload={controls.cancelUpload}
+        attachmentErrors={controls.errors}
+        onFileSelect={files => {
+          void controls.handleFileSelect(files)
+        }}
+        planModeActive={planModeActive}
+        onSetPlanMode={selectPlanMode}
+        onClearPlanMode={handleClearPlanMode}
+        onSetGoal={selectGoal}
+        onCompactContext={handleCompactContext}
+        goalDraftActive={goalDraftActive}
+        goalDraftMode={goalDraftMode}
+        onSelectModelOption={controls.setSelectedModelOption}
+        onCancelGoalDraft={onCancelGoalDraft}
+        onRemoveAttachment={attachmentId => {
+          void controls.removeAttachment(attachmentId)
+        }}
+        onClearCodeComments={onClearCodeComments}
+        onListLocalSkills={pluginSources?.skills ?? controls.listLocalSkills}
+        onListLocalApps={controls.listLocalApps}
+        onListLocalPlugins={pluginSources?.plugins}
+        models={controls.models}
+        selectedModel={controls.selectedModel}
+        activeModel={controls.activeModel}
+        selectedModelOptions={controls.selectedModelOptions}
+        onSelectModel={model => requestModelSelection(model)}
+        onBlockedModelSelect={controls.onBlockedModelSelect}
+        isModelSelectionReady={controls.isModelSelectionReady ?? true}
+        isStreaming={isStreaming}
+        onPause={stopResponse}
+        stopping={stopping}
+        modeStatus={
+          <>
+            {settingsTemplateSelect}
+            {settingsTemplateBadgeChip}
+            {computerUseControl}
+            {workflowModeControl}
+            {workflowReuseControl}
+            {executionModePill}
+          </>
+        }
+      />
+      {queueResumeDialog}
+      {modelSwitchWarningDialog}
+    </div>
+  )
+}
+
+function conversationMentionCandidate(
+  candidate: ConversationMentionCandidate,
+  t: ReturnType<typeof useTranslation>['t']
+) {
+  const workspaceLabel =
+    candidate.projectName || candidate.address.workspacePath || candidate.address.deviceId
+  return {
+    kind: 'conversation' as const,
+    key: candidate.key,
+    title: candidate.title,
+    description: workspaceLabel,
+    metaLabel: t('workbench.mention_conversation', 'Conversation'),
+    testId: candidate.testId,
+    enabled: true,
+    reference: candidate.reference,
+    searchAliases: [
+      candidate.title,
+      candidate.projectName ?? '',
+      candidate.address.workspacePath ?? '',
+    ],
+    conversation: candidate,
+  }
+}
+
+function QueueResumeDialog({
+  t,
+  onCancel,
+  onPreserve,
+  onClear,
+}: {
+  t: (key: string) => string
+  onCancel: () => void
+  onPreserve: () => void
+  onClear: () => void
+}) {
+  return (
+    <div
+      data-testid="paused-queue-send-dialog-overlay"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-black/35 px-4"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="paused-queue-send-dialog-title"
+        data-testid="paused-queue-send-dialog"
+        className="w-full max-w-[360px] rounded-lg border border-border bg-popover p-4 shadow-[0_18px_50px_rgba(0,0,0,0.28)]"
+      >
+        <h2
+          id="paused-queue-send-dialog-title"
+          className="text-base font-semibold text-text-primary"
+        >
+          {t('queue.send_with_paused_title')}
+        </h2>
+        <p className="mt-1.5 text-sm leading-5 text-text-secondary">
+          {t('queue.send_with_paused_description')}
+        </p>
+        <div className="mt-4 flex justify-end gap-1.5">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="paused-queue-send-cancel-button"
+            onClick={onCancel}
+            className="h-8 rounded-md border-border bg-base px-3 text-xs text-text-secondary hover:bg-muted hover:text-text-primary"
+          >
+            {t('queue.send_with_paused_cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="paused-queue-send-clear-button"
+            onClick={onClear}
+            className="h-8 rounded-md border-red-200 bg-base px-3 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
+          >
+            {t('queue.send_with_paused_clear')}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            data-testid="paused-queue-send-preserve-button"
+            onClick={onPreserve}
+            className="h-8 rounded-md border-text-primary bg-text-primary px-3 text-xs text-background hover:bg-text-primary/90 hover:text-background"
+          >
+            {t('queue.send_with_paused_preserve')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModelSwitchWarningDialog({
+  t,
+  targetModelLabel,
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  t: ReturnType<typeof useTranslation>['t']
+  targetModelLabel: string
+  pending: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      data-testid="model-switch-warning-dialog-overlay"
+      className="fixed inset-0 z-modal flex items-center justify-center bg-black/35 px-4"
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-busy={pending}
+        aria-labelledby="model-switch-warning-dialog-title"
+        aria-describedby="model-switch-warning-dialog-description"
+        data-testid="model-switch-warning-dialog"
+        className="w-full max-w-[400px] rounded-2xl border border-border bg-popover p-5 shadow-[0_18px_50px_rgba(0,0,0,0.24)]"
+      >
+        <h2 id="model-switch-warning-dialog-title" className="heading-small text-text-primary">
+          {t('workbench.model_switch_warning_title', 'Switch model?')}
+        </h2>
+        <p
+          id="model-switch-warning-dialog-description"
+          className="mt-2 text-sm leading-5 text-text-secondary"
+        >
+          {t(
+            'workbench.model_switch_warning_description',
+            'Switching to {{model}} may change how the existing context is understood. Tool support, response style, and task continuity may also differ.',
+            { model: targetModelLabel }
+          )}
+        </p>
+        <p className="mt-2 text-sm leading-5 text-text-secondary">
+          {t(
+            'workbench.model_switch_warning_effect',
+            'The current response and running tools continue with the current model. KCoder targets that support live switching apply the new model after a tool result; other runtimes use it for the next message.'
+          )}
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            data-testid="model-switch-warning-cancel-button"
+            disabled={pending}
+            onClick={onCancel}
+            className="h-8 rounded-lg px-3 text-sm text-text-secondary hover:bg-muted hover:text-text-primary"
+          >
+            {t('workbench.cancel', 'Cancel')}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            data-testid="model-switch-warning-confirm-button"
+            disabled={pending}
+            onClick={onConfirm}
+            className="h-8 rounded-lg bg-text-primary px-4 text-sm text-background hover:bg-text-primary/90"
+          >
+            {pending ? t('workbench.model_switch_confirming') : t('workbench.model_switch_warning_confirm', 'Switch model')}
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}

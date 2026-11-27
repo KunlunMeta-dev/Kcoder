@@ -1,0 +1,67 @@
+import type { RefObject } from 'react'
+import type { CloudProject } from '@/api/deliveries'
+import type {
+  InstalledPlugin,
+  LocalDeviceApp,
+  LocalDeviceSkill,
+  ModelOptions,
+  RuntimeGoal,
+  RuntimeContextUsage,
+  UnifiedModel,
+} from '@/types/api'
+import type { WorkspaceFileApi, WorkspaceTarget } from '@/types/workspace-files'
+import type { ComposerSlashSubmit, SlashCommand } from './composerAutocomplete'
+import type {
+  ComposerCloudMentionCandidate,
+  ComposerConversationMentionCandidate,
+} from './composerMentionCandidates'
+
+export interface ComposerSubmitOptions {
+  guideWhenBusy?: boolean
+  interruptWhenBusy?: boolean
+}
+
+export interface ComposerTextareaProps {
+  /** Plain worker instructions share the editor, without unsupported context actions. */
+  textOnly?: boolean
+  executionModes?: import('./composerExecutionModes').ComposerExecutionModeControls
+  value: string
+  inputHistory?: readonly string[]
+  inputHistoryScope?: string
+  onChange: (value: string) => void
+  onSubmit: (submittedValue?: string, options?: ComposerSubmitOptions) => void
+  slashSubmitRef?: RefObject<ComposerSlashSubmit | null>
+  slashActions?: readonly SlashCommand[]
+  contextUsage?: RuntimeContextUsage
+  canSend: boolean
+  disabled?: boolean
+  placeholder: string
+  testId?: string
+  rows: number
+  textareaRef: RefObject<HTMLElement | null>
+  className: string
+  skillMenuClassName?: string
+  onPasteFiles?: (files: File[]) => void
+  onOpenSkillFile?: (path: string) => void
+  workspaceTarget?: WorkspaceTarget | null
+  workspaceFileApi?: WorkspaceFileApi
+  cloudMentionCandidates?: ComposerCloudMentionCandidate[]
+  conversationMentionCandidates?: ComposerConversationMentionCandidate[]
+  cloudProjectCandidates?: ComposerCloudMentionCandidate[]
+  cloudSpaceEnabled?: boolean
+  onSelectCloudProject?: (project: CloudProject) => void
+  onListLocalSkills?: () => Promise<LocalDeviceSkill[]>
+  onListLocalApps?: () => Promise<LocalDeviceApp[]>
+  onListLocalPlugins?: () => Promise<InstalledPlugin[]>
+  models?: UnifiedModel[]
+  selectedModel?: UnifiedModel | null
+  selectedModelOptions?: ModelOptions
+  planModeActive?: boolean
+  onSetPlanMode?: () => void
+  onClearPlanMode?: () => void
+  onSetGoal?: (mode?: RuntimeGoal['mode']) => void
+  onCompactContext?: () => void
+  onSelectModel?: (model: UnifiedModel | null) => void
+  onBlockedModelSelect?: (model: UnifiedModel, message?: string) => void
+  isModelSelectionReady?: boolean
+}

@@ -1,0 +1,2886 @@
+{
+  "AsyncQuestionAccepted": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/definitions/AsyncQuestionAnswerValue"
+            },
+            "type": "object"
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "answers",
+          "submissionId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AsyncQuestionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOption"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AsyncQuestionAnswerRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questionId": {
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionItem"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceTurnId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/AsyncQuestionStatus"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "questionId",
+          "questions",
+          "requestId",
+          "revision",
+          "sourceTurnId",
+          "status",
+          "threadId",
+          "toolCallId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionStatus": {
+        "enum": [
+          "pending",
+          "answer_saved",
+          "queued",
+          "context_applied",
+          "delivery_failed",
+          "delivery_unknown",
+          "cancelled",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "accepted": {
+        "type": "boolean"
+      },
+      "question": {
+        "$ref": "#/definitions/AsyncQuestionRecord"
+      }
+    },
+    "required": [
+      "accepted",
+      "question"
+    ],
+    "title": "AsyncQuestionAccepted",
+    "type": "object"
+  },
+  "AsyncQuestionAnswerParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "answers": {
+        "additionalProperties": {
+          "$ref": "#/definitions/AsyncQuestionAnswerValue"
+        },
+        "type": "object"
+      },
+      "asyncUserQuestions": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "questionId": {
+        "type": "string"
+      },
+      "submissionId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "answers",
+      "expectedRevision",
+      "questionId",
+      "submissionId",
+      "threadId"
+    ],
+    "title": "AsyncQuestionAnswerParams",
+    "type": "object"
+  },
+  "AsyncQuestionAnswerReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/definitions/AsyncQuestionAnswerValue"
+            },
+            "type": "object"
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "answers",
+          "submissionId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AsyncQuestionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOption"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AsyncQuestionAnswerRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questionId": {
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionItem"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceTurnId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/AsyncQuestionStatus"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "questionId",
+          "questions",
+          "requestId",
+          "revision",
+          "sourceTurnId",
+          "status",
+          "threadId",
+          "toolCallId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionStatus": {
+        "enum": [
+          "pending",
+          "answer_saved",
+          "queued",
+          "context_applied",
+          "delivery_failed",
+          "delivery_unknown",
+          "cancelled",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "accepted": {
+        "description": "True when this submission won or is an exact retry of the winning submission.",
+        "type": "boolean"
+      },
+      "duplicate": {
+        "type": "boolean"
+      },
+      "question": {
+        "$ref": "#/definitions/AsyncQuestionRecord"
+      }
+    },
+    "required": [
+      "accepted",
+      "duplicate",
+      "question"
+    ],
+    "title": "AsyncQuestionAnswerReceipt",
+    "type": "object"
+  },
+  "AsyncQuestionAnswerRecord": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      }
+    },
+    "properties": {
+      "acceptedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "answers": {
+        "additionalProperties": {
+          "$ref": "#/definitions/AsyncQuestionAnswerValue"
+        },
+        "type": "object"
+      },
+      "submissionId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "acceptedAtMs",
+      "answers",
+      "submissionId"
+    ],
+    "title": "AsyncQuestionAnswerRecord",
+    "type": "object"
+  },
+  "AsyncQuestionAnswerResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/definitions/AsyncQuestionAnswerValue"
+            },
+            "type": "object"
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "answers",
+          "submissionId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AsyncQuestionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOption"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AsyncQuestionAnswerRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questionId": {
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionItem"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceTurnId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/AsyncQuestionStatus"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "questionId",
+          "questions",
+          "requestId",
+          "revision",
+          "sourceTurnId",
+          "status",
+          "threadId",
+          "toolCallId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionStatus": {
+        "enum": [
+          "pending",
+          "answer_saved",
+          "queued",
+          "context_applied",
+          "delivery_failed",
+          "delivery_unknown",
+          "cancelled",
+          "stale"
+        ],
+        "type": "string"
+      },
+      "Turn": {
+        "properties": {
+          "attemptId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "memorySnapshotId": {
+            "description": "Locator only; reading the canonical reviewed-memory snapshot rechecks authorization.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "$ref": "#/definitions/TurnStatus"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "TurnStatus": {
+        "enum": [
+          "running",
+          "completed",
+          "interrupted",
+          "failed"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "accepted": {
+        "type": "boolean"
+      },
+      "duplicate": {
+        "type": "boolean"
+      },
+      "question": {
+        "$ref": "#/definitions/AsyncQuestionRecord"
+      },
+      "startedTurn": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/Turn"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "The turn admitted by this answer RPC, if this call actually started one. Never return a historical turn here; a replay may start a new turn now."
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "accepted",
+      "duplicate",
+      "question",
+      "threadId"
+    ],
+    "title": "AsyncQuestionAnswerResult",
+    "type": "object"
+  },
+  "AsyncQuestionAnswerValue": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "selectedOptionIds": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "text": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "title": "AsyncQuestionAnswerValue",
+    "type": "object"
+  },
+  "AsyncQuestionCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "questionId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "questionId",
+      "threadId"
+    ],
+    "title": "AsyncQuestionCancelParams",
+    "type": "object"
+  },
+  "AsyncQuestionCancelResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/definitions/AsyncQuestionAnswerValue"
+            },
+            "type": "object"
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "answers",
+          "submissionId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AsyncQuestionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOption"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AsyncQuestionAnswerRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questionId": {
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionItem"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceTurnId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/AsyncQuestionStatus"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "questionId",
+          "questions",
+          "requestId",
+          "revision",
+          "sourceTurnId",
+          "status",
+          "threadId",
+          "toolCallId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionStatus": {
+        "enum": [
+          "pending",
+          "answer_saved",
+          "queued",
+          "context_applied",
+          "delivery_failed",
+          "delivery_unknown",
+          "cancelled",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "question": {
+        "$ref": "#/definitions/AsyncQuestionRecord"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "question",
+      "threadId"
+    ],
+    "title": "AsyncQuestionCancelResult",
+    "type": "object"
+  },
+  "AsyncQuestionChangedNotification": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/definitions/AsyncQuestionAnswerValue"
+            },
+            "type": "object"
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "answers",
+          "submissionId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AsyncQuestionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOption"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AsyncQuestionAnswerRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questionId": {
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionItem"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceTurnId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/AsyncQuestionStatus"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "questionId",
+          "questions",
+          "requestId",
+          "revision",
+          "sourceTurnId",
+          "status",
+          "threadId",
+          "toolCallId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionStatus": {
+        "enum": [
+          "pending",
+          "answer_saved",
+          "queued",
+          "context_applied",
+          "delivery_failed",
+          "delivery_unknown",
+          "cancelled",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "question": {
+        "$ref": "#/definitions/AsyncQuestionRecord"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "question",
+      "threadId"
+    ],
+    "title": "AsyncQuestionChangedNotification",
+    "type": "object"
+  },
+  "AsyncQuestionItem": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "header": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "multiSelect": {
+        "type": "boolean"
+      },
+      "options": {
+        "items": {
+          "$ref": "#/definitions/AsyncQuestionOption"
+        },
+        "type": "array"
+      },
+      "question": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "header",
+      "id",
+      "multiSelect",
+      "options",
+      "question"
+    ],
+    "title": "AsyncQuestionItem",
+    "type": "object"
+  },
+  "AsyncQuestionItemDraft": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionOptionDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "header": {
+        "type": "string"
+      },
+      "multiSelect": {
+        "type": "boolean"
+      },
+      "options": {
+        "items": {
+          "$ref": "#/definitions/AsyncQuestionOptionDraft"
+        },
+        "type": "array"
+      },
+      "question": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "header",
+      "multiSelect",
+      "options",
+      "question"
+    ],
+    "title": "AsyncQuestionItemDraft",
+    "type": "object"
+  },
+  "AsyncQuestionListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "includeTerminal": {
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "AsyncQuestionListParams",
+    "type": "object"
+  },
+  "AsyncQuestionListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/definitions/AsyncQuestionAnswerValue"
+            },
+            "type": "object"
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "answers",
+          "submissionId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AsyncQuestionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOption"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/AsyncQuestionAnswerRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "questionId": {
+            "type": "string"
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionItem"
+            },
+            "type": "array"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceTurnId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/AsyncQuestionStatus"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "createdAtMs",
+          "questionId",
+          "questions",
+          "requestId",
+          "revision",
+          "sourceTurnId",
+          "status",
+          "threadId",
+          "toolCallId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionStatus": {
+        "enum": [
+          "pending",
+          "answer_saved",
+          "queued",
+          "context_applied",
+          "delivery_failed",
+          "delivery_unknown",
+          "cancelled",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "questions": {
+        "items": {
+          "$ref": "#/definitions/AsyncQuestionRecord"
+        },
+        "type": "array"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "questions",
+      "threadId"
+    ],
+    "title": "AsyncQuestionListResult",
+    "type": "object"
+  },
+  "AsyncQuestionOption": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "description",
+      "id",
+      "label"
+    ],
+    "title": "AsyncQuestionOption",
+    "type": "object"
+  },
+  "AsyncQuestionOptionDraft": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "description",
+      "label"
+    ],
+    "title": "AsyncQuestionOptionDraft",
+    "type": "object"
+  },
+  "AsyncQuestionRecord": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionAnswerRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "answers": {
+            "additionalProperties": {
+              "$ref": "#/definitions/AsyncQuestionAnswerValue"
+            },
+            "type": "object"
+          },
+          "submissionId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "acceptedAtMs",
+          "answers",
+          "submissionId"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionAnswerValue": {
+        "additionalProperties": false,
+        "properties": {
+          "selectedOptionIds": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "AsyncQuestionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOption"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionStatus": {
+        "enum": [
+          "pending",
+          "answer_saved",
+          "queued",
+          "context_applied",
+          "delivery_failed",
+          "delivery_unknown",
+          "cancelled",
+          "stale"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "answer": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/AsyncQuestionAnswerRecord"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "deliveryError": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "questionId": {
+        "type": "string"
+      },
+      "questions": {
+        "items": {
+          "$ref": "#/definitions/AsyncQuestionItem"
+        },
+        "type": "array"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceTurnId": {
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/definitions/AsyncQuestionStatus"
+      },
+      "threadId": {
+        "type": "string"
+      },
+      "toolCallId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "createdAtMs",
+      "questionId",
+      "questions",
+      "requestId",
+      "revision",
+      "sourceTurnId",
+      "status",
+      "threadId",
+      "toolCallId"
+    ],
+    "title": "AsyncQuestionRecord",
+    "type": "object"
+  },
+  "AsyncQuestionRequest": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AsyncQuestionItemDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/AsyncQuestionOptionDraft"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "multiSelect",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "AsyncQuestionOptionDraft": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "questions": {
+        "items": {
+          "$ref": "#/definitions/AsyncQuestionItemDraft"
+        },
+        "type": "array"
+      },
+      "sourceTurnId": {
+        "type": "string"
+      },
+      "toolCallId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "questions",
+      "sourceTurnId",
+      "toolCallId"
+    ],
+    "title": "AsyncQuestionRequest",
+    "type": "object"
+  },
+  "AsyncQuestionStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "pending",
+      "answer_saved",
+      "queued",
+      "context_applied",
+      "delivery_failed",
+      "delivery_unknown",
+      "cancelled",
+      "stale"
+    ],
+    "title": "AsyncQuestionStatus",
+    "type": "string"
+  },
+  "TaskInteractionAnswerV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "answers": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "answers"
+    ],
+    "title": "TaskInteractionAnswerV1",
+    "type": "object"
+  },
+  "TaskInteractionApprovalKindV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "command",
+      "file_change",
+      "permission",
+      "tool"
+    ],
+    "title": "TaskInteractionApprovalKindV1",
+    "type": "string"
+  },
+  "TaskInteractionApprovalV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskInteractionApprovalKindV1": {
+        "enum": [
+          "command",
+          "file_change",
+          "permission",
+          "tool"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "input": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "kind": {
+        "$ref": "#/definitions/TaskInteractionApprovalKindV1"
+      },
+      "reason": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "subject": {
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "kind"
+    ],
+    "title": "TaskInteractionApprovalV1",
+    "type": "object"
+  },
+  "TaskInteractionItemV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionApprovalKindV1": {
+        "enum": [
+          "command",
+          "file_change",
+          "permission",
+          "tool"
+        ],
+        "type": "string"
+      },
+      "TaskInteractionApprovalV1": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/TaskInteractionApprovalKindV1"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionOptionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "label"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionPresentationV1": {
+        "additionalProperties": false,
+        "properties": {
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TaskInteractionApprovalV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/TaskInteractionQuestionV1"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionQuestionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "isOther": {
+            "type": "boolean"
+          },
+          "multiSelect": {
+            "description": "Omitted legacy questions retain their original single-choice wire shape.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/TaskInteractionOptionV1"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "isOther",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "selector": {
+            "$ref": "#/definitions/InteractionStatusReadParamsV1"
+          }
+        },
+        "required": [
+          "attemptId",
+          "selector"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionStateV1": {
+        "enum": [
+          "pending",
+          "response_pending",
+          "resolved",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "presentation": {
+        "$ref": "#/definitions/TaskInteractionPresentationV1"
+      },
+      "reference": {
+        "$ref": "#/definitions/TaskInteractionReferenceV1"
+      },
+      "state": {
+        "$ref": "#/definitions/TaskInteractionStateV1"
+      }
+    },
+    "required": [
+      "presentation",
+      "reference",
+      "state"
+    ],
+    "title": "TaskInteractionItemV1",
+    "type": "object"
+  },
+  "TaskInteractionObservationStateV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "observed",
+      "unknown"
+    ],
+    "title": "TaskInteractionObservationStateV1",
+    "type": "string"
+  },
+  "TaskInteractionOptionV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "label": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "description",
+      "label"
+    ],
+    "title": "TaskInteractionOptionV1",
+    "type": "object"
+  },
+  "TaskInteractionPresentationV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskInteractionApprovalKindV1": {
+        "enum": [
+          "command",
+          "file_change",
+          "permission",
+          "tool"
+        ],
+        "type": "string"
+      },
+      "TaskInteractionApprovalV1": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/TaskInteractionApprovalKindV1"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionOptionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "label"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionQuestionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "isOther": {
+            "type": "boolean"
+          },
+          "multiSelect": {
+            "description": "Omitted legacy questions retain their original single-choice wire shape.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/TaskInteractionOptionV1"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "isOther",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "approval": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/TaskInteractionApprovalV1"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "questions": {
+        "items": {
+          "$ref": "#/definitions/TaskInteractionQuestionV1"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "questions"
+    ],
+    "title": "TaskInteractionPresentationV1",
+    "type": "object"
+  },
+  "TaskInteractionQuestionV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "TaskInteractionOptionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "label"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "header": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "isOther": {
+        "type": "boolean"
+      },
+      "multiSelect": {
+        "description": "Omitted legacy questions retain their original single-choice wire shape.",
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "options": {
+        "items": {
+          "$ref": "#/definitions/TaskInteractionOptionV1"
+        },
+        "type": "array"
+      },
+      "question": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "header",
+      "id",
+      "isOther",
+      "options",
+      "question"
+    ],
+    "title": "TaskInteractionQuestionV1",
+    "type": "object"
+  },
+  "TaskInteractionReferenceV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "attemptId": {
+        "type": "string"
+      },
+      "selector": {
+        "$ref": "#/definitions/InteractionStatusReadParamsV1"
+      }
+    },
+    "required": [
+      "attemptId",
+      "selector"
+    ],
+    "title": "TaskInteractionReferenceV1",
+    "type": "object"
+  },
+  "TaskInteractionRespondParamsV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionAnswerV1": {
+        "additionalProperties": false,
+        "properties": {
+          "answers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "answers"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "selector": {
+            "$ref": "#/definitions/InteractionStatusReadParamsV1"
+          }
+        },
+        "required": [
+          "attemptId",
+          "selector"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "answers": {
+        "additionalProperties": {
+          "$ref": "#/definitions/TaskInteractionAnswerV1"
+        },
+        "type": "object"
+      },
+      "reference": {
+        "$ref": "#/definitions/TaskInteractionReferenceV1"
+      }
+    },
+    "required": [
+      "answers",
+      "reference"
+    ],
+    "title": "TaskInteractionRespondParamsV1",
+    "type": "object"
+  },
+  "TaskInteractionRespondResultV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "selector": {
+            "$ref": "#/definitions/InteractionStatusReadParamsV1"
+          }
+        },
+        "required": [
+          "attemptId",
+          "selector"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionStateV1": {
+        "enum": [
+          "pending",
+          "response_pending",
+          "resolved",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "reference": {
+        "$ref": "#/definitions/TaskInteractionReferenceV1"
+      },
+      "state": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/TaskInteractionStateV1"
+          }
+        ],
+        "description": "A sent response stays response_pending until the original native receipt resolves it."
+      }
+    },
+    "required": [
+      "reference",
+      "state"
+    ],
+    "title": "TaskInteractionRespondResultV1",
+    "type": "object"
+  },
+  "TaskInteractionSnapshotV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "InteractionStatusKindV1": {
+        "enum": [
+          "approval",
+          "question"
+        ],
+        "type": "string"
+      },
+      "InteractionStatusReadParamsV1": {
+        "additionalProperties": false,
+        "description": "Identifies one request without carrying its text, answers, or decision.",
+        "properties": {
+          "appServerEpoch": {
+            "type": "string"
+          },
+          "approvalId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/InteractionStatusKindV1"
+          },
+          "questionId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "requestId": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "appServerEpoch",
+          "kind",
+          "requestId",
+          "serverId",
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionApprovalKindV1": {
+        "enum": [
+          "command",
+          "file_change",
+          "permission",
+          "tool"
+        ],
+        "type": "string"
+      },
+      "TaskInteractionApprovalV1": {
+        "additionalProperties": false,
+        "properties": {
+          "input": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "$ref": "#/definitions/TaskInteractionApprovalKindV1"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "subject": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionItemV1": {
+        "additionalProperties": false,
+        "properties": {
+          "presentation": {
+            "$ref": "#/definitions/TaskInteractionPresentationV1"
+          },
+          "reference": {
+            "$ref": "#/definitions/TaskInteractionReferenceV1"
+          },
+          "state": {
+            "$ref": "#/definitions/TaskInteractionStateV1"
+          }
+        },
+        "required": [
+          "presentation",
+          "reference",
+          "state"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionObservationStateV1": {
+        "enum": [
+          "observed",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "TaskInteractionOptionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "label"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionPresentationV1": {
+        "additionalProperties": false,
+        "properties": {
+          "approval": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/TaskInteractionApprovalV1"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "questions": {
+            "items": {
+              "$ref": "#/definitions/TaskInteractionQuestionV1"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "questions"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionQuestionV1": {
+        "additionalProperties": false,
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "isOther": {
+            "type": "boolean"
+          },
+          "multiSelect": {
+            "description": "Omitted legacy questions retain their original single-choice wire shape.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "options": {
+            "items": {
+              "$ref": "#/definitions/TaskInteractionOptionV1"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "id",
+          "isOther",
+          "options",
+          "question"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionReferenceV1": {
+        "additionalProperties": false,
+        "properties": {
+          "attemptId": {
+            "type": "string"
+          },
+          "selector": {
+            "$ref": "#/definitions/InteractionStatusReadParamsV1"
+          }
+        },
+        "required": [
+          "attemptId",
+          "selector"
+        ],
+        "type": "object"
+      },
+      "TaskInteractionStateV1": {
+        "enum": [
+          "pending",
+          "response_pending",
+          "resolved",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/TaskInteractionItemV1"
+        },
+        "type": "array"
+      },
+      "observationState": {
+        "allOf": [
+          {
+            "$ref": "#/definitions/TaskInteractionObservationStateV1"
+          }
+        ],
+        "description": "Observed means original native selectors were checked, not complete business success."
+      },
+      "originalViewRequired": {
+        "description": "A verified original request needs its normal conversation presentation. This flag conveys no text or permission to answer that request here.",
+        "type": [
+          "boolean",
+          "null"
+        ]
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "items",
+      "observationState",
+      "schemaVersion",
+      "threadId"
+    ],
+    "title": "TaskInteractionSnapshotV1",
+    "type": "object"
+  },
+  "TaskInteractionStateV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "pending",
+      "response_pending",
+      "resolved",
+      "unknown"
+    ],
+    "title": "TaskInteractionStateV1",
+    "type": "string"
+  }
+}

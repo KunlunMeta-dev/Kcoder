@@ -1,0 +1,1771 @@
+{
+  "KnowledgeFileCapabilitiesResult": {
+    "valid": [
+      {
+        "name": "current",
+        "value": {
+          "supported": true,
+          "items": [
+            {
+              "format": "pdf",
+              "extensions": [
+                "pdf"
+              ],
+              "mimeTypes": [
+                "application/pdf"
+              ],
+              "maxFileBytes": 33554432,
+              "maxExtractedBytes": 8388608,
+              "requiresVision": false,
+              "warnings": [
+                "pdf_text_only"
+              ]
+            }
+          ],
+          "batchMaxFiles": 10,
+          "batchMaxBytes": 134217728
+        }
+      },
+      {
+        "name": "empty",
+        "value": {
+          "supported": true,
+          "items": [],
+          "batchMaxFiles": 10,
+          "batchMaxBytes": 134217728
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "nested_sensitive_unknown",
+        "value": {
+          "supported": true,
+          "items": [
+            {
+              "format": "pdf",
+              "extensions": [
+                "pdf"
+              ],
+              "mimeTypes": [
+                "application/pdf"
+              ],
+              "maxFileBytes": 33554432,
+              "maxExtractedBytes": 8388608,
+              "requiresVision": false,
+              "warnings": [
+                "pdf_text_only"
+              ],
+              "apiKey": "fixture-secret"
+            }
+          ],
+          "batchMaxFiles": 10,
+          "batchMaxBytes": 134217728
+        }
+      }
+    ]
+  },
+  "KnowledgeFileCapability": {
+    "valid": [
+      {
+        "name": "legacy_no_availability",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ]
+        }
+      },
+      {
+        "name": "current_unavailable",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ],
+          "available": false,
+          "unavailableReason": "runtime_missing"
+        }
+      },
+      {
+        "name": "nullable_availability",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ],
+          "available": null,
+          "unavailableReason": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "sensitive_unknown",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": false,
+          "warnings": [
+            "pdf_text_only"
+          ],
+          "providerUrl": "fixture-secret"
+        }
+      },
+      {
+        "name": "invalid_boolean",
+        "value": {
+          "format": "pdf",
+          "extensions": [
+            "pdf"
+          ],
+          "mimeTypes": [
+            "application/pdf"
+          ],
+          "maxFileBytes": 33554432,
+          "maxExtractedBytes": 8388608,
+          "requiresVision": "false",
+          "warnings": [
+            "pdf_text_only"
+          ]
+        }
+      }
+    ]
+  },
+  "KnowledgeImageImportListResult": {
+    "valid": [
+      {
+        "name": "durable-import-page",
+        "value": {
+          "supported": true,
+          "items": [
+            {
+              "id": "import",
+              "idempotencyKey": "file:digest",
+              "title": "image.png",
+              "status": "failed",
+              "phase": "validation",
+              "model": "vision",
+              "sourceId": null,
+              "revisionId": null,
+              "errorCode": "validation_failed",
+              "reservedCalls": 1,
+              "callLimit": 1,
+              "usageReportedCalls": 1,
+              "unknownUsageCalls": 0,
+              "inputTokens": 12,
+              "outputTokens": 7,
+              "textBytes": 100,
+              "reasoningBytes": 0,
+              "updatedAtMs": 1
+            }
+          ],
+          "nextAfterId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-private-field",
+        "value": {
+          "supported": true,
+          "items": [],
+          "nextAfterId": null,
+          "original": "private"
+        }
+      }
+    ]
+  },
+  "WikiImageImport": {
+    "valid": [
+      {
+        "name": "saved-response-recovery",
+        "value": {
+          "id": "import",
+          "idempotencyKey": "file:digest",
+          "title": "image.png",
+          "status": "failed",
+          "phase": "validation",
+          "model": "vision",
+          "sourceId": null,
+          "revisionId": null,
+          "errorCode": "validation_failed",
+          "reservedCalls": 1,
+          "callLimit": 1,
+          "usageReportedCalls": 1,
+          "unknownUsageCalls": 0,
+          "inputTokens": 12,
+          "outputTokens": 7,
+          "textBytes": 100,
+          "reasoningBytes": 0,
+          "updatedAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "private-response-never-public",
+        "value": {
+          "id": "import",
+          "idempotencyKey": "file:digest",
+          "title": "image.png",
+          "status": "failed",
+          "phase": "validation",
+          "model": "vision",
+          "sourceId": null,
+          "revisionId": null,
+          "errorCode": "validation_failed",
+          "reservedCalls": 1,
+          "callLimit": 1,
+          "usageReportedCalls": 1,
+          "unknownUsageCalls": 0,
+          "inputTokens": 12,
+          "outputTokens": 7,
+          "textBytes": 100,
+          "reasoningBytes": 0,
+          "updatedAtMs": 1,
+          "response": "private"
+        }
+      }
+    ]
+  },
+  "WikiJobPhase": {
+    "valid": [
+      {
+        "name": "known_analysis",
+        "value": "analysis"
+      },
+      {
+        "name": "known_generation",
+        "value": "generation"
+      },
+      {
+        "name": "known_citation_repair",
+        "value": "citation_repair"
+      },
+      {
+        "name": "known_source_support",
+        "value": "source_support"
+      },
+      {
+        "name": "known_format_repair",
+        "value": "format_repair"
+      },
+      {
+        "name": "known_truncation_retry",
+        "value": "truncation_retry"
+      },
+      {
+        "name": "known_commit",
+        "value": "commit"
+      },
+      {
+        "name": "future",
+        "value": "waiting_for_external_review"
+      },
+      {
+        "name": "case_unknown",
+        "value": "Completed"
+      },
+      {
+        "name": "empty_unknown",
+        "value": ""
+      },
+      {
+        "name": "utf8_exact_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+      },
+      {
+        "name": "known_organization_repair",
+        "value": "organization_repair"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "over_byte_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
+      },
+      {
+        "name": "numeric",
+        "value": 3
+      },
+      {
+        "name": "object",
+        "value": {
+          "unknown": "x"
+        }
+      }
+    ]
+  },
+  "WikiJobProgress": {
+    "valid": [
+      {
+        "name": "omitted_nullable_fields",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      },
+      {
+        "name": "current",
+        "value": {
+          "phase": "generation",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0,
+          "modelProgressAtMs": 3,
+          "reasoningEffort": "high",
+          "throughChunk": 2,
+          "totalChunks": 4,
+          "firstPage": 1,
+          "lastPage": 2,
+          "callLimit": 20,
+          "requestedOutputTokens": 2048,
+          "estimatedInputTokens": 100,
+          "inputTokens": 98,
+          "outputTokens": 202
+        }
+      },
+      {
+        "name": "future_phase",
+        "value": {
+          "phase": "future_host_phase",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      },
+      {
+        "name": "frozen-worker-model-configuration",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0,
+          "modelConfiguration": {
+            "providerId": "provider",
+            "modelId": "model",
+            "apiFormat": null,
+            "chatProtocol": "auto",
+            "contextWindowTokens": 64000,
+            "maxOutputTokens": 2048,
+            "requestOutputLimits": {
+              "max_tokens": 2048
+            },
+            "outputHeadroomTokens": 2048,
+            "text": true,
+            "tools": true,
+            "vision": false,
+            "reasoning": true,
+            "structuredOutput": false,
+            "reasoningEffort": "high",
+            "extraBodyConfigured": false,
+            "requestOverrideFields": [],
+            "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "boundary": "next_turn",
+            "sources": {
+              "max_output_tokens": [
+                "user"
+              ]
+            },
+            "toolSet": {
+              "profile": null,
+              "registryScope": "wiki_worker",
+              "registeredToolCount": 0,
+              "exposedToolCount": 0
+            }
+          }
+        }
+      },
+      {
+        "name": "file_contract_tool_counters",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0,
+          "toolTurns": 4,
+          "toolCalls": 11
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "sensitive_unknown",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0,
+          "response": "fixture-secret"
+        }
+      },
+      {
+        "name": "wrong_timestamp",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": "2",
+          "model": "model",
+          "textBytes": 0,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      },
+      {
+        "name": "negative_bytes",
+        "value": {
+          "phase": "analysis",
+          "startedAtMs": 1,
+          "phaseStartedAtMs": 1,
+          "heartbeatAtMs": 2,
+          "model": "model",
+          "textBytes": -1,
+          "reasoningBytes": 0,
+          "reservedCalls": 1,
+          "repairCalls": 0,
+          "usageReportedCalls": 0
+        }
+      }
+    ]
+  },
+  "WikiJobStatus": {
+    "valid": [
+      {
+        "name": "known_queued",
+        "value": "queued"
+      },
+      {
+        "name": "known_running",
+        "value": "running"
+      },
+      {
+        "name": "known_paused",
+        "value": "paused"
+      },
+      {
+        "name": "known_awaiting_review",
+        "value": "awaiting_review"
+      },
+      {
+        "name": "known_failed",
+        "value": "failed"
+      },
+      {
+        "name": "known_completed",
+        "value": "completed"
+      },
+      {
+        "name": "known_cancelled",
+        "value": "cancelled"
+      },
+      {
+        "name": "future",
+        "value": "waiting_for_external_review"
+      },
+      {
+        "name": "case_unknown",
+        "value": "Completed"
+      },
+      {
+        "name": "empty_unknown",
+        "value": ""
+      },
+      {
+        "name": "utf8_exact_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉a"
+      }
+    ],
+    "invalid": [
+      {
+        "name": "over_byte_limit",
+        "value": "汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉汉ab"
+      },
+      {
+        "name": "numeric",
+        "value": 3
+      },
+      {
+        "name": "object",
+        "value": {
+          "unknown": "x"
+        }
+      }
+    ]
+  },
+  "WikiPipelineProgress": {
+    "valid": [
+      {
+        "name": "omitted_optional_stage_fields",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "planned_units_and_resume_address",
+        "value": {
+          "version": 1,
+          "batch": 8,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            },
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "page-draft",
+              "stage": "generate",
+              "unitKey": "topic-2",
+              "status": "running",
+              "attempt": 2,
+              "reused": false,
+              "updatedAtMs": 1100,
+              "unitLabel": "维护步骤",
+              "unitIndex": 1,
+              "completedUnits": 1,
+              "totalUnits": 2
+            }
+          ],
+          "currentStage": "generate",
+          "resumeStage": {
+            "batch": 8,
+            "sourceRevision": "source-v1",
+            "stageKey": "page-draft",
+            "stage": "generate",
+            "unitKey": "topic-1"
+          }
+        }
+      },
+      {
+        "name": "explicit_null_optional_fields",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": null,
+              "unitIndex": null,
+              "completedUnits": null,
+              "totalUnits": null,
+              "startedAtMs": null,
+              "completedAtMs": null,
+              "artifactHash": null,
+              "errorCode": null,
+              "errorDetail": null
+            }
+          ],
+          "currentStage": null,
+          "resumeStage": null
+        }
+      },
+      {
+        "name": "paused_safe_failure",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "verify",
+              "unitKey": "topic-1",
+              "status": "paused",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id",
+              "errorCode": "budget_exceeded",
+              "errorDetail": "已达到调用预算"
+            }
+          ],
+          "currentStage": "verify"
+        }
+      },
+      {
+        "name": "u8_decode_upper_boundary",
+        "value": {
+          "version": 255,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "stage_extract",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "extract",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "extract"
+        }
+      },
+      {
+        "name": "stage_analyze",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "analyze"
+        }
+      },
+      {
+        "name": "stage_retrieve",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "retrieve",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "retrieve"
+        }
+      },
+      {
+        "name": "stage_generate",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "generate",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "generate"
+        }
+      },
+      {
+        "name": "stage_verify",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "verify",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "verify"
+        }
+      },
+      {
+        "name": "stage_coverage",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "coverage",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "coverage"
+        }
+      },
+      {
+        "name": "stage_commit",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "commit",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 0,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ],
+          "currentStage": "commit"
+        }
+      },
+      {
+        "name": "status_waiting",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "waiting",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_running",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "running",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_received",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "received",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_validated",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "validated",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_completed",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_failed",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "failed",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_paused",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "paused",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "status_needs_review",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "needs_review",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1
+            }
+          ]
+        }
+      },
+      {
+        "name": "file_contract_tool_counters",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "generation/aggregate",
+              "stage": "generate",
+              "unitKey": "topic-1",
+              "status": "running",
+              "attempt": 1,
+              "reused": false,
+              "updatedAtMs": 1,
+              "toolTurns": 4,
+              "toolCalls": 11
+            }
+          ]
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "u8_overflow",
+        "value": {
+          "version": 256,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "negative_batch_cursor",
+        "value": {
+          "version": 1,
+          "batch": -1,
+          "sourceRevision": "source-v1",
+          "records": []
+        }
+      },
+      {
+        "name": "missing_source_revision",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "records": []
+        }
+      },
+      {
+        "name": "wrong_records_type",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": {}
+        }
+      },
+      {
+        "name": "unknown_current_stage",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [],
+          "currentStage": "future"
+        }
+      },
+      {
+        "name": "unknown_record_status",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "future",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      },
+      {
+        "name": "negative_unit_count",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": -1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      },
+      {
+        "name": "attempt_u32_overflow",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 4294967296,
+              "reused": true,
+              "updatedAtMs": 1000,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      },
+      {
+        "name": "invalid_resume_address",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [],
+          "resumeStage": {
+            "stage": "generate"
+          }
+        }
+      },
+      {
+        "name": "negative_timestamp",
+        "value": {
+          "version": 1,
+          "batch": 0,
+          "sourceRevision": "source-v1",
+          "records": [
+            {
+              "batch": 8,
+              "sourceRevision": "source-v1",
+              "stageKey": "topic-plan",
+              "stage": "analyze",
+              "unitKey": "topic-1",
+              "status": "completed",
+              "attempt": 1,
+              "reused": true,
+              "updatedAtMs": -1,
+              "unitLabel": "安装步骤",
+              "unitIndex": 0,
+              "completedUnits": 1,
+              "totalUnits": 2,
+              "startedAtMs": 900,
+              "completedAtMs": 1000,
+              "artifactHash": "opaque-artifact-id"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "WikiVerificationFinding": {
+    "valid": [
+      {
+        "name": "open",
+        "value": {
+          "findingId": "f-1",
+          "pageId": "page-1",
+          "revisionId": "rev-1",
+          "jobId": "job-1",
+          "verdict": "unsupported",
+          "code": "wiki_support_unsupported",
+          "firstLine": 3,
+          "lastLine": 5,
+          "bodyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "current": true,
+          "createdAtMs": 1700000000000
+        }
+      },
+      {
+        "name": "decided",
+        "value": {
+          "findingId": "f-2",
+          "pageId": "page-1",
+          "revisionId": "rev-1",
+          "jobId": "job-1",
+          "verdict": "uncertain",
+          "code": "wiki_support_unsupported",
+          "firstLine": 3,
+          "lastLine": 5,
+          "bodyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "current": false,
+          "createdAtMs": 1700000000000,
+          "decision": "confirmed",
+          "decidedAtMs": 1700000000500
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_verdict",
+        "value": {
+          "findingId": "f-1",
+          "pageId": "page-1",
+          "revisionId": "rev-1",
+          "jobId": "job-1",
+          "verdict": "supported",
+          "code": "wiki_support_unsupported",
+          "firstLine": 3,
+          "lastLine": 5,
+          "bodyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "current": true,
+          "createdAtMs": 1700000000000
+        }
+      },
+      {
+        "name": "nested_sensitive_unknown",
+        "value": {
+          "findingId": "f-1",
+          "pageId": "page-1",
+          "revisionId": "rev-1",
+          "jobId": "job-1",
+          "verdict": "unsupported",
+          "code": "wiki_support_unsupported",
+          "firstLine": 3,
+          "lastLine": 5,
+          "bodyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "current": true,
+          "createdAtMs": 1700000000000,
+          "apiKey": "fixture-secret"
+        }
+      }
+    ]
+  },
+  "WikiPendingUnit": {
+    "valid": [
+      {
+        "name": "open",
+        "value": {
+          "pendingId": "pending-1",
+          "jobId": "job-1",
+          "sourceId": "source-1",
+          "sourceRevision": "source-rev-1",
+          "unitId": "S1-U3",
+          "chunkIds": [
+            "chunk-1"
+          ],
+          "firstLine": 10,
+          "lastLine": 14,
+          "reasonCode": "wiki_organization_unit_unplaced",
+          "status": "open",
+          "createdAtMs": 1700000000000
+        }
+      },
+      {
+        "name": "organizing",
+        "value": {
+          "pendingId": "pending-1",
+          "jobId": "job-1",
+          "sourceId": "source-1",
+          "sourceRevision": "source-rev-1",
+          "unitId": "S1-U3",
+          "chunkIds": [
+            "chunk-1"
+          ],
+          "firstLine": 10,
+          "lastLine": 14,
+          "reasonCode": "wiki_organization_unit_unplaced",
+          "status": "organizing",
+          "createdAtMs": 1700000000000,
+          "organizeJobId": "job-2"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_status",
+        "value": {
+          "pendingId": "pending-1",
+          "jobId": "job-1",
+          "sourceId": "source-1",
+          "sourceRevision": "source-rev-1",
+          "unitId": "S1-U3",
+          "chunkIds": [
+            "chunk-1"
+          ],
+          "firstLine": 10,
+          "lastLine": 14,
+          "reasonCode": "wiki_organization_unit_unplaced",
+          "status": "auto",
+          "createdAtMs": 1700000000000
+        }
+      },
+      {
+        "name": "missing_unit",
+        "value": {
+          "pendingId": "pending-1",
+          "jobId": "job-1",
+          "sourceId": "source-1",
+          "sourceRevision": "source-rev-1",
+          "chunkIds": [
+            "chunk-1"
+          ],
+          "firstLine": 10,
+          "lastLine": 14,
+          "reasonCode": "wiki_organization_unit_unplaced",
+          "status": "open",
+          "createdAtMs": 1700000000000
+        }
+      }
+    ]
+  },
+  "WikiFindingsListResult": {
+    "valid": [
+      {
+        "name": "page",
+        "value": {
+          "items": [
+            {
+              "findingId": "f-1",
+              "pageId": "page-1",
+              "revisionId": "rev-1",
+              "jobId": "job-1",
+              "verdict": "unsupported",
+              "code": "wiki_support_unsupported",
+              "firstLine": 3,
+              "lastLine": 5,
+              "bodyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "current": true,
+              "createdAtMs": 1700000000000
+            },
+            {
+              "findingId": "f-2",
+              "pageId": "page-1",
+              "revisionId": "rev-1",
+              "jobId": "job-1",
+              "verdict": "uncertain",
+              "code": "wiki_support_unsupported",
+              "firstLine": 3,
+              "lastLine": 5,
+              "bodyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "current": false,
+              "createdAtMs": 1700000000000,
+              "decision": "confirmed",
+              "decidedAtMs": 1700000000500
+            }
+          ],
+          "nextAfterId": "f-2"
+        }
+      },
+      {
+        "name": "empty",
+        "value": {
+          "items": [],
+          "nextAfterId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "nested_sensitive_unknown",
+        "value": {
+          "items": [
+            {
+              "findingId": "f-1",
+              "pageId": "page-1",
+              "revisionId": "rev-1",
+              "jobId": "job-1",
+              "verdict": "unsupported",
+              "code": "wiki_support_unsupported",
+              "firstLine": 3,
+              "lastLine": 5,
+              "bodyHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "current": true,
+              "createdAtMs": 1700000000000,
+              "token": "secret"
+            }
+          ],
+          "nextAfterId": null
+        }
+      }
+    ]
+  },
+  "WikiPendingListResult": {
+    "valid": [
+      {
+        "name": "page",
+        "value": {
+          "items": [
+            {
+              "pendingId": "pending-1",
+              "jobId": "job-1",
+              "sourceId": "source-1",
+              "sourceRevision": "source-rev-1",
+              "unitId": "S1-U3",
+              "chunkIds": [
+                "chunk-1"
+              ],
+              "firstLine": 10,
+              "lastLine": 14,
+              "reasonCode": "wiki_organization_unit_unplaced",
+              "status": "open",
+              "createdAtMs": 1700000000000
+            }
+          ],
+          "nextAfterId": null
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "wrong_items",
+        "value": {
+          "items": {},
+          "nextAfterId": null
+        }
+      }
+    ]
+  },
+  "WikiFindingsListParams": {
+    "valid": [
+      {
+        "name": "minimal",
+        "value": {
+          "libraryId": "l"
+        }
+      },
+      {
+        "name": "page_filter",
+        "value": {
+          "libraryId": "l",
+          "pageId": "p",
+          "includeDecided": true,
+          "afterId": "f-1",
+          "limit": 50
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "foreign_owner",
+        "value": {
+          "libraryId": "l",
+          "owner": "other"
+        }
+      }
+    ]
+  },
+  "WikiFindingDecideParams": {
+    "valid": [
+      {
+        "name": "confirm",
+        "value": {
+          "libraryId": "l",
+          "findingId": "f-1",
+          "expectedRevision": "rev-1",
+          "decision": "confirm",
+          "idempotencyKey": "k"
+        }
+      },
+      {
+        "name": "dismiss",
+        "value": {
+          "libraryId": "l",
+          "findingId": "f-1",
+          "expectedRevision": "rev-1",
+          "decision": "dismiss",
+          "idempotencyKey": "k2"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "approve_is_not_a_decision",
+        "value": {
+          "libraryId": "l",
+          "findingId": "f-1",
+          "expectedRevision": "rev-1",
+          "decision": "approve",
+          "idempotencyKey": "k"
+        }
+      },
+      {
+        "name": "missing_revision",
+        "value": {
+          "libraryId": "l",
+          "findingId": "f-1",
+          "decision": "confirm",
+          "idempotencyKey": "k"
+        }
+      }
+    ]
+  },
+  "WikiPendingListParams": {
+    "valid": [
+      {
+        "name": "minimal",
+        "value": {
+          "libraryId": "l"
+        }
+      },
+      {
+        "name": "source",
+        "value": {
+          "libraryId": "l",
+          "sourceId": "s",
+          "includeClosed": true,
+          "limit": 10
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown",
+        "value": {
+          "libraryId": "l",
+          "target": "other"
+        }
+      }
+    ]
+  },
+  "WikiPendingOrganizeParams": {
+    "valid": [
+      {
+        "name": "explicit",
+        "value": {
+          "libraryId": "l",
+          "pendingIds": [
+            "pending-1"
+          ],
+          "idempotencyKey": "k",
+          "language": "zh-CN"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "automatic_flag",
+        "value": {
+          "libraryId": "l",
+          "pendingIds": [
+            "pending-1"
+          ],
+          "idempotencyKey": "k",
+          "language": "zh-CN",
+          "automatic": true
+        }
+      }
+    ]
+  },
+  "WikiJobResumeParams": {
+    "valid": [
+      {
+        "name": "legacy",
+        "value": {
+          "libraryId": "l",
+          "jobId": "j"
+        }
+      },
+      {
+        "name": "rebind",
+        "value": {
+          "libraryId": "l",
+          "jobId": "j",
+          "rebindOrganizationModel": true
+        }
+      },
+      {
+        "name": "reorganize",
+        "value": {
+          "libraryId": "l",
+          "jobId": "j",
+          "reorganize": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "model_override",
+        "value": {
+          "libraryId": "l",
+          "jobId": "j",
+          "model": "other::model"
+        }
+      }
+    ]
+  },
+  "WikiJobOutcome": {
+    "valid": [
+      {
+        "name": "partial",
+        "value": {
+          "publishedPages": 3,
+          "verifiedUnits": 12,
+          "unverified": {
+            "unsupported": 1,
+            "uncertain": 2,
+            "unassessed": 0
+          },
+          "pendingUnits": 1,
+          "withheldUpdates": 0,
+          "toolTurns": 5,
+          "toolCalls": 9
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "verified_includes_unverified",
+        "value": {
+          "publishedPages": 3,
+          "verifiedUnits": 12,
+          "unverified": {
+            "unsupported": 1,
+            "uncertain": 2,
+            "unassessed": 0
+          },
+          "pendingUnits": 1,
+          "withheldUpdates": 0,
+          "toolTurns": 5,
+          "toolCalls": 9,
+          "unverifiedCountedAsVerified": true
+        }
+      }
+    ]
+  },
+  "KnowledgeTrashUpdateParams": {
+    "valid": [
+      {
+        "name": "move_to_trash",
+        "value": {
+          "libraryId": "library-1",
+          "expectedRevision": 4,
+          "trashed": true
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "libraryId": "library-1",
+          "expectedRevision": 4,
+          "trashed": true,
+          "force": true
+        }
+      }
+    ]
+  },
+  "KnowledgeLibraryPurgeParams": {
+    "valid": [
+      {
+        "name": "purge_after_retention",
+        "value": {
+          "libraryId": "library-1",
+          "expectedRevision": 5
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_property",
+        "value": {
+          "libraryId": "library-1",
+          "expectedRevision": 5,
+          "immediate": true
+        }
+      }
+    ]
+  },
+  "WikiPageVerification": {
+    "valid": [
+      {
+        "name": "partial",
+        "value": {
+          "status": "partial",
+          "unverified": [
+            {
+              "firstLine": 3,
+              "lastLine": 5,
+              "verdict": "uncertain"
+            }
+          ]
+        }
+      },
+      {
+        "name": "legacy",
+        "value": {
+          "status": "legacy",
+          "unverified": []
+        }
+      },
+      {
+        "name": "human",
+        "value": {
+          "status": "human_edited"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown_status",
+        "value": {
+          "status": "approved",
+          "unverified": []
+        }
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+[package]
+name = "kcoder_native_image"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[target.'cfg(windows)'.dependencies]
+anyhow.workspace = true
+# Leaf identity primitives shared with the CLI; it has no kcoder_* dependency,
+# so this addon stays outside the CLI and process-supervisor graphs.
+kcoder_native_image_identity = { path = "internal/image_identity" }
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_LibraryLoader",
+  "Win32_System_ProcessStatus",
+  "Win32_System_SystemServices",
+  "Win32_System_SystemInformation",
+  "Win32_System_Threading",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+sha2.workspace = true
+tempfile.workspace = true

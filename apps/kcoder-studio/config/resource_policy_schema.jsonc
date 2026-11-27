@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object", "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "meta": { "type": "object", "additionalProperties": false,
+      "properties": { "config_version": { "const": 1 } } },
+    "resources": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "idle_budget": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "max_processes": { "type": ["integer", "null"], "minimum": 0, "maximum": 10000, "default": null },
+            "max_resident_bytes": { "type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991, "default": null },
+            "sweep_interval_ms": { "type": "integer", "minimum": 1000, "maximum": 300000, "default": 5000 },
+            "sample_max_age_ms": { "type": "integer", "minimum": 1000, "maximum": 300000, "default": 30000 },
+            "sample_limit": { "type": "integer", "minimum": 1, "maximum": 32, "default": 16 }
+          }
+        }
+      }
+    }
+  }
+}

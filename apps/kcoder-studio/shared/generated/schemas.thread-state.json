@@ -1,0 +1,1098 @@
+{
+  "ThreadAttachParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "The trusted client transport assigns the slot and connection incarnation. Both are scoped to that transport's authenticated owner by the server.",
+    "properties": {
+      "clientId": {
+        "type": "string"
+      },
+      "generation": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "clientId",
+      "generation",
+      "threadId"
+    ],
+    "title": "ThreadAttachParams",
+    "type": "object"
+  },
+  "ThreadContextUsage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "TokenUsageBreakdown": {
+        "properties": {
+          "cachedInputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reasoningOutputTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "totalTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cachedInputTokens",
+          "inputTokens",
+          "outputTokens",
+          "reasoningOutputTokens",
+          "totalTokens"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "last": {
+        "$ref": "#/definitions/TokenUsageBreakdown"
+      },
+      "modelContextWindow": {
+        "description": "Older history retains usage but not the request's context-window limit.",
+        "format": "uint",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "total": {
+        "$ref": "#/definitions/TokenUsageBreakdown"
+      }
+    },
+    "required": [
+      "last",
+      "total"
+    ],
+    "title": "ThreadContextUsage",
+    "type": "object"
+  },
+  "ThreadEvictedParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadEvictionReason": {
+        "oneOf": [
+          {
+            "description": "The resident capacity was needed by another thread (least recently used idle runtime).",
+            "enum": [
+              "capacity"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "reason": {
+        "$ref": "#/definitions/ThreadEvictionReason"
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "reason",
+      "threadId"
+    ],
+    "title": "ThreadEvictedParams",
+    "type": "object"
+  },
+  "ThreadGoalStatusBatchParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadIds": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 100,
+        "minItems": 1,
+        "type": "array",
+        "uniqueItems": true
+      }
+    },
+    "required": [
+      "threadIds"
+    ],
+    "title": "ThreadGoalStatusBatchParams",
+    "type": "object"
+  },
+  "ThreadGoalStatusBatchResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadGoalStatusBatchObservation": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "availability": {
+                "enum": [
+                  "available"
+                ],
+                "type": "string"
+              },
+              "status": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "availability",
+              "status",
+              "threadId"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "availability": {
+                "enum": [
+                  "unavailable"
+                ],
+                "type": "string"
+              },
+              "threadId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "availability",
+              "threadId"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "observations": {
+        "items": {
+          "$ref": "#/definitions/ThreadGoalStatusBatchObservation"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "observations"
+    ],
+    "title": "ThreadGoalStatusBatchResult",
+    "type": "object"
+  },
+  "ThreadLifetimeReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "ThreadLifetimeReadParams",
+    "type": "object"
+  },
+  "ThreadLifetimeResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "SessionLifetimeMode": {
+        "enum": [
+          "background"
+        ],
+        "type": "string"
+      },
+      "SessionLifetimeSetting": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/definitions/SessionLifetimeMode"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "mode",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "attachedClients": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "backgroundAuthorized": {
+        "type": "boolean"
+      },
+      "pausedReason": {
+        "description": "Absence means that the lifetime gate permits admission, not tool access.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "reconnectGraceMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "setting": {
+        "$ref": "#/definitions/SessionLifetimeSetting"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "attachedClients",
+      "backgroundAuthorized",
+      "reconnectGraceMs",
+      "setting",
+      "threadId"
+    ],
+    "title": "ThreadLifetimeResult",
+    "type": "object"
+  },
+  "ThreadLifetimeSetParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "SessionLifetimeMode": {
+        "enum": [
+          "background"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "expectedRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "mode": {
+        "$ref": "#/definitions/SessionLifetimeMode"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedRevision",
+      "mode",
+      "threadId"
+    ],
+    "title": "ThreadLifetimeSetParams",
+    "type": "object"
+  },
+  "ThreadMaintenanceBusyErrorDataV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadMaintenanceOperation": {
+        "enum": [
+          "compact",
+          "rollback"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "`error.data` of a [`THREAD_MAINTENANCE_BUSY`] rejection.",
+    "properties": {
+      "operation": {
+        "$ref": "#/definitions/ThreadMaintenanceOperation"
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "operation",
+      "threadId"
+    ],
+    "title": "ThreadMaintenanceBusyErrorDataV1",
+    "type": "object"
+  },
+  "ThreadMaintenanceCancelParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Cancellation applies to the exact currently active compaction, if it matches.",
+    "properties": {
+      "maintenanceId": {
+        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$",
+        "type": "string"
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "maintenanceId",
+      "threadId"
+    ],
+    "title": "ThreadMaintenanceCancelParams",
+    "type": "object"
+  },
+  "ThreadMaintenanceCancelResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "A cancellation request is a signal, not the compaction's terminal outcome.",
+    "properties": {
+      "cancellationRequested": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "cancellationRequested"
+    ],
+    "title": "ThreadMaintenanceCancelResult",
+    "type": "object"
+  },
+  "ThreadMaintenanceParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadMaintenanceOperation": {
+        "enum": [
+          "compact",
+          "rollback"
+        ],
+        "type": "string"
+      },
+      "ThreadMaintenanceStatus": {
+        "oneOf": [
+          {
+            "enum": [
+              "started",
+              "completed",
+              "failed"
+            ],
+            "type": "string"
+          },
+          {
+            "description": "Cancelled before its commit; nothing of this operation was written.",
+            "enum": [
+              "cancelled"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "description": "Payload of `thread/maintenance`. The terminal status is sent after the request's own response, so the response remains the authoritative result.",
+    "properties": {
+      "maintenanceId": {
+        "description": "Opaque identity of this compaction, projected only for opted-in clients.",
+        "pattern": "^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "operation": {
+        "$ref": "#/definitions/ThreadMaintenanceOperation"
+      },
+      "status": {
+        "$ref": "#/definitions/ThreadMaintenanceStatus"
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "operation",
+      "status",
+      "threadId"
+    ],
+    "title": "ThreadMaintenanceParams",
+    "type": "object"
+  },
+  "ThreadModelSelectionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Request to change the model for a resident thread while its current turn is running.",
+    "properties": {
+      "model": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "model",
+      "threadId"
+    ],
+    "title": "ThreadModelSelectionParams",
+    "type": "object"
+  },
+  "ThreadModelSelectionResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "properties": {
+      "accepted": {
+        "type": "boolean"
+      },
+      "appliesAt": {
+        "type": "string"
+      },
+      "model": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "accepted",
+      "appliesAt",
+      "model"
+    ],
+    "title": "ThreadModelSelectionResult",
+    "type": "object"
+  },
+  "ThreadNotResidentErrorDataV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadEvictionReason": {
+        "oneOf": [
+          {
+            "description": "The resident capacity was needed by another thread (least recently used idle runtime).",
+            "enum": [
+              "capacity"
+            ],
+            "type": "string"
+          }
+        ]
+      }
+    },
+    "description": "`error.data` of a [`THREAD_NOT_RESIDENT`] rejection.",
+    "properties": {
+      "reason": {
+        "$ref": "#/definitions/ThreadEvictionReason"
+      },
+      "threadId": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9_-]+$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "reason",
+      "threadId"
+    ],
+    "title": "ThreadNotResidentErrorDataV1",
+    "type": "object"
+  },
+  "ThreadPresenceReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Read one thread's bounded presence observation.",
+    "properties": {
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "ThreadPresenceReadParams",
+    "type": "object"
+  },
+  "ThreadPresenceReadResultV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ThreadPresenceReadAbsentReasonV1": {
+        "description": "Stable reason for an authoritative State-bound deletion observation.",
+        "enum": [
+          "boundDeletedPrimarySource"
+        ],
+        "type": "string"
+      },
+      "ThreadPresenceReadPresentReasonV1": {
+        "description": "Stable reason for a resident runtime being authorized in the current workspace.",
+        "enum": [
+          "residentRuntime"
+        ],
+        "type": "string"
+      },
+      "ThreadPresenceReadUnknownReasonV1": {
+        "description": "Stable reasons for an inconclusive observation. Values never include paths or diagnostics.",
+        "enum": [
+          "coldSourceNotAuthorized",
+          "missingHistoryParent",
+          "missingControlDirectory",
+          "missingControlRecord",
+          "missingSourceForLiveRecord",
+          "legacyDeletionWithoutBinding",
+          "boundDeletionMissingSourceWithoutLock",
+          "boundDeletionResidualSameIdentity",
+          "compatibilityRootPresent",
+          "residentIdentityMismatch",
+          "primarySourceUnavailable",
+          "busy",
+          "unsupported",
+          "observationFailed"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "A disposable, point-in-time presence observation. It is not a deletion receipt.",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "$ref": "#/definitions/ThreadPresenceReadPresentReasonV1"
+          },
+          "status": {
+            "enum": [
+              "present"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "$ref": "#/definitions/ThreadPresenceReadAbsentReasonV1"
+          },
+          "status": {
+            "enum": [
+              "absent"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "reason": {
+            "$ref": "#/definitions/ThreadPresenceReadUnknownReasonV1"
+          },
+          "status": {
+            "enum": [
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "ThreadPresenceReadResultV1"
+  },
+  "ThreadRuntimeHandoffReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "operationId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "threadId"
+    ],
+    "title": "ThreadRuntimeHandoffReadParams",
+    "type": "object"
+  },
+  "ThreadRuntimeHandoffReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadRuntimeHandoffReceipt": {
+        "additionalProperties": false,
+        "description": "Receipts are scoped to the actual server incarnation. After it ends, callers must observe the current owner instead of replaying a release on a new one.",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "ownerRef": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/ThreadRuntimeHandoffStatus"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "ownerRef",
+          "serverId",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "ThreadRuntimeHandoffSnapshot": {
+        "additionalProperties": false,
+        "description": "This observes this app-server only. A missing resident owner is not proof that another app-server or the Native Core does not hold the original lease.",
+        "properties": {
+          "clientTurnCount": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ownerRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "releasable": {
+            "type": "boolean"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "releasable",
+          "serverId",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "ThreadRuntimeHandoffStatus": {
+        "enum": [
+          "released",
+          "rejected",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "operation": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ThreadRuntimeHandoffReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "snapshot": {
+        "$ref": "#/definitions/ThreadRuntimeHandoffSnapshot"
+      }
+    },
+    "required": [
+      "snapshot"
+    ],
+    "title": "ThreadRuntimeHandoffReadResult",
+    "type": "object"
+  },
+  "ThreadRuntimeHandoffReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadRuntimeHandoffStatus": {
+        "enum": [
+          "released",
+          "rejected",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Receipts are scoped to the actual server incarnation. After it ends, callers must observe the current owner instead of replaying a release on a new one.",
+    "properties": {
+      "operationId": {
+        "type": "string"
+      },
+      "ownerRef": {
+        "type": "string"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "status": {
+        "$ref": "#/definitions/ThreadRuntimeHandoffStatus"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "operationId",
+      "ownerRef",
+      "serverId",
+      "status",
+      "threadId"
+    ],
+    "title": "ThreadRuntimeHandoffReceipt",
+    "type": "object"
+  },
+  "ThreadRuntimeHandoffReleaseParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "expectedClientTurnCount": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expectedOwnerRef": {
+        "type": "string"
+      },
+      "expectedServerId": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "expectedClientTurnCount",
+      "expectedOwnerRef",
+      "expectedServerId",
+      "operationId",
+      "threadId"
+    ],
+    "title": "ThreadRuntimeHandoffReleaseParams",
+    "type": "object"
+  },
+  "ThreadRuntimeHandoffReleaseResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ThreadRuntimeHandoffReceipt": {
+        "additionalProperties": false,
+        "description": "Receipts are scoped to the actual server incarnation. After it ends, callers must observe the current owner instead of replaying a release on a new one.",
+        "properties": {
+          "operationId": {
+            "type": "string"
+          },
+          "ownerRef": {
+            "type": "string"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/definitions/ThreadRuntimeHandoffStatus"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operationId",
+          "ownerRef",
+          "serverId",
+          "status",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "ThreadRuntimeHandoffSnapshot": {
+        "additionalProperties": false,
+        "description": "This observes this app-server only. A missing resident owner is not proof that another app-server or the Native Core does not hold the original lease.",
+        "properties": {
+          "clientTurnCount": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ownerRef": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "releasable": {
+            "type": "boolean"
+          },
+          "serverId": {
+            "type": "string"
+          },
+          "threadId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "releasable",
+          "serverId",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "ThreadRuntimeHandoffStatus": {
+        "enum": [
+          "released",
+          "rejected",
+          "unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "receipt": {
+        "$ref": "#/definitions/ThreadRuntimeHandoffReceipt"
+      },
+      "snapshot": {
+        "$ref": "#/definitions/ThreadRuntimeHandoffSnapshot"
+      }
+    },
+    "required": [
+      "receipt",
+      "snapshot"
+    ],
+    "title": "ThreadRuntimeHandoffReleaseResult",
+    "type": "object"
+  },
+  "ThreadRuntimeHandoffSnapshot": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "This observes this app-server only. A missing resident owner is not proof that another app-server or the Native Core does not hold the original lease.",
+    "properties": {
+      "clientTurnCount": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "ownerRef": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "releasable": {
+        "type": "boolean"
+      },
+      "serverId": {
+        "type": "string"
+      },
+      "threadId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "releasable",
+      "serverId",
+      "threadId"
+    ],
+    "title": "ThreadRuntimeHandoffSnapshot",
+    "type": "object"
+  },
+  "ThreadRuntimeHandoffStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "released",
+      "rejected",
+      "unknown"
+    ],
+    "title": "ThreadRuntimeHandoffStatus",
+    "type": "string"
+  },
+  "ThreadTranscriptObservationV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "A complete, bounded read observation. Equality binds pages only within the same authorized workspace/thread and projection version. It grants no deletion, execution or cache authority. Missing proof is omitted rather than filled from a partial page or an unverified old index.",
+    "properties": {
+      "observationId": {
+        "description": "Binds the exact source stream, complete metadata inventory and full projected transcript.",
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      },
+      "viewKey": {
+        "description": "Final Thread/runtime display facts, independent of the selected page's message slice.",
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "type": "string"
+      }
+    },
+    "required": [
+      "observationId",
+      "viewKey"
+    ],
+    "title": "ThreadTranscriptObservationV1",
+    "type": "object"
+  },
+  "ThreadTranscriptSnapshotV1": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "ThreadTranscriptSnapshotUnavailableCodeV1": {
+        "enum": [
+          "legacyReader",
+          "unprovenSource"
+        ],
+        "type": "string"
+      }
+    },
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "snapshotId": {
+            "description": "Opaque identity; equality is meaningful only within the same authorized thread scope.",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "available"
+            ],
+            "type": "string"
+          },
+          "viewKey": {
+            "description": "Includes the final Thread and runtime display facts, never a single page's messages.",
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "snapshotId",
+          "status",
+          "viewKey"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "$ref": "#/definitions/ThreadTranscriptSnapshotUnavailableCodeV1"
+          },
+          "status": {
+            "enum": [
+              "unavailable"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "status"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "ThreadTranscriptSnapshotV1"
+  }
+}

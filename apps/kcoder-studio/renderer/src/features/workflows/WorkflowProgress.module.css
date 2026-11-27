@@ -1,0 +1,13 @@
+.spinner {
+  animation: workflow-progress-turn 1s linear infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes workflow-progress-turn {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* This is a live status indicator: reduce motion, but retain visible activity. */

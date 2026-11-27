@@ -1,0 +1,10 @@
+{
+  "model": "source-model",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.example.invalid",
+    "ANTHROPIC_API_KEY": "SYNTHETIC_CREDENTIAL_CANARY_NOT_A_REAL_KEY"
+  },
+  "apiKeyHelper": "a-command-that-must-never-run",
+  "permissions": { "allow": ["Bash(echo example)"] },
+  "hooks": { "PreToolUse": [{ "command": "never-run-this-hook" }] }
+}

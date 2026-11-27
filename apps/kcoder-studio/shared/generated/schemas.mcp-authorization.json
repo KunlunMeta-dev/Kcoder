@@ -1,0 +1,287 @@
+{
+  "McpProviderRevocationParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "definitions": {
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "McpServerParams": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "pluginId": {
+            "default": null,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "A native prepared reference is required before an explicit provider request. Callers cannot supply an endpoint, token, client secret or account override.",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "prepare"
+            ],
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/definitions/McpServerParams"
+          }
+        },
+        "required": [
+          "action",
+          "requestId",
+          "server"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "commit"
+            ],
+            "type": "string"
+          },
+          "intentRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/definitions/McpServerParams"
+          }
+        },
+        "required": [
+          "action",
+          "intentRef",
+          "requestId",
+          "server"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "cancel"
+            ],
+            "type": "string"
+          },
+          "intentRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/definitions/McpServerParams"
+          }
+        },
+        "required": [
+          "action",
+          "intentRef",
+          "requestId",
+          "server"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "action": {
+            "enum": [
+              "read"
+            ],
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "server": {
+            "$ref": "#/definitions/McpServerParams"
+          }
+        },
+        "required": [
+          "action",
+          "requestId",
+          "server"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "McpProviderRevocationParams"
+  },
+  "McpProviderRevocationPhase": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "prepared",
+      "accepted",
+      "unknown",
+      "unsupported",
+      "rejected"
+    ],
+    "title": "McpProviderRevocationPhase",
+    "type": "string"
+  },
+  "McpProviderRevocationReason": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "awaitingConfirmation",
+      "providerAccepted",
+      "outcomeUnconfirmed",
+      "endpointNotAdvertised",
+      "authenticationUnsupported",
+      "tokenTypeUnsupported",
+      "authorizationUnavailable",
+      "sourceChanged",
+      "credentialsChanged",
+      "providerRejected",
+      "intentExpired",
+      "preparationCancelled",
+      "originalReceiptUnavailable"
+    ],
+    "title": "McpProviderRevocationReason",
+    "type": "string"
+  },
+  "McpProviderRevocationReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "McpProviderRevocationPhase": {
+        "enum": [
+          "prepared",
+          "accepted",
+          "unknown",
+          "unsupported",
+          "rejected"
+        ],
+        "type": "string"
+      },
+      "McpProviderRevocationReason": {
+        "enum": [
+          "awaitingConfirmation",
+          "providerAccepted",
+          "outcomeUnconfirmed",
+          "endpointNotAdvertised",
+          "authenticationUnsupported",
+          "tokenTypeUnsupported",
+          "authorizationUnavailable",
+          "sourceChanged",
+          "credentialsChanged",
+          "providerRejected",
+          "intentExpired",
+          "preparationCancelled",
+          "originalReceiptUnavailable"
+        ],
+        "type": "string"
+      },
+      "McpProviderRevocationSourceState": {
+        "enum": [
+          "matches",
+          "changed",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "An accepted provider response concerns the original token only. It does not claim that local credentials were removed or all provider sessions revoked.",
+    "properties": {
+      "currentSourceMatches": {
+        "type": "boolean"
+      },
+      "intentRef": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "localCredentialsRemoved": {
+        "type": "boolean"
+      },
+      "phase": {
+        "$ref": "#/definitions/McpProviderRevocationPhase"
+      },
+      "reason": {
+        "$ref": "#/definitions/McpProviderRevocationReason"
+      },
+      "requestId": {
+        "type": "string"
+      },
+      "sourceState": {
+        "$ref": "#/definitions/McpProviderRevocationSourceState"
+      }
+    },
+    "required": [
+      "currentSourceMatches",
+      "localCredentialsRemoved",
+      "phase",
+      "reason",
+      "requestId",
+      "sourceState"
+    ],
+    "title": "McpProviderRevocationReceipt",
+    "type": "object"
+  },
+  "McpProviderRevocationSourceState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "matches",
+      "changed",
+      "unavailable"
+    ],
+    "title": "McpProviderRevocationSourceState",
+    "type": "string"
+  }
+}

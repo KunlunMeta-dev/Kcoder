@@ -1,0 +1,2011 @@
+{
+  "AutomationApplicationSelectionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "readConsentRef": {
+        "maxLength": 256,
+        "minLength": 1,
+        "type": "string"
+      },
+      "resourceUri": {
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+      }
+    },
+    "required": [
+      "readConsentRef",
+      "resourceUri",
+      "source"
+    ],
+    "title": "AutomationApplicationSelectionParams",
+    "type": "object"
+  },
+  "AutomationApplicationSelectionReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_IntegrationRevisionRef": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskCapabilitySourceChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "accountRef": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_IntegrationRevisionRef"
+              }
+            ],
+            "description": "Null means no separately configured third-party account, never an inferred identity."
+          },
+          "sourceRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          }
+        },
+        "required": [
+          "accountRef",
+          "sourceRef"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "resourceRef": {
+        "type": "string"
+      },
+      "selectionRevision": {
+        "type": "string"
+      },
+      "source": {
+        "$ref": "#/definitions/IntegrationTaskCapabilitySourceChoice"
+      },
+      "sourceRef": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "owner",
+      "resourceRef",
+      "selectionRevision",
+      "source",
+      "sourceRef"
+    ],
+    "title": "AutomationApplicationSelectionReceipt",
+    "type": "object"
+  },
+  "AutomationArtifactClaim": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Actual native export completion, separate from preparing a lease or clicking a link.",
+    "properties": {
+      "bytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "completedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "exportId": {
+        "type": "string"
+      },
+      "manifestRef": {
+        "$ref": "#/definitions/IntegrationEntityRef"
+      },
+      "nativeOperationId": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "runId": {
+        "type": "string"
+      },
+      "sha256": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "bytes",
+      "completedAtMs",
+      "exportId",
+      "manifestRef",
+      "nativeOperationId",
+      "owner",
+      "runId",
+      "sha256"
+    ],
+    "title": "AutomationArtifactClaim",
+    "type": "object"
+  },
+  "AutomationClaimListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationArtifactClaim": {
+        "additionalProperties": false,
+        "description": "Actual native export completion, separate from preparing a lease or clicking a link.",
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "completedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "exportId": {
+            "type": "string"
+          },
+          "manifestRef": {
+            "$ref": "#/definitions/IntegrationEntityRef"
+          },
+          "nativeOperationId": {
+            "type": "string"
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "bytes",
+          "completedAtMs",
+          "exportId",
+          "manifestRef",
+          "nativeOperationId",
+          "owner",
+          "runId",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "IntegrationEntityKind": {
+        "enum": [
+          "model_policy_configuration",
+          "input",
+          "workspace",
+          "workflow",
+          "assistant",
+          "delegation",
+          "destination",
+          "thread",
+          "turn",
+          "task",
+          "artifact",
+          "dataset",
+          "subscription",
+          "publication",
+          "connection",
+          "delivery"
+        ],
+        "type": "string"
+      },
+      "IntegrationEntityRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/IntegrationEntityKind"
+          },
+          "revision": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_AutomationArtifactClaim": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/AutomationArtifactClaim"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_AutomationArtifactClaim"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "AutomationClaimListResult",
+    "type": "object"
+  },
+  "AutomationConnectionEventSource": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationConnectionEventSourceState": {
+        "enum": [
+          "available",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "description": "Metadata from an actual native connection event source; selecting it grants no execution authority.",
+    "properties": {
+      "connectionId": {
+        "type": "string"
+      },
+      "platform": {
+        "$ref": "#/definitions/MessagingPlatform"
+      },
+      "reasonCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "receivedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceRef": {
+        "type": "string"
+      },
+      "state": {
+        "$ref": "#/definitions/AutomationConnectionEventSourceState"
+      }
+    },
+    "required": [
+      "connectionId",
+      "platform",
+      "receivedAtMs",
+      "sourceRef",
+      "state"
+    ],
+    "title": "AutomationConnectionEventSource",
+    "type": "object"
+  },
+  "AutomationConnectionEventSourceListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationConnectionEventSource": {
+        "additionalProperties": false,
+        "description": "Metadata from an actual native connection event source; selecting it grants no execution authority.",
+        "properties": {
+          "connectionId": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/definitions/MessagingPlatform"
+          },
+          "reasonCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "receivedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/definitions/AutomationConnectionEventSourceState"
+          }
+        },
+        "required": [
+          "connectionId",
+          "platform",
+          "receivedAtMs",
+          "sourceRef",
+          "state"
+        ],
+        "type": "object"
+      },
+      "AutomationConnectionEventSourceState": {
+        "enum": [
+          "available",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "KnowledgePage_for_AutomationConnectionEventSource": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/AutomationConnectionEventSource"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "MessagingPlatform": {
+        "enum": [
+          "feishu",
+          "dingtalk",
+          "qq",
+          "weixin",
+          "wecom",
+          "github"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_AutomationConnectionEventSource"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "AutomationConnectionEventSourceListResult",
+    "type": "object"
+  },
+  "AutomationConnectionEventSourceState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "available",
+      "unavailable"
+    ],
+    "title": "AutomationConnectionEventSourceState",
+    "type": "string"
+  },
+  "AutomationDeliveryStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "not_ready",
+      "studio_available",
+      "pending",
+      "accepted",
+      "failed",
+      "cancelled",
+      "unknown",
+      "unavailable"
+    ],
+    "title": "AutomationDeliveryStatus",
+    "type": "string"
+  },
+  "AutomationDestination": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "oneOf": [
+      {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "studio"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "type": "object"
+      },
+      {
+        "additionalProperties": false,
+        "properties": {
+          "destinationRef": {
+            "type": "string"
+          },
+          "destinationRevision": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "channel"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "destinationRef",
+          "destinationRevision",
+          "kind"
+        ],
+        "type": "object"
+      }
+    ],
+    "title": "AutomationDestination"
+  },
+  "AutomationFileSelectionParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "fileNames": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "type": "array"
+      },
+      "relativeDirectory": {
+        "maxLength": 4096,
+        "minLength": 1,
+        "type": "string"
+      }
+    },
+    "required": [
+      "fileNames",
+      "relativeDirectory"
+    ],
+    "title": "AutomationFileSelectionParams",
+    "type": "object"
+  },
+  "AutomationFileSelectionReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationFileSelectionItem": {
+        "additionalProperties": false,
+        "properties": {
+          "identityRevision": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "resourceRef": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "identityRevision",
+          "name",
+          "resourceRef"
+        ],
+        "type": "object"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/AutomationFileSelectionItem"
+        },
+        "maxItems": 32,
+        "minItems": 1,
+        "type": "array"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "selectionRevision": {
+        "type": "string"
+      },
+      "sourceRef": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "items",
+      "owner",
+      "selectionRevision",
+      "sourceRef"
+    ],
+    "title": "AutomationFileSelectionReceipt",
+    "type": "object"
+  },
+  "AutomationPeriodBudgetPreview": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationBudgetWindow": {
+        "additionalProperties": false,
+        "properties": {
+          "endsAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "startsAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "endsAtMs",
+          "startsAtMs"
+        ],
+        "type": "object"
+      },
+      "AutomationPeriodBudget": {
+        "additionalProperties": false,
+        "properties": {
+          "maximumModelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "windowSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "maximumModelCalls",
+          "maximumTokens",
+          "windowSeconds"
+        ],
+        "type": "object"
+      }
+    },
+    "description": "Preview is observation only; no policy or subscription authority is serialized.",
+    "properties": {
+      "activeCalls": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "activeTasks": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "chargedModelCalls": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "chargedTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "configuration": {
+        "$ref": "#/definitions/AutomationPeriodBudget"
+      },
+      "createsSubscription": {
+        "type": "boolean"
+      },
+      "currentWindow": {
+        "$ref": "#/definitions/AutomationBudgetWindow"
+      },
+      "effectiveMaximumModelCalls": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "effectiveMaximumTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "increasesApplyNextWindow": {
+        "type": "boolean"
+      },
+      "unknownCostReservations": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "activeCalls",
+      "activeTasks",
+      "chargedModelCalls",
+      "chargedTokens",
+      "configuration",
+      "createsSubscription",
+      "currentWindow",
+      "effectiveMaximumModelCalls",
+      "effectiveMaximumTokens",
+      "increasesApplyNextWindow",
+      "unknownCostReservations"
+    ],
+    "title": "AutomationPeriodBudgetPreview",
+    "type": "object"
+  },
+  "AutomationQuarantineListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationQuarantinedEvent": {
+        "additionalProperties": false,
+        "description": "Read-only projection of an original quarantined ingress fact, never a retry request.",
+        "properties": {
+          "eventId": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "occurredAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reasonCode": {
+            "type": "string"
+          },
+          "sourceRef": {
+            "type": "string"
+          },
+          "subscriptionId": {
+            "type": "string"
+          },
+          "subscriptionRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "eventId",
+          "id",
+          "occurredAtMs",
+          "reasonCode",
+          "sourceRef",
+          "subscriptionId",
+          "subscriptionRevision"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_AutomationQuarantinedEvent": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/AutomationQuarantinedEvent"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_AutomationQuarantinedEvent"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "AutomationQuarantineListResult",
+    "type": "object"
+  },
+  "AutomationQuarantinedEvent": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "description": "Read-only projection of an original quarantined ingress fact, never a retry request.",
+    "properties": {
+      "eventId": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "occurredAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "reasonCode": {
+        "type": "string"
+      },
+      "sourceRef": {
+        "type": "string"
+      },
+      "subscriptionId": {
+        "type": "string"
+      },
+      "subscriptionRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "eventId",
+      "id",
+      "occurredAtMs",
+      "reasonCode",
+      "sourceRef",
+      "subscriptionId",
+      "subscriptionRevision"
+    ],
+    "title": "AutomationQuarantinedEvent",
+    "type": "object"
+  },
+  "AutomationRun": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDeliveryStatus": {
+        "enum": [
+          "not_ready",
+          "studio_available",
+          "pending",
+          "accepted",
+          "failed",
+          "cancelled",
+          "unknown",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "AutomationRunStatus": {
+        "enum": [
+          "preparing",
+          "accepted",
+          "running",
+          "waiting",
+          "completed",
+          "failed",
+          "cancelled",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "artifactRefs": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "createdAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "deliveryId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "deliveryStatus": {
+        "$ref": "#/definitions/AutomationDeliveryStatus"
+      },
+      "errorCode": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "id": {
+        "type": "string"
+      },
+      "nativeOperationId": {
+        "type": "string"
+      },
+      "nativeTaskId": {
+        "description": "Read-only projection from the original private Native acceptance. Older runs without that receipt retain None; manifests never supply this ID.",
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "nativeThreadId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "nativeTurnId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "output": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "status": {
+        "$ref": "#/definitions/AutomationRunStatus"
+      },
+      "subscriptionId": {
+        "type": "string"
+      },
+      "subscriptionRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "title": {
+        "default": "",
+        "type": "string"
+      },
+      "triggerId": {
+        "type": "string"
+      },
+      "updatedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "artifactRefs",
+      "createdAtMs",
+      "deliveryStatus",
+      "id",
+      "nativeOperationId",
+      "owner",
+      "status",
+      "subscriptionId",
+      "subscriptionRevision",
+      "triggerId",
+      "updatedAtMs"
+    ],
+    "title": "AutomationRun",
+    "type": "object"
+  },
+  "AutomationRunListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDeliveryStatus": {
+        "enum": [
+          "not_ready",
+          "studio_available",
+          "pending",
+          "accepted",
+          "failed",
+          "cancelled",
+          "unknown",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "AutomationRun": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactRefs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deliveryStatus": {
+            "$ref": "#/definitions/AutomationDeliveryStatus"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "nativeOperationId": {
+            "type": "string"
+          },
+          "nativeTaskId": {
+            "description": "Read-only projection from the original private Native acceptance. Older runs without that receipt retain None; manifests never supply this ID.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nativeThreadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nativeTurnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "status": {
+            "$ref": "#/definitions/AutomationRunStatus"
+          },
+          "subscriptionId": {
+            "type": "string"
+          },
+          "subscriptionRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "triggerId": {
+            "type": "string"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactRefs",
+          "createdAtMs",
+          "deliveryStatus",
+          "id",
+          "nativeOperationId",
+          "owner",
+          "status",
+          "subscriptionId",
+          "subscriptionRevision",
+          "triggerId",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "AutomationRunStatus": {
+        "enum": [
+          "preparing",
+          "accepted",
+          "running",
+          "waiting",
+          "completed",
+          "failed",
+          "cancelled",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "KnowledgePage_for_AutomationRun": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/definitions/AutomationRun"
+            },
+            "type": "array"
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "page": {
+        "$ref": "#/definitions/KnowledgePage_for_AutomationRun"
+      }
+    },
+    "required": [
+      "page"
+    ],
+    "title": "AutomationRunListResult",
+    "type": "object"
+  },
+  "AutomationRunReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "runId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "runId"
+    ],
+    "title": "AutomationRunReadParams",
+    "type": "object"
+  },
+  "AutomationRunReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationDeliveryStatus": {
+        "enum": [
+          "not_ready",
+          "studio_available",
+          "pending",
+          "accepted",
+          "failed",
+          "cancelled",
+          "unknown",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "AutomationRun": {
+        "additionalProperties": false,
+        "properties": {
+          "artifactRefs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "createdAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "deliveryId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "deliveryStatus": {
+            "$ref": "#/definitions/AutomationDeliveryStatus"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "nativeOperationId": {
+            "type": "string"
+          },
+          "nativeTaskId": {
+            "description": "Read-only projection from the original private Native acceptance. Older runs without that receipt retain None; manifests never supply this ID.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nativeThreadId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "nativeTurnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "output": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "owner": {
+            "$ref": "#/definitions/IntegrationOwner"
+          },
+          "status": {
+            "$ref": "#/definitions/AutomationRunStatus"
+          },
+          "subscriptionId": {
+            "type": "string"
+          },
+          "subscriptionRevision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "default": "",
+            "type": "string"
+          },
+          "triggerId": {
+            "type": "string"
+          },
+          "updatedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "artifactRefs",
+          "createdAtMs",
+          "deliveryStatus",
+          "id",
+          "nativeOperationId",
+          "owner",
+          "status",
+          "subscriptionId",
+          "subscriptionRevision",
+          "triggerId",
+          "updatedAtMs"
+        ],
+        "type": "object"
+      },
+      "AutomationRunStatus": {
+        "enum": [
+          "preparing",
+          "accepted",
+          "running",
+          "waiting",
+          "completed",
+          "failed",
+          "cancelled",
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "run": {
+        "$ref": "#/definitions/AutomationRun"
+      }
+    },
+    "required": [
+      "run"
+    ],
+    "title": "AutomationRunReadResult",
+    "type": "object"
+  },
+  "AutomationRunStatus": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "preparing",
+      "accepted",
+      "running",
+      "waiting",
+      "completed",
+      "failed",
+      "cancelled",
+      "unknown"
+    ],
+    "title": "AutomationRunStatus",
+    "type": "string"
+  },
+  "AutomationTemplate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "acceptanceCriteria": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "description": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "inputSchema": true,
+      "maximumRuntimeSeconds": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "maximumTokens": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "suggestedSchedule": {
+        "$ref": "#/definitions/CronSchedule"
+      },
+      "title": {
+        "type": "string"
+      },
+      "workflowId": {
+        "type": "string"
+      },
+      "workflowVersion": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "acceptanceCriteria",
+      "description",
+      "id",
+      "inputSchema",
+      "maximumRuntimeSeconds",
+      "maximumTokens",
+      "suggestedSchedule",
+      "title",
+      "workflowId",
+      "workflowVersion"
+    ],
+    "title": "AutomationTemplate",
+    "type": "object"
+  },
+  "AutomationTemplateListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "AutomationTemplate": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptanceCriteria": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputSchema": true,
+          "maximumRuntimeSeconds": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "maximumTokens": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "suggestedSchedule": {
+            "$ref": "#/definitions/CronSchedule"
+          },
+          "title": {
+            "type": "string"
+          },
+          "workflowId": {
+            "type": "string"
+          },
+          "workflowVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "acceptanceCriteria",
+          "description",
+          "id",
+          "inputSchema",
+          "maximumRuntimeSeconds",
+          "maximumTokens",
+          "suggestedSchedule",
+          "title",
+          "workflowId",
+          "workflowVersion"
+        ],
+        "type": "object"
+      },
+      "CronSchedule": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "at": {
+                "description": "RFC3339 timestamp, for example `2026-07-18T09:00:00Z`.",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "at"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "every_seconds": {
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "kind": {
+                "enum": [
+                  "every"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "every_seconds",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Legacy schedules retain UTC evaluation.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "cron"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "description": "Evaluate calendar fields in an explicit IANA timezone. Persisted instants remain UTC.",
+            "properties": {
+              "expression": {
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "zoned_cron"
+                ],
+                "type": "string"
+              },
+              "timezone": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "expression",
+              "kind",
+              "timezone"
+            ],
+            "type": "object"
+          }
+        ]
+      }
+    },
+    "properties": {
+      "templates": {
+        "items": {
+          "$ref": "#/definitions/AutomationTemplate"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "templates"
+    ],
+    "title": "AutomationTemplateListResult",
+    "type": "object"
+  },
+  "AutomationTriggerParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "subscriptionId": {
+        "type": "string"
+      },
+      "subscriptionRevision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "triggerFacts": true,
+      "triggerId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "subscriptionId",
+      "subscriptionRevision",
+      "triggerFacts",
+      "triggerId"
+    ],
+    "title": "AutomationTriggerParams",
+    "type": "object"
+  }
+}

@@ -1,0 +1,85 @@
+{
+  "skill_name": "lark-calendar",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "帮我约一个明天下午 3 点到 4 点的会，主题『Q3 复盘』，邀请 ou_aaa 和 ou_bbb。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Create the event with calendar +create using ISO 8601 start and end times and the attendee ids, as the user.",
+      "expectations": [
+        "Uses calendar +create with --summary, --start and --end in ISO 8601 with a timezone offset",
+        "Invites the attendees with --attendee-ids ou_aaa,ou_bbb",
+        "Uses --as user because the event belongs to the user",
+        "Reports the result from the create response without an extra verification query"
+      ],
+      "assertions": [
+        {
+          "contains": "+create"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "I need a meeting room for 6 people sometime next Tuesday afternoon. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Because there is no exact time block, get candidate blocks with +suggestion first and only then search rooms with +room-find.",
+      "expectations": [
+        "Calls +suggestion first to obtain concrete time blocks",
+        "Only then calls +room-find with a concrete time block",
+        "Does not guess a time and call +room-find directly"
+      ],
+      "assertions": [
+        {
+          "contains": "+suggestion"
+        },
+        {
+          "contains": "+room-find"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "把每周一的站会（重复日程）从下周开始全部取消。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Locate the recurring event and delete with --apply-to this-and-following from next week's instance.",
+      "expectations": [
+        "Treats it as a recurring event and follows the recurring-event rules",
+        "Uses calendar +delete with --apply-to this-and-following on the right instance",
+        "Does not default to deleting only a single instance"
+      ],
+      "assertions": [
+        {
+          "contains": "--apply-to"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Share the event \"Design review\" next Wednesday with the chat oc_design. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Find the event, get its share link with calendar events share_info, then send that link through lark-im.",
+      "expectations": [
+        "Finds the event (for example with +search-event) to get its event_id",
+        "Gets the event share link with calendar events share_info",
+        "Sends the share link with lark-im instead of building an applink by hand"
+      ],
+      "assertions": [
+        {
+          "contains": "share_info"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "看看我和 ou_ccc 本周四哪些时间都有空。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Query common free time with +freebusy --type common_free for both users over the whole Thursday.",
+      "expectations": [
+        "Uses calendar +freebusy with --type common_free instead of merging busy slots by hand",
+        "Passes both the current user and ou_ccc with --user-id",
+        "Covers the whole Thursday rather than an arbitrarily shortened window",
+        "Does not present the result as a recommended meeting time (that would be +suggestion)"
+      ],
+      "assertions": [
+        {
+          "contains": "common_free"
+        }
+      ]
+    }
+  ]
+}

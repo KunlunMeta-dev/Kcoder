@@ -1,0 +1,26 @@
+[package]
+name = "kcoder_tool_input"
+description = "KCoder model-facing tool input schema and coercion."
+publish = false
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[features]
+test-oracle = []
+
+[dependencies]
+kcoder_tool_error = { path = "../tool_error" }
+image = { workspace = true }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_types = { path = "../../../kcoder_types", features = ["json-schema"] }
+schemars = "0.8"
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lib]
+path = "../../src/internal/tool_input/lib.rs"

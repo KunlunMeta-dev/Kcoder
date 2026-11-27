@@ -1,0 +1,284 @@
+pub mod peer_messages;
+use kcoder_types::{ContentBlock, ContentDelta, StreamEvent};
+
+mod client_model_configuration;
+mod error_metadata;
+pub mod model_budget_input;
+pub mod native_model_request;
+pub mod provider_factory;
+pub mod providers;
+pub mod response_budget;
+pub mod token_counter;
+pub use client_model_configuration::{ClientModelConfiguration, model_configuration_summary};
+pub use error_metadata::{
+    HttpErrorMetadata, NonHttpErrorClass, RejectedReasoningParameter, SseErrorKind,
+};
+
+pub use provider_factory::{
+    MissingApiKeyError, MissingProviderError, ProviderBuildOverrides, ProviderFactory,
+    ProviderKind, first_non_empty, missing_api_key_message,
+};
+pub use providers::{
+    AnthropicProvider, GeminiProvider, GenAiProvider, GrokProvider, ModelDiscoveryOptions,
+    OpenAiProvider, Provider, ProviderModelDiscovery, ProviderStream, ProviderTokenCount,
+};
+
+#[cfg(all(feature = "e2e-http-transport", debug_assertions))]
+#[doc(hidden)]
+pub fn enable_e2e_http_transport_for_test_driver() {
+    providers::e2e_http_transport::E2eHttpTransport::enable_for_test_driver();
+}
+
+/// Typed recovery facts with a redacted Display/Debug implementation.
+///
+/// Public inner transport errors and payloads remain available for classification.
+/// They may contain authenticated URLs or provider data: never format or log those
+/// raw fields. Use `safe_summary` or this outer error's Display/Debug at boundaries.
+pub enum ApiErrorKind {
+    /// Raised by KCoder before dispatch or when the original peer turn is cancelled.
+    PeerTurnAuthorization {
+        summary: kcoder_types::ProviderErrorSummary,
+        /// A cancelled inner stream may already have reached the transport before its first event.
+        dispatch_may_have_started: bool,
+    },
+    ResponseLimit {
+        resource: &'static str,
+        limit: usize,
+    },
+    Network(reqwest::Error),
+    EventSource(Box<reqwest_eventsource::Error>),
+    CannotCloneRequest(reqwest_eventsource::CannotCloneRequestError),
+    JsonParse(serde_json::Error, String),
+    Api {
+        error_type: String,
+        message: String,
+    },
+    SseStream {
+        error_type: String,
+        message: String,
+        kind: SseErrorKind,
+    },
+    Http {
+        error_type: String,
+        message: String,
+        metadata: HttpErrorMetadata,
+    },
+    InvalidHeader(reqwest::header::InvalidHeaderValue),
+}
+
+impl std::fmt::Display for ApiErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.safe_summary())?;
+        if let Self::JsonParse(error, _) = self {
+            write!(f, " line={}, column={}", error.line(), error.column())?;
+        }
+        Ok(())
+    }
+}
+
+impl std::fmt::Debug for ApiErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self, f)
+    }
+}
+
+impl ApiErrorKind {
+    pub fn peer_turn_authorization(reason: &str) -> Self {
+        Self::PeerTurnAuthorization {
+            summary: kcoder_types::ProviderErrorSummary::peer_turn_authorization(reason),
+            dispatch_may_have_started: false,
+        }
+    }
+
+    pub fn peer_turn_cancelled_after_dispatch() -> Self {
+        Self::PeerTurnAuthorization {
+            summary: kcoder_types::ProviderErrorSummary::peer_turn_authorization(
+                "peer_provider_start_cancelled",
+            ),
+            dispatch_may_have_started: true,
+        }
+    }
+
+    pub fn safe_summary(&self) -> kcoder_types::ProviderErrorSummary {
+        let (kind, status) = match self {
+            Self::PeerTurnAuthorization { summary, .. } => return summary.clone(),
+            Self::ResponseLimit { resource, limit } => {
+                return kcoder_types::ProviderErrorSummary::response_limit(resource, *limit);
+            }
+            Self::Http {
+                error_type,
+                metadata,
+                ..
+            } => (
+                metadata.provider_type.as_deref().unwrap_or(error_type),
+                Some(metadata.status),
+            ),
+            Self::Api { error_type, .. } => (error_type.as_str(), None),
+            Self::Network(error) if error.is_builder() => ("request_build_error", None),
+            Self::Network(error) if error.is_decode() => ("response_parse_error", None),
+            Self::Network(_) => ("network_error", None),
+            Self::SseStream { .. } | Self::EventSource(_) => ("sse_stream_error", None),
+            Self::JsonParse(_, _) => ("response_parse_error", None),
+            Self::CannotCloneRequest(_) | Self::InvalidHeader(_) => ("request_build_error", None),
+        };
+        kcoder_types::ProviderErrorSummary::new(kind, status)
+    }
+}
+
+// Keep this typed error downcastable through anyhow, but do not expose unsafe
+// transport source formatting (URLs and credentials). Raw sources remain in variants.
+impl std::error::Error for ApiErrorKind {}
+
+impl From<reqwest::Error> for ApiErrorKind {
+    fn from(error: reqwest::Error) -> Self {
+        Self::Network(error)
+    }
+}
+impl From<reqwest_eventsource::CannotCloneRequestError> for ApiErrorKind {
+    fn from(error: reqwest_eventsource::CannotCloneRequestError) -> Self {
+        Self::CannotCloneRequest(error)
+    }
+}
+impl From<reqwest::header::InvalidHeaderValue> for ApiErrorKind {
+    fn from(error: reqwest::header::InvalidHeaderValue) -> Self {
+        Self::InvalidHeader(error)
+    }
+}
+
+impl From<reqwest_eventsource::Error> for ApiErrorKind {
+    fn from(err: reqwest_eventsource::Error) -> Self {
+        Self::EventSource(Box::new(err))
+    }
+}
+
+/// Convenience: accumulate text deltas from a stream of events into a single assistant message.
+pub fn accumulate_assistant_text(events: &[StreamEvent]) -> Option<ContentBlock> {
+    let mut text = String::new();
+    for ev in events {
+        if let StreamEvent::ContentBlockDelta {
+            delta: ContentDelta::TextDelta { text: delta },
+            ..
+        } = ev
+        {
+            text.push_str(delta);
+        }
+    }
+    if text.is_empty() {
+        None
+    } else {
+        Some(ContentBlock::Text { text })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_error_summary_hides_raw_fields_and_bounds_all_formats() {
+        let secret = "SENTINEL_PRIVATE Bearer multi word https://host/path?key=secret";
+        let error = ApiErrorKind::Http {
+            error_type: secret.repeat(1000),
+            message: secret.repeat(1000),
+            metadata: HttpErrorMetadata::from_response(
+                401,
+                &serde_json::json!({
+                    "error": { "code": secret, "type": secret, "param": secret }
+                })
+                .to_string(),
+                Some("3"),
+            ),
+        };
+        for rendered in [error.to_string(), format!("{error:?}")] {
+            assert!(!rendered.contains("SENTINEL_PRIVATE"));
+            assert!(rendered.len() <= 512);
+            assert!(rendered.contains("401"));
+        }
+        let wrapped = anyhow::Error::new(error).context("provider request failed");
+        assert!(wrapped.downcast_ref::<ApiErrorKind>().is_some());
+        assert!(!format!("{wrapped:#}").contains("SENTINEL_PRIVATE"));
+    }
+
+    #[test]
+    fn provider_error_summary_hides_json_payload_and_transport_url_sources() {
+        let raw = "SENTINEL_PRIVATE".repeat(1000);
+        let error = ApiErrorKind::JsonParse(
+            serde_json::from_str::<serde_json::Value>(&raw).unwrap_err(),
+            raw,
+        );
+        assert!(!format!("{error} {error:?}").contains("SENTINEL_PRIVATE"));
+        let source = reqwest::Client::new()
+            .get("https://SENTINEL_PRIVATE.invalid/?token=SENTINEL_PRIVATE")
+            .header("bad\nheader", "value")
+            .build()
+            .unwrap_err()
+            .with_url(
+                "https://host.invalid/?token=SENTINEL_PRIVATE"
+                    .parse()
+                    .unwrap(),
+            );
+        assert!(source.to_string().contains("SENTINEL_PRIVATE"));
+        let wrapped =
+            anyhow::Error::new(ApiErrorKind::Network(source)).context("provider request failed");
+        assert!(
+            matches!(wrapped.downcast_ref::<ApiErrorKind>(), Some(ApiErrorKind::Network(error)) if error.is_builder() && error.url().unwrap().query().unwrap().contains("SENTINEL_PRIVATE"))
+        );
+        assert!(!format!("{wrapped:#} {wrapped:?}").contains("SENTINEL_PRIVATE"));
+    }
+
+    #[test]
+    fn accumulate_text() {
+        let events = vec![
+            StreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: ContentDelta::TextDelta {
+                    text: "hello ".into(),
+                },
+            },
+            StreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: ContentDelta::TextDelta {
+                    text: "world".into(),
+                },
+            },
+        ];
+        let block = accumulate_assistant_text(&events).unwrap();
+        assert!(matches!(block, ContentBlock::Text { text } if text == "hello world"));
+    }
+}
+
+#[cfg(test)]
+mod peer_turn_diagnostic_tests {
+    use super::ApiErrorKind;
+
+    #[test]
+    fn local_peer_authorization_preserves_only_a_bounded_reason_and_remote_text_cannot_claim_it() {
+        let cancelled = ApiErrorKind::peer_turn_cancelled_after_dispatch();
+        assert!(matches!(
+            cancelled,
+            ApiErrorKind::PeerTurnAuthorization {
+                dispatch_may_have_started: true,
+                ..
+            }
+        ));
+        let reason = "peer_provider_start_original_message_changed";
+        let error = ApiErrorKind::peer_turn_authorization(reason);
+        assert_eq!(
+            error.to_string(),
+            format!("KCoder peer turn authorization failed [{reason}]")
+        );
+        let hidden = ApiErrorKind::peer_turn_authorization("private provider response body");
+        assert_eq!(
+            hidden.to_string(),
+            "KCoder peer turn authorization failed [peer_provider_start_unconfirmed]"
+        );
+        let remote = ApiErrorKind::Api {
+            error_type: reason.into(),
+            message: "private upstream data".into(),
+        };
+        assert_eq!(
+            remote.to_string(),
+            "Provider error: unknown_error. Response details withheld."
+        );
+    }
+}

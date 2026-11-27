@@ -1,0 +1,345 @@
+{
+  "OfficeArtifactActionParams": [
+    {
+      "decoded": {
+        "action": "download",
+        "destination": null,
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "action": "download",
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeArtifactListParams": [
+    {
+      "decoded": {
+        "cursor": null,
+        "limit": 10,
+        "personalOnly": false,
+        "threadId": "thread-case"
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "limit": 10,
+        "threadId": "thread-case"
+      }
+    }
+  ],
+  "OfficeArtifactManifest": [
+    {
+      "decoded": {
+        "bytes": 1024,
+        "createdAtMs": 1,
+        "format": "docx",
+        "id": "artifact-case",
+        "kind": "document",
+        "owner": {
+          "accountId": "account-case",
+          "organizationId": null,
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceRefs": [],
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        },
+        "title": "核对结果",
+        "verification": {
+          "completedChecks": [
+            "OOXML structure"
+          ],
+          "formulaCalculation": "not_performed",
+          "pendingChecks": [
+            "reader verification"
+          ],
+          "readerStatus": "pending",
+          "status": "partial"
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "bytes": 1024,
+        "createdAtMs": 1,
+        "format": "docx",
+        "id": "artifact-case",
+        "kind": "document",
+        "owner": {
+          "accountId": "account-case",
+          "targetId": "Target-Case",
+          "workspaceId": "workspace-case"
+        },
+        "revision": 1,
+        "schemaVersion": 1,
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sourceRefs": [],
+        "task": {
+          "threadId": "thread-case",
+          "turnId": "turn-case"
+        },
+        "title": "核对结果",
+        "verification": {
+          "completedChecks": [
+            "OOXML structure"
+          ],
+          "formulaCalculation": "not_performed",
+          "pendingChecks": [
+            "reader verification"
+          ],
+          "readerStatus": "pending",
+          "status": "partial"
+        }
+      }
+    }
+  ],
+  "OfficeArtifactPresentation": [
+    {
+      "decoded": {
+        "kind": "document",
+        "paragraphs": [
+          "金额1234.56元；待确认日期。"
+        ]
+      },
+      "name": "bounded-office-contract",
+      "value": {
+        "kind": "document",
+        "paragraphs": [
+          "金额1234.56元；待确认日期。"
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "table"
+      },
+      "name": "fixed-table",
+      "value": {
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "table"
+      }
+    },
+    {
+      "decoded": {
+        "chartType": "bar",
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "chart",
+        "labelColumn": "name",
+        "valueColumns": [
+          "amount"
+        ]
+      },
+      "name": "fixed-chart",
+      "value": {
+        "chartType": "bar",
+        "dataset": {
+          "id": "data-case",
+          "revision": 1
+        },
+        "kind": "chart",
+        "labelColumn": "name",
+        "valueColumns": [
+          "amount"
+        ]
+      }
+    },
+    {
+      "decoded": {
+        "items": [
+          {
+            "assignee": null,
+            "due": null,
+            "id": "action-1",
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "status": "unknown",
+            "text": "复核材料"
+          }
+        ],
+        "kind": "action_items"
+      },
+      "name": "fixed-action_items",
+      "value": {
+        "items": [
+          {
+            "assignee": null,
+            "due": null,
+            "id": "action-1",
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "status": "unknown",
+            "text": "复核材料"
+          }
+        ],
+        "kind": "action_items"
+      }
+    },
+    {
+      "decoded": {
+        "findings": [
+          {
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "text": "可核对来源"
+          }
+        ],
+        "kind": "research",
+        "observedAt": "2026-10-24T00:00:00Z",
+        "summary": "来源可核对"
+      },
+      "name": "fixed-research",
+      "value": {
+        "findings": [
+          {
+            "sourceRefs": [
+              {
+                "id": "input-case",
+                "kind": "office_input",
+                "revision": "1"
+              }
+            ],
+            "text": "可核对来源"
+          }
+        ],
+        "kind": "research",
+        "observedAt": "2026-10-24T00:00:00Z",
+        "summary": "来源可核对"
+      }
+    },
+    {
+      "decoded": {
+        "detail": "等待原生回执核对",
+        "kind": "operation_receipt",
+        "operationId": "operation-case",
+        "phase": "unknown"
+      },
+      "name": "fixed-operation_receipt",
+      "value": {
+        "detail": "等待原生回执核对",
+        "kind": "operation_receipt",
+        "operationId": "operation-case",
+        "phase": "unknown"
+      }
+    },
+    {
+      "decoded": {
+        "items": [
+          {
+            "id": "artifact-case",
+            "revision": 1
+          }
+        ],
+        "kind": "file_collection"
+      },
+      "name": "fixed-file_collection",
+      "value": {
+        "items": [
+          {
+            "id": "artifact-case",
+            "revision": 1
+          }
+        ],
+        "kind": "file_collection"
+      }
+    },
+    {
+      "decoded": {
+        "initialValues": {},
+        "kind": "form",
+        "purpose": "创建跟进任务",
+        "schema": {
+          "properties": {
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "type": "object"
+        }
+      },
+      "name": "fixed-form",
+      "value": {
+        "initialValues": {},
+        "kind": "form",
+        "purpose": "创建跟进任务",
+        "schema": {
+          "properties": {
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ],
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "OfficeArtifactReadParams": [
+    {
+      "decoded": {
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      },
+      "name": "case-preserving-bounded-example",
+      "value": {
+        "reference": {
+          "id": "artifact-case",
+          "revision": 1
+        }
+      }
+    }
+  ],
+  "OfficeExecuteArtifactActionParams": [
+    {
+      "decoded": {
+        "preparedOperationId": "prepared-native-operation"
+      },
+      "name": "native-prepared-intent",
+      "value": {
+        "preparedOperationId": "prepared-native-operation"
+      }
+    }
+  ]
+}

@@ -1,0 +1,495 @@
+{
+  "OfficeAssistantDefinition": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "schemaVersion": 1,
+          "id": "meeting",
+          "scope": "personal",
+          "title": "会议纪要",
+          "description": "根据材料形成纪要",
+          "language": "zh-CN",
+          "inputSchema": {
+            "type": "object"
+          },
+          "instructions": "保留来源和待确认字段",
+          "modelSelection": {
+            "kind": "inherit_current"
+          },
+          "outputKinds": [
+            "document",
+            "action_items"
+          ],
+          "acceptanceCriteria": [
+            "来源可以追溯"
+          ],
+          "externalSend": "ask"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "schemaVersion": 1,
+          "id": "meeting",
+          "scope": "personal",
+          "title": "会议纪要",
+          "description": "根据材料形成纪要",
+          "language": "zh-CN",
+          "inputSchema": {
+            "type": "object"
+          },
+          "instructions": "保留来源和待确认字段",
+          "modelSelection": {
+            "kind": "inherit_current"
+          },
+          "outputKinds": [
+            "document",
+            "action_items"
+          ],
+          "acceptanceCriteria": [
+            "来源可以追溯"
+          ],
+          "externalSend": "ask",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantDraft": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "revision": 1,
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "updatedAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "revision": 1,
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "updatedAtMs": 1,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantVersion": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "version": "1.0.0",
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "createdAtMs": 1,
+          "archived": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "owner": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case"
+          },
+          "version": "1.0.0",
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "createdAtMs": 1,
+          "archived": false,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantAdoption": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "operationId": "adopt-case",
+          "scope": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case",
+            "identityGeneration": "generation-1",
+            "targetRevision": "revision-1"
+          },
+          "assistant": {
+            "owner": {
+              "accountId": "account-case",
+              "targetId": "Target-Case",
+              "workspaceId": "workspace-case"
+            },
+            "version": "1.0.0",
+            "definition": {
+              "schemaVersion": 1,
+              "id": "meeting",
+              "scope": "personal",
+              "title": "会议纪要",
+              "description": "根据材料形成纪要",
+              "language": "zh-CN",
+              "inputSchema": {
+                "type": "object"
+              },
+              "instructions": "保留来源和待确认字段",
+              "modelSelection": {
+                "kind": "inherit_current"
+              },
+              "outputKinds": [
+                "document",
+                "action_items"
+              ],
+              "acceptanceCriteria": [
+                "来源可以追溯"
+              ],
+              "externalSend": "ask"
+            },
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "createdAtMs": 1,
+            "archived": false
+          },
+          "inputs": {},
+          "createdAtMs": 1
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "operationId": "adopt-case",
+          "scope": {
+            "accountId": "account-case",
+            "targetId": "Target-Case",
+            "workspaceId": "workspace-case",
+            "identityGeneration": "generation-1",
+            "targetRevision": "revision-1"
+          },
+          "assistant": {
+            "owner": {
+              "accountId": "account-case",
+              "targetId": "Target-Case",
+              "workspaceId": "workspace-case"
+            },
+            "version": "1.0.0",
+            "definition": {
+              "schemaVersion": 1,
+              "id": "meeting",
+              "scope": "personal",
+              "title": "会议纪要",
+              "description": "根据材料形成纪要",
+              "language": "zh-CN",
+              "inputSchema": {
+                "type": "object"
+              },
+              "instructions": "保留来源和待确认字段",
+              "modelSelection": {
+                "kind": "inherit_current"
+              },
+              "outputKinds": [
+                "document",
+                "action_items"
+              ],
+              "acceptanceCriteria": [
+                "来源可以追溯"
+              ],
+              "externalSend": "ask"
+            },
+            "definitionSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "createdAtMs": 1,
+            "archived": false
+          },
+          "inputs": {},
+          "createdAtMs": 1,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantReadParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "id": "meeting"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "id": "meeting",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSaveDraftParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          }
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "definition": {
+            "schemaVersion": 1,
+            "id": "meeting",
+            "scope": "personal",
+            "title": "会议纪要",
+            "description": "根据材料形成纪要",
+            "language": "zh-CN",
+            "inputSchema": {
+              "type": "object"
+            },
+            "instructions": "保留来源和待确认字段",
+            "modelSelection": {
+              "kind": "inherit_current"
+            },
+            "outputKinds": [
+              "document",
+              "action_items"
+            ],
+            "acceptanceCriteria": [
+              "来源可以追溯"
+            ],
+            "externalSend": "ask"
+          },
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeSaveVersionParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0",
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAdoptParams": {
+    "valid": [
+      {
+        "name": "case-preserving-bounded-example",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0",
+          "inputs": {},
+          "startTask": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "reject-unknown-authority",
+        "value": {
+          "id": "meeting",
+          "version": "1.0.0",
+          "inputs": {},
+          "startTask": false,
+          "arbitraryAuthority": true
+        }
+      }
+    ]
+  },
+  "OfficeAssistantDeleteParams": {
+    "valid": [
+      {
+        "name": "normal",
+        "value": {
+          "id": "personal.sample"
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "missing-id",
+        "value": {}
+      }
+    ]
+  },
+  "OfficeAssistantSkill": {
+    "valid": [
+      {
+        "name": "disabled-reviewed-instruction",
+        "value": {
+          "slug": "meeting-notes",
+          "title": "会议纪要",
+          "description": "整理会议内容",
+          "content": "保留原始来源和待确认事项。",
+          "enabled": false
+        }
+      }
+    ],
+    "invalid": [
+      {
+        "name": "unknown-authority",
+        "value": {
+          "slug": "meeting",
+          "title": "Meeting",
+          "description": "",
+          "content": "Summarize",
+          "enabled": true,
+          "allowAllTools": true
+        }
+      }
+    ]
+  }
+}

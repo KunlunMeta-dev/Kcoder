@@ -1,0 +1,28 @@
+[package]
+name = "kcoder_tui_render"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[features]
+# Downstream test probes and transcript assertions; production keeps its startup probe.
+deterministic-test-probes = []
+
+[dependencies]
+ratatui = { workspace = true, features = ["unstable-widget-ref", "unstable-rendered-line-info"] }
+crossterm.workspace = true
+pulldown-cmark.workspace = true
+syntect.workspace = true
+two-face.workspace = true
+unicode-width.workspace = true
+unicode-segmentation.workspace = true
+url.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[lib]
+path = "../../src/internal/tui_render/lib.rs"

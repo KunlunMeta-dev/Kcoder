@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import { randomBytes } from 'node:crypto';
+import { copyFile, mkdir, readFile } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import test from 'node:test';
+import { repoRoot, runE2E } from './run-context.mjs';
+
+test('the actual staged Windows probe dependencies complete one owned model-independent loopback callback', async () => {
+  await runE2E(import.meta.url, { tier: 'model-independent',
+    modelPolicy: 'owned staged modules and loopback callback; no Windows, CLI, external OAuth or model' }, async context => {
+    const suite = await readFile(new URL('../../integration/gateway/windows-workspace-probe.integration.mjs', import.meta.url), 'utf8');
+    const entries = [...suite.matchAll(/\['(apps\/kcoder-studio\/(?:e2e\/harness\/(?:windows-oauth-probe|oauth-mcp)\.mjs|src\/mcp-oauth-callback\.js))', '([^']+)'\]/g)];
+    assert.equal(entries.length, 3, 'Read the actual three-file Windows staging contract');
+    const stage = context.pathInState('oauth-stage');
+    await mkdir(stage);
+    for (const [, source, destination] of entries) await copyFile(resolve(repoRoot, source), join(stage, destination));
+    const probeUrl = pathToFileURL(join(stage, 'windows-oauth-probe.mjs'));
+    const source = await readFile(probeUrl, 'utf8');
+    const specifier = source.match(/import\s*\{\s*createMcpOAuthCallbackReceiver\s*\}\s*from\s*['"]([^'"]+)['"]/)?.[1];
+    assert.ok(specifier, 'The probe must name its actual callback dependency');
+    const { createMcpOAuthCallbackReceiver } = await import(new URL(specifier, probeUrl).href);
+    const fixtureSpecifier = source.match(/import\s*\{\s*startOAuthMcpFixture\s*\}\s*from\s*['"]([^'"]+)['"]/)?.[1];
+    assert.ok(fixtureSpecifier);
+    const { startOAuthMcpFixture } = await import(new URL(fixtureSpecifier, probeUrl).href);
+    const issuer = await startOAuthMcpFixture(context, { resourceScopes: ['probe:read'] });
+    const receiver = await createMcpOAuthCallbackReceiver({ lifetimeMs: 5_000 });
+    context.addCleanup('close owned probe callback receiver', () => receiver.close());
+    context.registerPort('windows-probe-callback', Number(new URL(receiver.redirectUri).port));
+    const state = randomBytes(24).toString('hex');
+    context.registerSecret(state);
+    const authorization = new URL('/authorize', issuer.root);
+    authorization.search = new URLSearchParams({ state, redirect_uri: receiver.redirectUri, scope: 'probe:read' });
+    context.registerSecret(authorization.href);
+    receiver.bindAuthorizationUrl(authorization.href);
+    const reply = await fetch(authorization, { signal: AbortSignal.timeout(5_000) });
+    assert.equal(reply.status, 200);
+    await reply.text();
+    const result = await receiver.result;
+    context.registerSecret(result.callbackUrl);
+    assert.equal(result.status, 'received');
+    const callback = new URL(result.callbackUrl);
+    assert.equal(callback.origin + callback.pathname, receiver.redirectUri);
+    assert.equal(callback.searchParams.get('state'), state);
+    assert.ok(callback.searchParams.get('code'));
+    assert.deepEqual(issuer.events, ['browser-authorize']);
+    await assert.rejects(fetch(callback, { signal: AbortSignal.timeout(1_000) }));
+    return { actualModuleImport: true, ownedLoopbackCallback: true, oneReceipt: true, nativeWindows: false };
+  });
+});

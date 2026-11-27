@@ -1,0 +1,80 @@
+{
+  "skill_name": "lark-sheets",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "在飞书表格 https://example.feishu.cn/sheets/ShtAbc123 的『销售』子表 D2:D200 里写公式：D = B × C（单价 × 数量），写完要确认结果正确。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Write formulas with +cells-set on the named sheet, then verify with +formula-verify and read back sentinel cells.",
+      "expectations": [
+        "Writes formulas (not static values computed elsewhere) with +cells-set",
+        "Passes the sheet with --sheet-name or --sheet-id and keeps --range as A1 notation",
+        "Verifies with +formula-verify after writing",
+        "Reads back a few sentinel cells (first, middle, last) to confirm the values"
+      ],
+      "assertions": [
+        {
+          "contains": "+formula-verify"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Add a column chart of monthly revenue from A1:B13 on sheet \"Summary\" of https://example.feishu.cn/sheets/ShtXyz789. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Create one chart with +chart-create-basic, then check it with +chart-list.",
+      "expectations": [
+        "Uses +chart-create-basic for a single basic chart",
+        "States the chart type, x-axis field and series before creating it",
+        "Checks the result with +chart-list"
+      ],
+      "assertions": [
+        {
+          "contains": "+chart-create-basic"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "把下面 3 条新订单追加到表格 https://example.feishu.cn/sheets/ShtOrd456 的『订单』子表末尾：订单号 00123、00124、00125，金额分别 120.5、88、240。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Append typed rows with +table-put --mode append, keeping order numbers as text and amounts as numbers.",
+      "expectations": [
+        "Appends with +table-put --mode append",
+        "Keeps order numbers with leading zeros as text and amounts as numbers",
+        "Reads the appended rows back to confirm them"
+      ],
+      "assertions": [
+        {
+          "contains": "+table-put"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "Delete rows 50 to 60 on sheet \"Raw\" of https://example.feishu.cn/sheets/ShtRaw001 — the whole rows, not just their contents. List the lark-cli commands you would run in order (placeholders are fine) and what each step is for.",
+      "expected_output": "Remove whole rows with +dim-delete rather than clearing cells.",
+      "expectations": [
+        "Uses +dim-delete to delete the whole rows",
+        "Does not use +cells-clear as a substitute for deleting rows"
+      ],
+      "assertions": [
+        {
+          "contains": "+dim-delete"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "这个表格 https://example.feishu.cn/sheets/ShtFb002 的 C 列是 1 万多条用户评论，帮我在 D 列给每条评论打上『正面/负面/中性』的情感标签。列出你会按顺序执行的 lark-cli 命令（参数用占位符即可），并说明每一步的目的。",
+      "expected_output": "Use the native AI formula row by row in column D, then check it with +formula-verify --ai-only over the written range.",
+      "expectations": [
+        "Uses the =AI(prompt, range) formula for the per-row sentiment labels instead of Python-generated static values",
+        "Writes the formulas in batches when there are many rows",
+        "Checks with +formula-verify --ai-only on the whole written range instead of polling with +cells-get"
+      ],
+      "assertions": [
+        {
+          "contains": "AI("
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,915 @@
+{
+  "ImportedMemoryProvenance": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ImportedMemoryLayout": {
+        "enum": [
+          "claude_auto_memory_v1",
+          "codex_memory_files_v1",
+          "unclassified_static_notes"
+        ],
+        "type": "string"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "factsVerified": {
+        "description": "Integrity checks concern bytes, not the truth of model-authored statements.",
+        "enum": [
+          false
+        ],
+        "type": "boolean"
+      },
+      "layout": {
+        "$ref": "#/definitions/ImportedMemoryLayout"
+      },
+      "migrationJobId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      },
+      "sourceFile": {
+        "type": "string"
+      },
+      "sourceGroup": {
+        "type": "string"
+      },
+      "sourceModifiedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "sourceRevision": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "factsVerified",
+      "layout",
+      "source",
+      "sourceFile",
+      "sourceGroup",
+      "sourceRevision"
+    ],
+    "title": "ImportedMemoryProvenance",
+    "type": "object"
+  },
+  "MigrationMemoryControlParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "confirmUnverifiedNotes": {
+        "type": "boolean"
+      },
+      "enabled": {
+        "type": "boolean"
+      },
+      "expectedRevision": {
+        "type": "string"
+      },
+      "id": {
+        "type": "string"
+      },
+      "ownerOperationId": {
+        "type": "string"
+      },
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "confirmUnverifiedNotes",
+      "enabled",
+      "expectedRevision",
+      "id",
+      "ownerOperationId",
+      "requestId"
+    ],
+    "title": "ImportedMemoryControl",
+    "type": "object"
+  },
+  "MigrationMemoryControlReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "requestId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "requestId"
+    ],
+    "title": "MigrationMemoryControlReadParams",
+    "type": "object"
+  },
+  "MigrationMemoryControlResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ImportedMemoryControl": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmUnverifiedNotes": {
+            "type": "boolean"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "expectedRevision": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ownerOperationId": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "confirmUnverifiedNotes",
+          "enabled",
+          "expectedRevision",
+          "id",
+          "ownerOperationId",
+          "requestId"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryControlReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "appliedRevision": {
+            "type": "string"
+          },
+          "request": {
+            "$ref": "#/definitions/ImportedMemoryControl"
+          }
+        },
+        "required": [
+          "appliedRevision",
+          "request"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryLayout": {
+        "enum": [
+          "claude_auto_memory_v1",
+          "codex_memory_files_v1",
+          "unclassified_static_notes"
+        ],
+        "type": "string"
+      },
+      "ImportedMemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "factsVerified": {
+            "description": "Integrity checks concern bytes, not the truth of model-authored statements.",
+            "enum": [
+              false
+            ],
+            "type": "boolean"
+          },
+          "layout": {
+            "$ref": "#/definitions/ImportedMemoryLayout"
+          },
+          "migrationJobId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceFile": {
+            "type": "string"
+          },
+          "sourceGroup": {
+            "type": "string"
+          },
+          "sourceModifiedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "factsVerified",
+          "layout",
+          "source",
+          "sourceFile",
+          "sourceGroup",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryRecordSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerOperationId": {
+            "type": "string"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ImportedMemoryProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/ImportedMemoryScope"
+          }
+        },
+        "required": [
+          "bytes",
+          "enabled",
+          "id",
+          "name",
+          "ownerOperationId",
+          "revision",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryScope": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "global"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "project"
+                ],
+                "type": "string"
+              },
+              "root": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "root"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "current": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ImportedMemoryRecordSummary"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "receipt": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/ImportedMemoryControlReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "An applied receipt and the current observed record are deliberately separate."
+      }
+    },
+    "title": "ImportedMemoryControlResult",
+    "type": "object"
+  },
+  "MigrationMemoryDiscoverParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "source": {
+        "$ref": "#/definitions/MigrationSourceKind"
+      }
+    },
+    "required": [
+      "source"
+    ],
+    "title": "MigrationMemoryDiscoverParams",
+    "type": "object"
+  },
+  "MigrationMemoryListParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "pageIndex": {
+        "default": 0,
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "title": "MigrationMemoryListParams",
+    "type": "object"
+  },
+  "MigrationMemoryListResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ImportedMemoryLayout": {
+        "enum": [
+          "claude_auto_memory_v1",
+          "codex_memory_files_v1",
+          "unclassified_static_notes"
+        ],
+        "type": "string"
+      },
+      "ImportedMemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "factsVerified": {
+            "description": "Integrity checks concern bytes, not the truth of model-authored statements.",
+            "enum": [
+              false
+            ],
+            "type": "boolean"
+          },
+          "layout": {
+            "$ref": "#/definitions/ImportedMemoryLayout"
+          },
+          "migrationJobId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceFile": {
+            "type": "string"
+          },
+          "sourceGroup": {
+            "type": "string"
+          },
+          "sourceModifiedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "factsVerified",
+          "layout",
+          "source",
+          "sourceFile",
+          "sourceGroup",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryRecordSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerOperationId": {
+            "type": "string"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ImportedMemoryProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/ImportedMemoryScope"
+          }
+        },
+        "required": [
+          "bytes",
+          "enabled",
+          "id",
+          "name",
+          "ownerOperationId",
+          "revision",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryScope": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "global"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "project"
+                ],
+                "type": "string"
+              },
+              "root": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "root"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "items": {
+        "items": {
+          "$ref": "#/definitions/ImportedMemoryRecordSummary"
+        },
+        "type": "array"
+      },
+      "nextPage": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "totalRecords": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "items",
+      "totalRecords"
+    ],
+    "title": "ImportedMemoryRecordPage",
+    "type": "object"
+  },
+  "MigrationMemoryReadParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string"
+      },
+      "offset": {
+        "default": 0,
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "id"
+    ],
+    "title": "MigrationMemoryReadParams",
+    "type": "object"
+  },
+  "MigrationMemoryReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ImportedMemoryLayout": {
+        "enum": [
+          "claude_auto_memory_v1",
+          "codex_memory_files_v1",
+          "unclassified_static_notes"
+        ],
+        "type": "string"
+      },
+      "ImportedMemoryProvenance": {
+        "additionalProperties": false,
+        "properties": {
+          "factsVerified": {
+            "description": "Integrity checks concern bytes, not the truth of model-authored statements.",
+            "enum": [
+              false
+            ],
+            "type": "boolean"
+          },
+          "layout": {
+            "$ref": "#/definitions/ImportedMemoryLayout"
+          },
+          "migrationJobId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceFile": {
+            "type": "string"
+          },
+          "sourceGroup": {
+            "type": "string"
+          },
+          "sourceModifiedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "sourceRevision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "factsVerified",
+          "layout",
+          "source",
+          "sourceFile",
+          "sourceGroup",
+          "sourceRevision"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryRecordSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ownerOperationId": {
+            "type": "string"
+          },
+          "provenance": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/ImportedMemoryProvenance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "revision": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/ImportedMemoryScope"
+          }
+        },
+        "required": [
+          "bytes",
+          "enabled",
+          "id",
+          "name",
+          "ownerOperationId",
+          "revision",
+          "scope"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryScope": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "global"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "enum": [
+                  "project"
+                ],
+                "type": "string"
+              },
+              "root": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "root"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "nextOffset": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": [
+          "integer",
+          "null"
+        ]
+      },
+      "record": {
+        "$ref": "#/definitions/ImportedMemoryRecordSummary"
+      },
+      "text": {
+        "type": "string"
+      },
+      "totalBytes": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "record",
+      "text",
+      "totalBytes"
+    ],
+    "title": "ImportedMemoryRecordText",
+    "type": "object"
+  },
+  "MigrationMemorySourcesParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "cursor": {
+        "default": null,
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "catalogId"
+    ],
+    "title": "MigrationMemorySourcesParams",
+    "type": "object"
+  },
+  "MigrationMemorySourcesResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "ImportedMemoryDiscoveryProblem": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "count": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "count"
+        ],
+        "type": "object"
+      },
+      "ImportedMemoryLayout": {
+        "enum": [
+          "claude_auto_memory_v1",
+          "codex_memory_files_v1",
+          "unclassified_static_notes"
+        ],
+        "type": "string"
+      },
+      "ImportedMemorySourceSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "blockedItems": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "bytes": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "files": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "layout": {
+            "$ref": "#/definitions/ImportedMemoryLayout"
+          },
+          "source": {
+            "$ref": "#/definitions/MigrationSourceKind"
+          },
+          "sourceGroup": {
+            "description": "An original directory label, never a decoded or inferred project path.",
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "blockedItems",
+          "bytes",
+          "files",
+          "layout",
+          "source",
+          "sourceGroup",
+          "sourceId"
+        ],
+        "type": "object"
+      },
+      "MigrationSourceKind": {
+        "enum": [
+          "claude-code",
+          "codex"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "catalogId": {
+        "type": "string"
+      },
+      "items": {
+        "items": {
+          "$ref": "#/definitions/ImportedMemorySourceSummary"
+        },
+        "type": "array"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "problems": {
+        "items": {
+          "$ref": "#/definitions/ImportedMemoryDiscoveryProblem"
+        },
+        "type": "array"
+      },
+      "unobserved": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "catalogId",
+      "items",
+      "problems",
+      "unobserved"
+    ],
+    "title": "ImportedMemorySourcePage",
+    "type": "object"
+  }
+}

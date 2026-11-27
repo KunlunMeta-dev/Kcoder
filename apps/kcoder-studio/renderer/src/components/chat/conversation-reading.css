@@ -1,0 +1,82 @@
+/* Each sibling block has one spacing owner, including stable streaming chunks. */
+[data-conversation-reading='true'],
+[data-conversation-reading='true'] .conversation-markdown-blocks,
+[data-conversation-reading='true'] blockquote {
+  display: flex;
+  flex-direction: column;
+  gap: var(--conversation-block-gap);
+}
+[data-conversation-reading='true'] [data-markdown-window-chunk] {
+  display: contents;
+}
+[data-conversation-reading='true'] :where(p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote, pre, hr),
+[data-conversation-reading='true'] [data-reading-table],
+[data-conversation-reading='true'] [data-reading-code],
+[data-conversation-reading='true'] [data-reading-image],
+[data-conversation-reading='true'] > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+[data-conversation-reading='true'] li > * + *,
+[data-conversation-reading='true'] :where(td, th) > p + p {
+  margin-top: var(--conversation-block-gap);
+}
+[data-conversation-reading='true'] :where(code, pre, .katex) {
+  letter-spacing: 0;
+}
+
+[data-conversation-segments] > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* Section insets belong to headings; sibling gaps retain their single owner. */
+[data-conversation-reading='true'] .conversation-markdown-blocks > :where(h1, h2, h3, h4, h5, h6) {
+  text-wrap: balance;
+  padding-block-end: 0.25rem;
+}
+[data-conversation-reading='true'] .conversation-markdown-blocks > :where(h1, h2):not(:first-child),
+[data-conversation-reading='true'] > [data-markdown-window-chunk]:not(:first-child) .conversation-markdown-blocks > :where(h1, h2):first-child {
+  padding-block-start: var(--conversation-block-gap);
+}
+[data-conversation-reading='true'] .conversation-markdown-blocks > :where(h3, h4, h5, h6):not(:first-child),
+[data-conversation-reading='true'] > [data-markdown-window-chunk]:not(:first-child) .conversation-markdown-blocks > :where(h3, h4, h5, h6):first-child {
+  padding-block-start: calc(var(--conversation-block-gap) / 2);
+}
+[data-conversation-reading='true'] p {
+  text-wrap: pretty;
+}
+[data-conversation-reading='true'] li::marker {
+  color: rgb(var(--color-text-secondary));
+}
+[data-conversation-reading='true'] li > :where(ul, ol) {
+  margin-block-start: calc(var(--conversation-block-gap) / 2);
+}
+[data-conversation-reading='true'] blockquote {
+  padding-block: 0.5rem;
+  padding-inline-end: 0.75rem;
+  border-start-end-radius: var(--radius-md);
+  border-end-end-radius: var(--radius-md);
+  background: rgb(var(--color-bg-surface));
+}
+[data-conversation-reading='true'] [data-reading-table] {
+  border: 1px solid rgb(var(--color-border));
+  border-radius: var(--radius-md);
+}
+[data-conversation-reading='true'] :where(th, td) {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+[data-conversation-reading='true'] th {
+  background: rgb(var(--color-bg-surface));
+}
+[data-conversation-reading='true'] tbody > tr:nth-child(even) {
+  background: rgb(var(--color-bg-surface) / 0.4);
+}
+[data-conversation-reading='true'] tbody > tr:last-child > td {
+  border-bottom: 0;
+}
+[data-conversation-reading='true'] table:has(tr > :nth-child(4)) {
+  min-inline-size: 36rem;
+}

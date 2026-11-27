@@ -1,0 +1,14 @@
+{
+  "contractVersion": "parallel-v1",
+  "requestId": "fixture-knowledge-read",
+  "status": "unavailable",
+  "operationId": null,
+  "entityRevision": null,
+  "observedAt": "2026-10-24T00:00:00+00:00",
+  "result": null,
+  "error": {
+    "code": "KNOWLEDGE_BACKEND_UNAVAILABLE",
+    "messageKey": "integrations.knowledge.operationFailed",
+    "recovery": "retry_read"
+  }
+}

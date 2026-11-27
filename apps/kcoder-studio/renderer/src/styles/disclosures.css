@@ -1,0 +1,73 @@
+/* Preserve native disclosure semantics while replacing the browser's filled marker. */
+details > summary {
+  list-style: none;
+}
+details > summary::-webkit-details-marker {
+  display: none;
+}
+details > summary::marker {
+  content: '';
+}
+/* Composed headers and menu triggers retain their own icons and layout. */
+details > summary:not(.list-none):not(:has(> svg)) {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: color 160ms ease;
+}
+details > summary:not(.list-none):not(:has(> svg)):hover {
+  color: rgb(var(--color-text-primary));
+}
+details > summary:focus-visible {
+  outline: 2px solid rgb(var(--color-focus));
+  outline-offset: 3px;
+}
+details > summary:not(.list-none):not(:has(> svg))::after {
+  content: '';
+  flex: 0 0 auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-inline: 0.25rem 0.375rem;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  opacity: 0.65;
+  pointer-events: none;
+  transform: translateY(-0.125rem) rotate(45deg);
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+details[open] > summary:not(.list-none):not(:has(> svg))::after {
+  transform: translateY(0.125rem) rotate(225deg);
+  opacity: 1;
+}
+
+/* Only the intrinsic open/closed size changes. Live content and floating picker
+   menus keep their own layout, including when nested in a disclosure. */
+@supports (interpolate-size: allow-keywords) and selector(details::details-content) {
+  details:where(.studio-card, .studio-card-spacing, [data-studio-page-content] details, .studio-page-gutter details):not(.studio-disclosure-menu)::details-content {
+    interpolate-size: allow-keywords;
+    content-visibility: hidden;
+    block-size: 0;
+    opacity: 0;
+    overflow: clip;
+    transition:
+      block-size var(--duration-panel) var(--ease-out),
+      opacity var(--duration-fast) var(--ease-standard),
+      content-visibility var(--duration-panel) allow-discrete;
+  }
+  details[open]:where(.studio-card, .studio-card-spacing, [data-studio-page-content] details, .studio-page-gutter details):not(.studio-disclosure-menu)::details-content {
+    content-visibility: visible;
+    block-size: auto;
+    opacity: 1;
+  }
+}
+@media (max-width: 767px) {
+  details > summary:not(.list-none):not(:has(> svg)) {
+    min-height: 2.75rem;
+  }
+}

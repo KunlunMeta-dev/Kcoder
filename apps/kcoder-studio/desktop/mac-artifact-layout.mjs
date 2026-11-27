@@ -1,0 +1,154 @@
+import { chmod, lstat, readdir, readFile, readlink, realpath } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
+import { chromeRelease } from '../../../scripts/release/prepare-chrome.mjs';
+import { isMacChromeFrameworkLink } from '../../../scripts/release/mac-chrome-links.mjs';
+import { macTarget } from '../../../scripts/release/mac-target.mjs';
+import { normalizeElectronArch } from './stage-gateway-dependencies.mjs';
+import { assertPublicPath, inventory, manifestName, verifyManifest, writeManifest } from '../../../scripts/release/artifact-manifest.mjs';
+
+const frameworks = new Set(['Electron Framework', 'Mantle', 'ReactiveObjC', 'Squirrel']);
+const execute = promisify(execFile);
+
+export function macApplicationPath(context) {
+  const name = context?.packager?.appInfo?.productFilename;
+  if (typeof name !== 'string' || !name || basename(name) !== name || /[\\/\0]/.test(name)) {
+    throw new Error('macOS release requires a valid application bundle name');
+  }
+  return resolve(context.appOutDir, `${name}.app`);
+}
+
+function permittedFrameworkLink(path, target, platform) {
+  const chromePrefix = 'Contents/Resources/bin/chrome/';
+  if (path.startsWith(chromePrefix)) return isMacChromeFrameworkLink(path.slice(chromePrefix.length), target, chromeRelease(platform));
+  const match = /^Contents\/Frameworks\/([^/]+)\.framework\/(.+)$/.exec(path);
+  if (!match || !frameworks.has(match[1])) return false;
+  const member = match[2];
+  if (member === 'Versions/Current') return target === 'A';
+  if (member === 'Helpers') return match[1] === 'Electron Framework' && target === 'Versions/Current/Helpers';
+  return [match[1], 'Resources', 'Libraries', 'Headers', 'Modules'].includes(member)
+    && target === `Versions/Current/${member}`;
+}
+
+/** Audit canonical files and explicitly bounded framework links; never follow
+ * symlinks while walking or relax the ordinary resource inventory boundary. */
+async function macApplicationTree(bundle, options = {}) {
+  const buildTarget = macTarget(options.arch ?? 'x64');
+  bundle = resolve(bundle);
+  const bundleInfo = await lstat(bundle);
+  if (bundleInfo.isSymbolicLink() || !bundleInfo.isDirectory()) {
+    throw new Error('macOS application must be a real directory');
+  }
+  // macOS commonly exposes the same temporary tree through /tmp and /private/tmp.
+  // Resolve the checked directory itself before comparing framework link targets;
+  // the lstat above still rejects a bundle root that is itself a symlink.
+  bundle = await realpath(bundle);
+  const files = [];
+  const directories = [''];
+  const frameworkLinks = [];
+  async function visit(prefix = '') {
+    for (const name of (await readdir(resolve(bundle, prefix))).sort()) {
+      const path = prefix ? `${prefix}/${name}` : name;
+      assertPublicPath(path);
+      const full = resolve(bundle, path);
+      const info = await lstat(full);
+      if (info.isSymbolicLink()) {
+        const target = await readlink(full);
+        if (isAbsolute(target) || !permittedFrameworkLink(path, target, buildTarget.platform)) throw new Error(`Unexpected macOS framework link: ${path}`);
+        frameworkLinks.push({ path, target });
+      } else if (info.isDirectory()) {
+        directories.push(path);
+        await visit(path);
+      }
+      else if (info.isFile()) files.push(path);
+      else throw new Error(`Unsupported macOS application resource: ${path}`);
+    }
+  }
+  await visit();
+  for (const link of frameworkLinks) {
+    const resolved = relative(bundle, await realpath(resolve(bundle, link.path)));
+    if (isAbsolute(resolved) || resolved === '..' || resolved.startsWith(`..${sep}`)) throw new Error(`macOS framework link escapes its application: ${link.path}`);
+  }
+  return { bundle, files, directories, frameworkLinks };
+}
+
+/** Publish readable bundle modes without changing sealed bytes, following
+ * framework aliases, or widening the private staging parent. */
+export async function normalizeMacApplicationPermissions(bundle, options = {}) {
+  const tree = await macApplicationTree(bundle, options);
+  const files = [];
+  for (const path of tree.files) {
+    const full = resolve(tree.bundle, path);
+    const info = await lstat(full);
+    if (!info.isFile() || info.nlink !== 1) throw new Error(`macOS permission normalization rejects hard-linked or non-regular file: ${path}`);
+    const mode = info.mode & 0o111 ? 0o755 : 0o644;
+    files.push({ full, mode });
+  }
+  for (const path of tree.directories) await chmod(resolve(tree.bundle, path), 0o755);
+  for (const { full, mode } of files) await chmod(full, mode);
+}
+
+export async function inspectMacApplication(bundle, options = {}) {
+  const buildTarget = macTarget(options.arch ?? 'x64');
+  const tree = await macApplicationTree(bundle, options);
+  bundle = tree.bundle;
+  const { files, frameworkLinks } = tree;
+  const required = ['Contents/Resources/app.asar', 'Contents/Resources/gateway/dev-server.mjs', 'Contents/Resources/renderer-dist/index.html'];
+  if (options.requireSidecar !== false) required.push('Contents/Resources/bin/kcoder');
+  if (options.requireLocalResources !== false) required.push(
+    `Contents/Resources/bin/chrome/chrome-${buildTarget.platform}/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing`,
+    'Contents/Resources/bin/pdf/pdftotext', 'Contents/Resources/bin/pdf/xpdfrc', 'Contents/Resources/bin/pdf/.kcoder-pdf.json',
+  );
+  for (const path of required) if (!files.includes(path)) throw new Error(`macOS application is missing ${path}`);
+  const adhoc = options.codeSigning === 'ad-hoc';
+  const host = `Contents/MacOS/${basename(bundle, '.app')}`;
+  if (adhoc) {
+    for (const path of [host, 'Contents/_CodeSignature/CodeResources']) {
+      if (!files.includes(path)) throw new Error(`Signed macOS application is missing ${path}`);
+    }
+  }
+  // The outer signature contains the manifest's digest. Including its bytes
+  // (or the signature-bearing host image) in that manifest would be circular.
+  // Native signature verification covers both; all other files remain hashed.
+  const inventoryFiles = files.filter(path => path !== `Contents/Resources/${manifestName}`
+    && (!adhoc || (path !== host && path !== 'Contents/_CodeSignature/CodeResources')));
+  const canonical = await inventory(bundle, { files: inventoryFiles, ...(options.inspectAsar ? { inspectAsar: options.inspectAsar } : {}) });
+  return { frameworkLinks, resourceFiles: canonical.filter(file => file.path.startsWith('Contents/Resources/')).map(file => file.path.slice('Contents/Resources/'.length)), bundleFiles: canonical.filter(file => !file.path.startsWith('Contents/Resources/')) };
+}
+
+export async function writeMacReleaseManifest(context, options = {}) {
+  const bundle = macApplicationPath(context);
+  const kind = context.packager.appInfo.id === 'dev.kcoder.studio.remote' ? 'studio-remote' : 'studio-desktop';
+  const target = macTarget(normalizeElectronArch(context.arch, options.arch ?? 'x64'));
+  const layout = await inspectMacApplication(bundle, { ...options, arch: target.arch, requireSidecar: kind !== 'studio-remote', requireLocalResources: kind !== 'studio-remote' });
+  return writeManifest(resolve(bundle, 'Contents/Resources'), {
+    kind, platform: 'darwin', ...options, files: layout.resourceFiles,
+    hostRuntime: {
+      kind: 'electron', version: context.packager.info.framework.version, architecture: target.arch,
+      ...(options.codeSigning === 'ad-hoc' ? { codeSigning: 'ad-hoc' } : {}),
+      inventoryBoundary: options.codeSigning === 'ad-hoc'
+        ? 'Resources and nested code are hashed; the outer host image and resource seal are verified by codesign --deep --strict; final installer checksum covers the complete application'
+        : 'Contents/Resources and canonical application files; framework link targets are explicit; final installer checksum covers the complete application',
+      frameworkLinks: layout.frameworkLinks, bundleFiles: layout.bundleFiles,
+    },
+  });
+}
+
+export async function verifyMacReleaseManifest(bundle, options = {}) {
+  const prior = JSON.parse(await readFile(resolve(bundle, 'Contents/Resources', manifestName), 'utf8'));
+  const arch = prior.hostRuntime?.architecture ?? 'x64';
+  if (options.arch && options.arch !== arch) throw new Error('macOS application architecture does not match the release manifest');
+  const codeSigning = prior.hostRuntime?.codeSigning;
+  if (codeSigning !== undefined && codeSigning !== 'ad-hoc') throw new Error('Unsupported macOS release signature mode');
+  if (codeSigning === 'ad-hoc') {
+    await execute('/usr/bin/codesign', ['--verify', '--deep', '--strict', '--all-architectures', bundle]);
+  }
+  const actual = await inspectMacApplication(bundle, { ...options, codeSigning, arch, requireSidecar: prior.kind !== 'studio-remote', requireLocalResources: prior.kind !== 'studio-remote' });
+  const manifest = await verifyManifest(resolve(bundle, 'Contents/Resources'), { ...options, files: actual.resourceFiles });
+  if (JSON.stringify(actual.frameworkLinks) !== JSON.stringify(manifest.hostRuntime?.frameworkLinks)
+    || JSON.stringify(actual.bundleFiles) !== JSON.stringify(manifest.hostRuntime?.bundleFiles)) {
+    throw new Error('macOS application files or framework links do not match the release manifest');
+  }
+  return manifest;
+}

@@ -1,0 +1,30 @@
+[package]
+name = "kcoder_desktop_recovery"
+description = "Desktop grant generations, recovery claims, and cleanup receipts."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[features]
+test-oracle = []
+
+[dependencies]
+anyhow.workspace = true
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_computer_use = { path = "../../../kcoder_computer_use" }
+kcoder_types = { path = "../../../kcoder_types" }
+
+[target.'cfg(windows)'.dependencies]
+kcoder_mcp = { path = "../../../kcoder_mcp" }
+
+[dev-dependencies]
+serde_json.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[lib]
+path = "../../src/internal/desktop_recovery/lib.rs"

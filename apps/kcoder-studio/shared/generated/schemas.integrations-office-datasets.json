@@ -1,0 +1,721 @@
+{
+  "OfficeAggregate": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeAggregateFunction": {
+        "enum": [
+          "count",
+          "sum",
+          "min",
+          "max"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "column": {
+        "type": "string"
+      },
+      "function": {
+        "$ref": "#/definitions/OfficeAggregateFunction"
+      },
+      "key": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "column",
+      "function",
+      "key"
+    ],
+    "title": "OfficeAggregate",
+    "type": "object"
+  },
+  "OfficeAggregateFunction": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "count",
+      "sum",
+      "min",
+      "max"
+    ],
+    "title": "OfficeAggregateFunction",
+    "type": "string"
+  },
+  "OfficeAggregateResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "key": {
+        "type": "string"
+      },
+      "nonNullCount": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "value": {
+        "description": "Exact decimal text; null means that every matched cell is null.",
+        "type": [
+          "string",
+          "null"
+        ]
+      }
+    },
+    "required": [
+      "key",
+      "nonNullCount"
+    ],
+    "title": "OfficeAggregateResult",
+    "type": "object"
+  },
+  "OfficeDataset": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationOwner": {
+        "additionalProperties": false,
+        "description": "Stable owner identity excludes refreshable authorization/configuration generations.",
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "targetId",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "OfficeColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/OfficeColumnType"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeColumnType": {
+        "enum": [
+          "string",
+          "number",
+          "boolean",
+          "date"
+        ],
+        "type": "string"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeTaskRef": {
+        "additionalProperties": false,
+        "properties": {
+          "runId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "threadId",
+          "turnId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "columns": {
+        "items": {
+          "$ref": "#/definitions/OfficeColumn"
+        },
+        "type": "array"
+      },
+      "id": {
+        "type": "string"
+      },
+      "owner": {
+        "$ref": "#/definitions/IntegrationOwner"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "rows": {
+        "items": {
+          "items": true,
+          "type": "array"
+        },
+        "type": "array"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sourceRefs": {
+        "items": {
+          "$ref": "#/definitions/OfficeResourceRef"
+        },
+        "type": "array"
+      },
+      "task": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/OfficeTaskRef"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      }
+    },
+    "required": [
+      "columns",
+      "id",
+      "owner",
+      "revision",
+      "rows",
+      "schemaVersion",
+      "sourceRefs"
+    ],
+    "title": "OfficeDataset",
+    "type": "object"
+  },
+  "OfficeDatasetPage": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeAggregateResult": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "nonNullCount": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "value": {
+            "description": "Exact decimal text; null means that every matched cell is null.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "nonNullCount"
+        ],
+        "type": "object"
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeColumn": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/definitions/OfficeColumnType"
+          },
+          "title": {
+            "type": "string"
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "title"
+        ],
+        "type": "object"
+      },
+      "OfficeColumnType": {
+        "enum": [
+          "string",
+          "number",
+          "boolean",
+          "date"
+        ],
+        "type": "string"
+      },
+      "OfficeResourceRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "aggregates": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeAggregateResult"
+        },
+        "type": "array"
+      },
+      "columns": {
+        "items": {
+          "$ref": "#/definitions/OfficeColumn"
+        },
+        "type": "array"
+      },
+      "dataset": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      },
+      "matchedRows": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "nextCursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "numberText": {
+        "default": [],
+        "description": "Canonical numeric text for clients whose JSON number type loses integer precision.",
+        "items": {
+          "items": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": "array"
+        },
+        "type": "array"
+      },
+      "querySha256": {
+        "type": "string"
+      },
+      "rows": {
+        "items": {
+          "items": true,
+          "type": "array"
+        },
+        "type": "array"
+      },
+      "sourceRefs": {
+        "items": {
+          "$ref": "#/definitions/OfficeResourceRef"
+        },
+        "type": "array"
+      },
+      "totalRows": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "columns",
+      "dataset",
+      "matchedRows",
+      "querySha256",
+      "rows",
+      "sourceRefs",
+      "totalRows"
+    ],
+    "title": "OfficeDatasetPage",
+    "type": "object"
+  },
+  "OfficeDatasetPageParams": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeAggregate": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "function": {
+            "$ref": "#/definitions/OfficeAggregateFunction"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "column",
+          "function",
+          "key"
+        ],
+        "type": "object"
+      },
+      "OfficeAggregateFunction": {
+        "enum": [
+          "count",
+          "sum",
+          "min",
+          "max"
+        ],
+        "type": "string"
+      },
+      "OfficeArtifactRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "OfficeDatasetQuery": {
+        "additionalProperties": false,
+        "properties": {
+          "aggregates": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeAggregate"
+            },
+            "type": "array"
+          },
+          "columns": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "filters": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeFilter"
+            },
+            "type": "array"
+          },
+          "limit": {
+            "format": "uint",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "sort": {
+            "default": [],
+            "items": {
+              "$ref": "#/definitions/OfficeSort"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "limit"
+        ],
+        "type": "object"
+      },
+      "OfficeFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/definitions/OfficeFilterOperator"
+          },
+          "value": true
+        },
+        "required": [
+          "column",
+          "operator",
+          "value"
+        ],
+        "type": "object"
+      },
+      "OfficeFilterOperator": {
+        "enum": [
+          "eq",
+          "not_eq",
+          "contains",
+          "greater_than",
+          "less_than",
+          "is_null"
+        ],
+        "type": "string"
+      },
+      "OfficeSort": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "descending": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "column",
+          "descending"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "query": {
+        "$ref": "#/definitions/OfficeDatasetQuery"
+      },
+      "reference": {
+        "$ref": "#/definitions/OfficeArtifactRef"
+      }
+    },
+    "required": [
+      "query",
+      "reference"
+    ],
+    "title": "OfficeDatasetPageParams",
+    "type": "object"
+  },
+  "OfficeDatasetQuery": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "OfficeAggregate": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "function": {
+            "$ref": "#/definitions/OfficeAggregateFunction"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "column",
+          "function",
+          "key"
+        ],
+        "type": "object"
+      },
+      "OfficeAggregateFunction": {
+        "enum": [
+          "count",
+          "sum",
+          "min",
+          "max"
+        ],
+        "type": "string"
+      },
+      "OfficeFilter": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "operator": {
+            "$ref": "#/definitions/OfficeFilterOperator"
+          },
+          "value": true
+        },
+        "required": [
+          "column",
+          "operator",
+          "value"
+        ],
+        "type": "object"
+      },
+      "OfficeFilterOperator": {
+        "enum": [
+          "eq",
+          "not_eq",
+          "contains",
+          "greater_than",
+          "less_than",
+          "is_null"
+        ],
+        "type": "string"
+      },
+      "OfficeSort": {
+        "additionalProperties": false,
+        "properties": {
+          "column": {
+            "type": "string"
+          },
+          "descending": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "column",
+          "descending"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "aggregates": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeAggregate"
+        },
+        "type": "array"
+      },
+      "columns": {
+        "default": [],
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "cursor": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "filters": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeFilter"
+        },
+        "type": "array"
+      },
+      "limit": {
+        "format": "uint",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "sort": {
+        "default": [],
+        "items": {
+          "$ref": "#/definitions/OfficeSort"
+        },
+        "type": "array"
+      }
+    },
+    "required": [
+      "limit"
+    ],
+    "title": "OfficeDatasetQuery",
+    "type": "object"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "read": {
+    "en": "Reading files",
+    "zh-CN": "正在读取文件"
+  },
+  "write": {
+    "en": "Writing files",
+    "zh-CN": "正在写入文件"
+  },
+  "edit": {
+    "en": "Editing files",
+    "zh-CN": "正在编辑文件"
+  },
+  "apply_patch": {
+    "en": "Editing files",
+    "zh-CN": "正在编辑文件"
+  },
+  "grep": {
+    "en": "Searching code",
+    "zh-CN": "正在搜索代码"
+  },
+  "glob": {
+    "en": "Searching files",
+    "zh-CN": "正在搜索文件"
+  },
+  "bash": {
+    "en": "Running a command",
+    "zh-CN": "正在运行命令"
+  },
+  "powershell": {
+    "en": "Running a command",
+    "zh-CN": "正在运行命令"
+  },
+  "repl": {
+    "en": "Running code",
+    "zh-CN": "正在运行代码"
+  },
+  "web_search": {
+    "en": "Searching the web",
+    "zh-CN": "正在搜索网页"
+  },
+  "web_fetch": {
+    "en": "Visiting a webpage",
+    "zh-CN": "正在访问网页"
+  },
+  "WebBrowser": {
+    "en": "Browsing the web",
+    "zh-CN": "正在浏览网页"
+  },
+  "view_image": {
+    "en": "Viewing an image",
+    "zh-CN": "正在查看图片"
+  },
+  "explore_agent": {
+    "en": "Exploring the codebase",
+    "zh-CN": "正在探索代码"
+  },
+  "spawn_agent": {
+    "en": "Coordinating subagents",
+    "zh-CN": "正在协调子代理"
+  },
+  "tool_agent": {
+    "en": "Coordinating subagents",
+    "zh-CN": "正在协调子代理"
+  },
+  "todo_write": {
+    "en": "Updating the plan",
+    "zh-CN": "正在更新计划"
+  },
+  "create_goal": {
+    "en": "Updating the goal",
+    "zh-CN": "正在更新目标"
+  },
+  "update_goal": {
+    "en": "Updating the goal",
+    "zh-CN": "正在更新目标"
+  },
+  "get_goal": {
+    "en": "Reading the goal",
+    "zh-CN": "正在读取目标"
+  },
+  "request_user_input": {
+    "en": "Waiting for your input",
+    "zh-CN": "等待你的操作"
+  },
+  "ask_user_question": {
+    "en": "Waiting for your input",
+    "zh-CN": "等待你的操作"
+  },
+  "tool_search": {
+    "en": "Finding tools",
+    "zh-CN": "正在查找工具"
+  },
+  "show_widget": {
+    "en": "Creating a visualization",
+    "zh-CN": "正在生成可视化"
+  },
+  "image_generation": {
+    "en": "Generating an image",
+    "zh-CN": "正在生成图片"
+  },
+  "REPL": {
+    "en": "Running code",
+    "zh-CN": "正在运行代码"
+  },
+  "TodoWrite": {
+    "en": "Updating the plan",
+    "zh-CN": "正在更新计划"
+  },
+  "WebSearch": {
+    "en": "Searching the web",
+    "zh-CN": "正在搜索网页"
+  },
+  "WebFetch": {
+    "en": "Visiting a webpage",
+    "zh-CN": "正在访问网页"
+  },
+  "AskUserQuestion": {
+    "en": "Waiting for your input",
+    "zh-CN": "等待你的操作"
+  },
+  "AskUserQuestionAsync": {
+    "en": "Waiting for your input",
+    "zh-CN": "等待你的操作"
+  },
+  "PlanAgent": {
+    "en": "Coordinating subagents",
+    "zh-CN": "正在协调子代理"
+  },
+  "Agent": {
+    "en": "Coordinating subagents",
+    "zh-CN": "正在协调子代理"
+  },
+  "ControlAgent": {
+    "en": "Coordinating subagents",
+    "zh-CN": "正在协调子代理"
+  },
+  "AgentFleet": {
+    "en": "Coordinating subagents",
+    "zh-CN": "正在协调子代理"
+  }
+}

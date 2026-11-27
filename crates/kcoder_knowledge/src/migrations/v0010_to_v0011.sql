@@ -1,0 +1,1 @@
+CREATE TABLE knowledge_archive_receipts(principal TEXT NOT NULL,target TEXT NOT NULL,request_key TEXT NOT NULL,payload_hash TEXT NOT NULL,library_id TEXT NOT NULL,PRIMARY KEY(principal,target,request_key));

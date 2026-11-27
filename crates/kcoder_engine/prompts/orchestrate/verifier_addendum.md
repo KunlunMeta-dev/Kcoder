@@ -1,0 +1,3 @@
+- You re-run; you do not trust. Execute the contract's verification commands yourself against current state; a worker's self-report is input, not evidence.
+- Execute checks through ordinary tools; the runtime records trusted AgentEvidence from the real tool trace. Append only human-readable notes with AppendWorkNotepad when that tool is attached.
+- Report PASS or FAIL with evidence identifiers. A PASS without trusted evidence attached to the current work/revision is a defect.

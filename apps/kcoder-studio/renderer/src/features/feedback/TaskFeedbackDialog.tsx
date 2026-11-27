@@ -1,0 +1,256 @@
+import { WebSearchDetails } from '@/components/settings/WebSearchDetails'
+import { usePluginTargetScope } from '@/kcoder/usePluginTargetScope'
+import { useTaskBackgroundIssues, type BackgroundIssueTarget } from '@/kcoder/backgroundIssues'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import { invoke } from '@/lib/runtime-commands'
+import { feedbackCapabilities, type FeedbackExportResult } from './feedbackExport'
+import { Check, FileArchive, Loader2, X } from 'lucide-react'
+import { useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import { useEscapeKey } from '@/hooks/useEscapeKey'
+import { useTranslation } from '@/hooks/useTranslation'
+import { cn } from '@/lib/utils'
+
+interface FeedbackSelection {
+  runtimeLogs: boolean
+  taskInfo: boolean
+  screenshot: boolean
+  systemInfo: boolean
+}
+
+interface TaskFeedbackDialogProps {
+  open: boolean
+  target?: BackgroundIssueTarget
+  getTaskContext: () => Promise<Record<string, unknown>>
+  onClose: () => void
+}
+
+const initialSelection: FeedbackSelection = {
+  runtimeLogs: true,
+  taskInfo: true,
+  screenshot: true,
+  systemInfo: true,
+}
+
+export function TaskFeedbackDialog({ open, target, getTaskContext, onClose }: TaskFeedbackDialogProps) {
+  if (!open) return null
+  return <TaskFeedbackDialogContent target={target} getTaskContext={getTaskContext} onClose={onClose} />
+}
+
+function TaskFeedbackDialogContent({
+  target,
+  getTaskContext,
+  onClose,
+}: Omit<TaskFeedbackDialogProps, 'open'>) {
+  const { t } = useTranslation('common')
+  const issues = useTaskBackgroundIssues(target)
+  const searchScope = usePluginTargetScope(target?.deviceId ?? "")
+  const capabilities = feedbackCapabilities()
+  const [selection, setSelection] = useState(() => ({ ...initialSelection,
+    runtimeLogs: capabilities.runtimeLogs, screenshot: capabilities.screenshot }))
+  const [note, setNote] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [capturingScreenshot, setCapturingScreenshot] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<FeedbackExportResult | null>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const hasSelection = Object.values(selection).some(Boolean)
+
+  useEscapeKey(exporting ? () => undefined : onClose)
+
+  const exportBundle = async () => {
+    setExporting(true)
+    setError(null)
+    try {
+      const context = selection.taskInfo ? await getTaskContext() : null
+      const taskContext = context && issues.length ? { ...context, backgroundIssues: issues.filter(issue => issue.isCurrent()).map(({ kind, code }) => ({ kind, code })) } : context
+      let screenshotDataUrl: string | null = null
+      if (selection.screenshot) {
+        const overlay = overlayRef.current
+        overlay?.style.setProperty('visibility', 'hidden')
+        setCapturingScreenshot(true)
+        await waitForScreenshotPaint()
+        try {
+          screenshotDataUrl = await invoke<string>('capture_main_webview')
+        } catch {
+          screenshotDataUrl = null
+        } finally {
+          overlay?.style.removeProperty('visibility')
+          setCapturingScreenshot(false)
+        }
+      }
+      const exported = await invoke<FeedbackExportResult | null>('export_feedback_bundle', {
+        request: {
+          destination: null,
+          includeRuntimeLogs: selection.runtimeLogs,
+          includeTaskInfo: selection.taskInfo,
+          includeScreenshot: selection.screenshot,
+          includeSystemInfo: selection.systemInfo,
+          note,
+          taskContext,
+          screenshotDataUrl,
+        },
+      })
+      if (exported) setResult(exported)
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : String(caughtError || t('workbench.feedback_export_failed'))
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return createPortal(
+    <div
+      ref={overlayRef}
+      data-testid="task-feedback-dialog-overlay"
+      aria-hidden={capturingScreenshot || undefined}
+      className={cn(
+        'fixed inset-0 z-modal flex items-center justify-center bg-black/35 px-4',
+        capturingScreenshot && 'invisible'
+      )}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="task-feedback-dialog-title"
+        className="w-full max-w-[440px] rounded-xl border border-border bg-popover p-5 text-text-primary shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="task-feedback-dialog-title" className="heading-sm">
+              {t('workbench.feedback_title')}
+            </h2>
+            <p className="mt-1 text-sm text-text-secondary">
+              {t('workbench.feedback_description')}
+            </p>
+          </div>
+          <button
+            type="button"
+            data-testid="task-feedback-close-button"
+            onClick={onClose}
+            disabled={exporting}
+            className="flex h-8 min-w-8 items-center justify-center rounded-md text-text-secondary hover:bg-muted"
+            aria-label={t('workbench.close_dialog')}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {target?.deviceId && <WebSearchDetails key={`${searchScope.key}:${target.taskId ?? ''}`} serverId={target.deviceId} mode="kcoder" threadId={target.threadId ?? undefined} taskId={target.taskId} isCurrent={searchScope.isCurrent} />}
+
+        {issues.length > 0 && (
+          <section className="mt-4 space-y-3" aria-label={t('workbench.feedback_background_issues')}>
+            <h3 className="text-sm font-medium">{t('workbench.feedback_background_issues')}</h3>
+            {issues.map((issue, index) => <div key={index} data-testid="feedback-background-issue" className="studio-card-spacing rounded-lg border border-border p-3 text-sm">
+              <p>{t('workbench.imported_history_read_failed')}</p>
+              <div className="mt-2 flex gap-2">
+                <Button variant="outline" onClick={issue.retry}>{t('workbench.imported_history_retry')}</Button>
+                <Button variant="ghost" onClick={issue.dismiss}>{t('workbench.feedback_dismiss_issue')}</Button>
+              </div>
+            </div>)}
+          </section>
+        )}
+
+        {result ? (
+          <div className="mt-6">
+            <div className="flex items-center gap-2 text-sm font-medium">
+              <Check className="h-4 w-4 text-success" />
+              {t(result.downloadStatus === 'requested' ? 'workbench.feedback_download_requested' : 'workbench.feedback_exported')}
+            </div>
+            <p className="mt-2 break-all text-xs text-text-secondary">{result.path}</p>
+            <p className="mt-1 text-xs text-text-secondary">
+              {t('workbench.feedback_report_id')}: {result.reportId}
+            </p>
+            {result.warnings?.length > 0 && <p className="mt-2 text-sm text-text-secondary">{t('workbench.feedback_export_partial')}</p>}
+          </div>
+        ) : (
+          <>
+            <div className="mt-5 space-y-1">
+              {(
+                [
+                  ['runtimeLogs', 'feedback_runtime_logs', 'feedback_runtime_logs_description'],
+                  ['taskInfo', 'feedback_task_info', 'feedback_task_info_description'],
+                  ['screenshot', 'feedback_screenshot', 'feedback_screenshot_description'],
+                  ['systemInfo', 'feedback_system_info', 'feedback_system_info_description'],
+                ] as const
+              ).map(([key, label, description]) => (
+                <label
+                  key={key}
+                  className="flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 hover:bg-muted"
+                >
+                  <Checkbox
+                    data-testid={`task-feedback-${key}-checkbox`}
+                    checked={selection[key]}
+                    disabled={(key === 'runtimeLogs' && !capabilities.runtimeLogs) || (key === 'screenshot' && !capabilities.screenshot)}
+                    onChange={event =>
+                      setSelection(current => ({ ...current, [key]: event.target.checked }))
+                    }
+                    className="mt-0.5 h-4 w-4 accent-current"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium">{t(`workbench.${label}`)}</span>
+                    <span className="block text-xs text-text-secondary">
+                      {t(`workbench.${description}`)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            {(!capabilities.runtimeLogs || !capabilities.screenshot) && <p className="mt-2 text-xs text-text-secondary">{t('workbench.feedback_desktop_only_options')}</p>}
+            <label className="mt-4 block text-sm font-medium">
+              {t('workbench.feedback_note')}
+              <textarea
+                data-testid="task-feedback-note"
+                value={note}
+                onChange={event => setNote(event.target.value)}
+                placeholder={t('workbench.feedback_note_placeholder')}
+                rows={3}
+                maxLength={16384}
+                className="mt-2 w-full resize-none rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-primary"
+              />
+            </label>
+          </>
+        )}
+
+        {error ? <p className="mt-3 text-xs text-red-500">{error}</p> : null}
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            type="button"
+            data-testid="task-feedback-cancel-button"
+            onClick={onClose}
+            disabled={exporting}
+            className="h-9 rounded-md px-3 text-sm font-medium hover:bg-muted"
+          >
+            {result ? t('workbench.feedback_close') : t('workbench.cancel')}
+          </button>
+          {!result ? (
+            <button
+              type="button"
+              data-testid="task-feedback-export-button"
+              disabled={!hasSelection || exporting}
+              onClick={() => void exportBundle()}
+              className="inline-flex h-9 items-center gap-2 rounded-md bg-text-primary px-3 text-sm font-medium text-background disabled:opacity-50"
+            >
+              {exporting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <FileArchive className="h-4 w-4" />
+              )}
+              {t('workbench.feedback_export')}
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+function waitForScreenshotPaint(): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, 500))
+}

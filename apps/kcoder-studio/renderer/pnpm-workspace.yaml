@@ -1,0 +1,20 @@
+packages:
+  - packages/*
+
+allowBuilds:
+  core-js: true
+  esbuild: true
+  protobufjs: true
+
+packageExtensions:
+  '@testing-library/jest-dom@*':
+    # The Vitest integration imports this optional peer from the shared store.
+    peerDependencies:
+      vitest: '*'
+    peerDependenciesMeta:
+      vitest:
+        optional: true
+
+  'tiptap-markdown@*':
+    peerDependencies:
+      '@tiptap/pm': '^2.0.0'

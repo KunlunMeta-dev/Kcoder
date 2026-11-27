@@ -1,0 +1,27 @@
+[package]
+name = "kcoder_native_image_identity"
+description = "Windows executable-image file identity primitives shared by the Native addon and CLI."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+# Leaf crate: no kcoder_* dependencies, so the Native addon stays outside the
+# CLI and process-supervisor graphs while both share these exact checks.
+[dependencies]
+sha2.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_Foundation",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Threading",
+] }
+
+[target.'cfg(windows)'.dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,1113 @@
+{
+  "NativeCodeCurrentOsState": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "unknown"
+    ],
+    "title": "NativeCodeCurrentOsState",
+    "type": "string"
+  },
+  "NativeCodeOwnerObservation": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "last_persisted"
+    ],
+    "title": "NativeCodeOwnerObservation",
+    "type": "string"
+  },
+  "NativeCodeServiceGrantView": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationDelegationStatus": {
+        "enum": [
+          "active",
+          "revoked",
+          "expired"
+        ],
+        "type": "string"
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "expiresAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "reference": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "status": {
+        "$ref": "#/definitions/IntegrationDelegationStatus"
+      }
+    },
+    "required": [
+      "expiresAtMs",
+      "reference",
+      "status"
+    ],
+    "title": "NativeCodeServiceGrantView",
+    "type": "object"
+  },
+  "NativeCodeServiceIntent": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "configurationSha256": {
+        "type": "string"
+      },
+      "definitionId": {
+        "type": "string"
+      },
+      "definitionSha256": {
+        "type": "string"
+      },
+      "definitionVersion": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "expiresAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "leaseId": {
+        "type": "string"
+      },
+      "nativeImageSha256": {
+        "type": "string"
+      },
+      "operationId": {
+        "type": "string"
+      },
+      "scope": {
+        "$ref": "#/definitions/IntegrationScope"
+      },
+      "taskSha256": {
+        "type": "string"
+      },
+      "template": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "configurationSha256",
+      "definitionId",
+      "definitionSha256",
+      "definitionVersion",
+      "expiresAtMs",
+      "leaseId",
+      "nativeImageSha256",
+      "operationId",
+      "scope",
+      "taskSha256",
+      "template"
+    ],
+    "title": "NativeCodeServiceIntent",
+    "type": "object"
+  },
+  "NativeCodeServiceLocator": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "leaseId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "leaseId"
+    ],
+    "title": "NativeCodeServiceLocator",
+    "type": "object"
+  },
+  "NativeCodeServiceMethod": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "integrations/services/code/prepare",
+      "integrations/services/code/read",
+      "integrations/services/code/start",
+      "integrations/services/code/revoke"
+    ],
+    "title": "NativeCodeServiceMethod",
+    "type": "string"
+  },
+  "NativeCodeServiceMutationResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationDelegationStatus": {
+        "enum": [
+          "active",
+          "revoked",
+          "expired"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationRuntimeAcceptance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/definitions/IntegrationTaskState"
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      },
+      "NativeCodeServiceGrantView": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reference": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "status": {
+            "$ref": "#/definitions/IntegrationDelegationStatus"
+          }
+        },
+        "required": [
+          "expiresAtMs",
+          "reference",
+          "status"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationSha256": {
+            "type": "string"
+          },
+          "definitionId": {
+            "type": "string"
+          },
+          "definitionSha256": {
+            "type": "string"
+          },
+          "definitionVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expiresAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "leaseId": {
+            "type": "string"
+          },
+          "nativeImageSha256": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "taskSha256": {
+            "type": "string"
+          },
+          "template": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configurationSha256",
+          "definitionId",
+          "definitionSha256",
+          "definitionVersion",
+          "expiresAtMs",
+          "leaseId",
+          "nativeImageSha256",
+          "operationId",
+          "scope",
+          "taskSha256",
+          "template"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceReadyReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "acceptance": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationRuntimeAcceptance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "leaseId": {
+            "type": "string"
+          },
+          "modelCalls": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "operationId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "leaseId",
+          "modelCalls",
+          "operationId"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": false,
+            "type": "boolean"
+          },
+          "grantRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "intent": {
+            "$ref": "#/definitions/NativeCodeServiceIntent"
+          },
+          "observedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/definitions/NativeCodeServiceState"
+          }
+        },
+        "required": [
+          "grantRef",
+          "intent",
+          "observedAtMs",
+          "revision",
+          "schemaVersion",
+          "state"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceState": {
+        "enum": [
+          "approved",
+          "running",
+          "stopped",
+          "revoked",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "cancellationRequested": {
+        "default": false,
+        "type": "boolean"
+      },
+      "cancellationSettled": {
+        "default": false,
+        "type": "boolean"
+      },
+      "grant": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/NativeCodeServiceGrantView"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ready": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/NativeCodeServiceReadyReceipt"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "reconciled": {
+        "default": false,
+        "type": "boolean"
+      },
+      "record": {
+        "$ref": "#/definitions/NativeCodeServiceRecord"
+      }
+    },
+    "required": [
+      "record"
+    ],
+    "title": "NativeCodeServiceMutationResult",
+    "type": "object"
+  },
+  "NativeCodeServicePreparePayload": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "NativeCodeServicePurpose": {
+        "enum": [
+          "native_saved_code_service"
+        ],
+        "type": "string"
+      },
+      "NativeCodeWorkflowSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "args": true,
+          "definitionId": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "args",
+          "definitionId",
+          "version"
+        ],
+        "type": "object"
+      }
+    },
+    "properties": {
+      "codeWorkflow": {
+        "$ref": "#/definitions/NativeCodeWorkflowSelection"
+      },
+      "expiresInMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "explicitBackgroundConsent": {
+        "type": "boolean"
+      },
+      "purpose": {
+        "$ref": "#/definitions/NativeCodeServicePurpose"
+      }
+    },
+    "required": [
+      "codeWorkflow",
+      "expiresInMs",
+      "explicitBackgroundConsent",
+      "purpose"
+    ],
+    "title": "NativeCodeServicePreparePayload",
+    "type": "object"
+  },
+  "NativeCodeServicePurpose": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "enum": [
+      "native_saved_code_service"
+    ],
+    "title": "NativeCodeServicePurpose",
+    "type": "string"
+  },
+  "NativeCodeServiceReadResult": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationDelegationStatus": {
+        "enum": [
+          "active",
+          "revoked",
+          "expired"
+        ],
+        "type": "string"
+      },
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "NativeCodeCurrentOsState": {
+        "enum": [
+          "unknown"
+        ],
+        "type": "string"
+      },
+      "NativeCodeOwnerObservation": {
+        "enum": [
+          "last_persisted"
+        ],
+        "type": "string"
+      },
+      "NativeCodeServiceGrantView": {
+        "additionalProperties": false,
+        "properties": {
+          "expiresAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "reference": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "status": {
+            "$ref": "#/definitions/IntegrationDelegationStatus"
+          }
+        },
+        "required": [
+          "expiresAtMs",
+          "reference",
+          "status"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationSha256": {
+            "type": "string"
+          },
+          "definitionId": {
+            "type": "string"
+          },
+          "definitionSha256": {
+            "type": "string"
+          },
+          "definitionVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expiresAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "leaseId": {
+            "type": "string"
+          },
+          "nativeImageSha256": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "taskSha256": {
+            "type": "string"
+          },
+          "template": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configurationSha256",
+          "definitionId",
+          "definitionSha256",
+          "definitionVersion",
+          "expiresAtMs",
+          "leaseId",
+          "nativeImageSha256",
+          "operationId",
+          "scope",
+          "taskSha256",
+          "template"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceRecord": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": false,
+            "type": "boolean"
+          },
+          "grantRef": {
+            "$ref": "#/definitions/IntegrationRevisionRef"
+          },
+          "intent": {
+            "$ref": "#/definitions/NativeCodeServiceIntent"
+          },
+          "observedAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "revision": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "schemaVersion": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "state": {
+            "$ref": "#/definitions/NativeCodeServiceState"
+          }
+        },
+        "required": [
+          "grantRef",
+          "intent",
+          "observedAtMs",
+          "revision",
+          "schemaVersion",
+          "state"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceState": {
+        "enum": [
+          "approved",
+          "running",
+          "stopped",
+          "revoked",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "currentOsState": {
+        "$ref": "#/definitions/NativeCodeCurrentOsState"
+      },
+      "grant": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/NativeCodeServiceGrantView"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "ownerObservation": {
+        "$ref": "#/definitions/NativeCodeOwnerObservation"
+      },
+      "record": {
+        "$ref": "#/definitions/NativeCodeServiceRecord"
+      }
+    },
+    "required": [
+      "currentOsState",
+      "ownerObservation",
+      "record"
+    ],
+    "title": "NativeCodeServiceReadResult",
+    "type": "object"
+  },
+  "NativeCodeServiceReadyReceipt": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationRuntimeAcceptance": {
+        "additionalProperties": false,
+        "properties": {
+          "state": {
+            "$ref": "#/definitions/IntegrationTaskState"
+          },
+          "taskId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "threadId": {
+            "type": "string"
+          },
+          "turnId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "state",
+          "threadId"
+        ],
+        "type": "object"
+      },
+      "IntegrationTaskState": {
+        "enum": [
+          "queued",
+          "running",
+          "waiting_for_user",
+          "completed",
+          "failed",
+          "cancelled",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "acceptance": {
+        "anyOf": [
+          {
+            "$ref": "#/definitions/IntegrationRuntimeAcceptance"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "leaseId": {
+        "type": "string"
+      },
+      "modelCalls": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "operationId": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "leaseId",
+      "modelCalls",
+      "operationId"
+    ],
+    "title": "NativeCodeServiceReadyReceipt",
+    "type": "object"
+  },
+  "NativeCodeServiceRecord": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "definitions": {
+      "IntegrationNullable_for_String": {
+        "anyOf": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "string"
+          }
+        ],
+        "description": "Unlike Option, a missing field is not interchangeable with an explicit null."
+      },
+      "IntegrationRevisionRef": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "revision"
+        ],
+        "type": "object"
+      },
+      "IntegrationScope": {
+        "additionalProperties": false,
+        "properties": {
+          "accountId": {
+            "type": "string"
+          },
+          "identityGeneration": {
+            "type": "string"
+          },
+          "organizationId": {
+            "anyOf": [
+              {
+                "$ref": "#/definitions/IntegrationNullable_for_String"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "targetId": {
+            "type": "string"
+          },
+          "targetRevision": {
+            "type": "string"
+          },
+          "workspaceId": {
+            "$ref": "#/definitions/IntegrationNullable_for_String"
+          }
+        },
+        "required": [
+          "accountId",
+          "identityGeneration",
+          "targetId",
+          "targetRevision",
+          "workspaceId"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceIntent": {
+        "additionalProperties": false,
+        "properties": {
+          "configurationSha256": {
+            "type": "string"
+          },
+          "definitionId": {
+            "type": "string"
+          },
+          "definitionSha256": {
+            "type": "string"
+          },
+          "definitionVersion": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "expiresAtMs": {
+            "format": "uint64",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "leaseId": {
+            "type": "string"
+          },
+          "nativeImageSha256": {
+            "type": "string"
+          },
+          "operationId": {
+            "type": "string"
+          },
+          "scope": {
+            "$ref": "#/definitions/IntegrationScope"
+          },
+          "taskSha256": {
+            "type": "string"
+          },
+          "template": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "configurationSha256",
+          "definitionId",
+          "definitionSha256",
+          "definitionVersion",
+          "expiresAtMs",
+          "leaseId",
+          "nativeImageSha256",
+          "operationId",
+          "scope",
+          "taskSha256",
+          "template"
+        ],
+        "type": "object"
+      },
+      "NativeCodeServiceState": {
+        "enum": [
+          "approved",
+          "running",
+          "stopped",
+          "revoked",
+          "outcome_unknown"
+        ],
+        "type": "string"
+      }
+    },
+    "properties": {
+      "enabled": {
+        "default": false,
+        "type": "boolean"
+      },
+      "grantRef": {
+        "$ref": "#/definitions/IntegrationRevisionRef"
+      },
+      "intent": {
+        "$ref": "#/definitions/NativeCodeServiceIntent"
+      },
+      "observedAtMs": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "revision": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "schemaVersion": {
+        "format": "uint32",
+        "minimum": 0,
+        "type": "integer"
+      },
+      "state": {
+        "$ref": "#/definitions/NativeCodeServiceState"
+      }
+    },
+    "required": [
+      "grantRef",
+      "intent",
+      "observedAtMs",
+      "revision",
+      "schemaVersion",
+      "state"
+    ],
+    "title": "NativeCodeServiceRecord",
+    "type": "object"
+  },
+  "NativeCodeWorkflowSelection": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "additionalProperties": false,
+    "properties": {
+      "args": true,
+      "definitionId": {
+        "type": "string"
+      },
+      "version": {
+        "format": "uint64",
+        "minimum": 0,
+        "type": "integer"
+      }
+    },
+    "required": [
+      "args",
+      "definitionId",
+      "version"
+    ],
+    "title": "NativeCodeWorkflowSelection",
+    "type": "object"
+  }
+}

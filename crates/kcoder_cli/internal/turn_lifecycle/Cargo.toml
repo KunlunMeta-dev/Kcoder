@@ -1,0 +1,36 @@
+[package]
+name = "kcoder_turn_lifecycle"
+description = "App Server turn admission, attempt receipts and recent error projection."
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+publish = false
+
+[dependencies]
+anyhow = { workspace = true }
+chrono = { workspace = true }
+dunce = { workspace = true }
+fs2 = "0.4"
+kcoder_app_interactions = { path = "../app_interactions" }
+kcoder_app_events = { path = "../app_events" }
+kcoder_app_protocol = { path = "../../../kcoder_app_protocol" }
+kcoder_attachments = { path = "../attachments" }
+kcoder_attachment_retention = { path = "../attachment_retention" }
+kcoder_cli_storage = { path = "../cli_storage" }
+kcoder_config = { path = "../../../kcoder_config" }
+kcoder_engine = { path = "../../../kcoder_engine" }
+kcoder_workspace_resources = { path = "../workspace_resources" }
+kcoder_state = { path = "../../../kcoder_state" }
+kcoder_thread_metadata = { path = "../thread_metadata" }
+kcoder_transcript = { path = "../transcript" }
+kcoder_transcript_observation = { path = "../transcript_observation" }
+kcoder_types = { path = "../../../kcoder_types" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+
+[lib]
+path = "../../src/internal/turn_lifecycle/lib.rs"

@@ -1,0 +1,91 @@
+{
+  "skill_name": "kcoder-settings",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我想打开 KCoder 的自进化，但只让它学习技能，学到的改动要等我确认后才生效。怎么配置？",
+      "expected_output": "Turn on evolution.enabled in the user scope, keep mode propose, and switch off the preference and project_knowledge targets.",
+      "expectations": [
+        "Writes the setting to the user scope, not project settings",
+        "Sets evolution.enabled to true and keeps evolution.mode as propose (the default)",
+        "Disables the other target types, for example evolution.targets.preference.enabled and evolution.targets.project_knowledge.enabled set to false",
+        "Mentions that self-evolution makes extra calls to the selected model"
+      ],
+      "assertions": [
+        {
+          "contains": "evolution.enabled"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Why does \"evolution\": {\"mode\": \"auto\"} in my project's .kcoder/settings.json have no effect?",
+      "expected_output": "Project and local settings may only set evolution.enabled to false; other evolution keys there are ignored with a warning, so set it in user settings.",
+      "expectations": [
+        "Explains that project/local settings can only turn evolution off (enabled false)",
+        "Explains that the other evolution keys there are ignored with a load warning",
+        "Recommends setting evolution.mode in the user settings instead"
+      ],
+      "assertions": [
+        {
+          "contains": "enabled"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Add my DeepSeek API key so I can use the deepseek provider.",
+      "expected_output": "Store the key through kcoder auth login for the deepseek provider, never in settings.json or project files.",
+      "expectations": [
+        "Uses kcoder auth login --provider deepseek to store the credential",
+        "Does not put the API key in settings.json, project configuration or an imported file",
+        "Checks the result with kcoder auth status"
+      ],
+      "assertions": [
+        {
+          "contains": "auth login"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "prompt": "项目里 .kcoder/settings.json 配的 MCP 服务器一直没加载，怎么排查？",
+      "expected_output": "Check project trust with kcoder trust status, trust only after explicit user confirmation, and verify in a new session.",
+      "expectations": [
+        "Runs kcoder trust status --path for the project first",
+        "Adds trust only after the user explicitly confirms the directory is trusted",
+        "Verifies the MCP server in a new session"
+      ],
+      "assertions": [
+        {
+          "contains": "trust status"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "prompt": "帮我把 training_mode: true 写进 settings.json，我要录训练轨迹。",
+      "expected_output": "Refuse to write it: training mode is a CLI/runtime switch (--training-mode); pair it with a memory-free overlay and a fresh session.",
+      "expectations": [
+        "Explains that training_mode is not a settings field and writing it fails validation",
+        "Uses --training-mode (or KCODER_TRAINING_MODE=true) instead",
+        "Recommends a memory-free --settings-file overlay and a brand-new session"
+      ],
+      "assertions": [
+        {
+          "contains": "--training-mode"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "prompt": "I want to use the ocr tool to read text from a scanned PDF. How do I enable it?",
+      "expected_output": "Explain that ocr is the OpenCodeReview code-review tool, not optical character recognition, and use read for scanned pages.",
+      "expectations": [
+        "Explains that ocr is OpenCodeReview code review, not optical character recognition",
+        "Recommends the read tool, which renders pages without a text layer as images for a vision-capable model",
+        "Does not remove ocr from tools.disabled for this purpose"
+      ]
+    }
+  ]
+}
